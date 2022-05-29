@@ -1,0 +1,40 @@
+@import './a';
+@import './colors';
+@import './constants';
+@import './html';
+@import './input';
+@import './lists';
+@import './scrollbar';
+
+
+
+.left {
+    float: left;
+}
+.right {
+    float: right;
+}
+
+
+.noselect {
+    user-select: none;
+}
+
+.btn {
+    background-color: red;
+    border: 1px solid transparent;
+    border-radius: .25rem;
+    color: #DDDDDD;
+    cursor: pointer;
+    display: inline-block;
+    font-size: 1rem;
+    line-height: 1.5;
+    padding: .375rem .75rem;
+    text-align: center;
+    text-decoration: none;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.btn.active, .btn:hover, .btn:focus {
+    background-color: rgba(red, 0.6);
+}

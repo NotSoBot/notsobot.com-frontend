@@ -1,0 +1,26 @@
+@import '../colors';
+
+
+.app {
+    display: flex;
+    flex-flow: column nowrap;
+
+    color: #DDDDDD;
+    min-height: 100vh;
+    min-width: 100vw;
+
+    background-attachment: fixed;
+    background-image: linear-gradient(172.38deg, rgba($appBackground, 0.85) 2.14%, #42444D 93.29%), url('../../assets/images/logos/NotSoLogo.svg');
+    background-position: 0, top 25% left calc(-0.31 * min(100vh, 1200px));
+    background-repeat: no-repeat;
+    background-size: auto, auto calc(min(100vh, 1200px));
+}
+
+:global(.app-desktop, .app-mobile) {
+    height: auto;
+    width: auto;
+}
+
+:global(.app-mobile) {
+    background-position: 0, top 25% left calc(-0.65 * min(100vh, 1200px));
+}

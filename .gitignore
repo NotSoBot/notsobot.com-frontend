@@ -1,3 +1,7 @@
+dist/
+lib/
+keys/google.key.json
+
 # Logs
 logs
 *.log

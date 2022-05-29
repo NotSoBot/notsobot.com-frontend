@@ -1,0 +1,22 @@
+:root {
+    --padding-gutter-rule: 24px;
+    --padding-section-rule: 56px;
+    //--page-max-width: 1260px;
+    --page-max-width: 80vw;
+}
+
+
+@media screen and (min-width: 768px) {
+    :root {
+        --padding-gutter-rule: 40px;
+        --padding-section-rule: 80px;
+    }
+}
+
+
+@media screen and (min-width: 1024px) {
+    :root {
+        --padding-gutter-rule: 60px;
+        --padding-section-rule: 120px;
+    }
+}

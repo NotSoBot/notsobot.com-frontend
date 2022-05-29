@@ -1,0 +1,11 @@
+a {
+    color: white;
+    cursor: pointer;
+    opacity: 0.7;
+    text-decoration: none;
+    transition: opacity .125s ease-in-out;
+    will-change: opacity;
+}
+:global(a.active), a:focus, a:hover {
+    opacity: 1;
+}

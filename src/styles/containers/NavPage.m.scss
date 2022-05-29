@@ -1,0 +1,11 @@
+.nav-page {
+    align-self: center;
+    display: flex;
+    justify-content: center;
+
+    height: auto;
+    max-width: var(--page-max-width);
+    padding-bottom: var(--padding-section-rule);
+    padding-left: var(--padding-section-rule);
+    padding-right: var(--padding-section-rule);
+}

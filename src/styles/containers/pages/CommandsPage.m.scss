@@ -1,0 +1,291 @@
+@import '../../colors';
+@import '../../constants';
+
+
+.page {
+    display: flex;
+    flex-flow: column nowrap;
+    justify-content: center;
+
+    .header {
+        display: flex;
+        flex-flow: row nowrap;
+        justify-content: center;
+
+        h2 {
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+        span {
+            color: white;
+            opacity: 0.7;
+        }
+    }
+
+    .container {
+        display: flex;
+        flex-flow: row nowrap;
+        justify-content: center;
+
+        .column {
+            display: flex;
+            flex-flow: column nowrap;
+        }
+        .column-big {
+            flex-grow: 1;
+            padding: 0 20px;
+        }
+
+        .search {
+            align-items: center;
+            display: flex;
+            flex-flow: row nowrap;
+    
+            background-color: $NotSoGrayDark;
+            border-radius: 10px;
+            margin-bottom: 2.5px;
+            padding: 10px 25px 10px 10px;
+
+            i.input-icon {
+                height: 24px;
+                margin-right: 5px;
+                width: 24px;
+            }
+
+            input {
+                flex-grow: 1;
+                //background: url('../../assets/images/logos/Discord-Logo-White.svg') no-repeat scroll 5px;
+                //background-size: auto 75%;
+                //padding-left: 20px;
+
+                font-size: 24px;
+                //margin: 10px;
+            }
+        }
+
+        .sidenav {
+            align-items: center;
+            display: flex;
+            flex-flow: column nowrap;
+
+            background-color: $NotSoGrayDark;
+            border-radius: 10px;
+            padding: 5px 0;
+            white-space: nowrap;
+
+            .sidenav-title {
+                display: flex;
+                justify-content: center;
+
+                span {
+                    font-size: 24px;
+                    line-height: 29px;
+                }
+            }
+
+            .divider {
+                border: 1px solid;
+                border-color: white;
+                border-radius: 80%;
+                margin: 5px 0;
+                width: 80%;
+            }
+
+            ul {
+                padding: 15px 20px;
+
+                li {
+                    border-radius: 5px;
+                    cursor: pointer;
+                    padding: 5px 20px;
+                    text-align: center;
+
+                    transition: background-color .125s ease-in-out;
+                }
+                li:hover {
+                    background-color: $NotSoGrayLight;
+                }
+                li.active, li:focus {
+                    background-color: $headerBackground;
+                }
+            }
+        }
+
+        .sidenav-spacer {
+            margin: 5px 0;
+        }
+
+        .commands {
+            display: flex;
+            flex-flow: column nowrap;
+
+            .command {
+                background-color: $NotSoGrayDark;
+                border-radius: 10px;
+                cursor: pointer;
+                display: flex;
+                flex-flow: column nowrap;
+                margin: 5px 0;
+                padding: 10px 25px;
+
+                transition: background-color 0.125 ease-in-out, color 0.125s ease-in-out;
+
+                .command-header {
+                    display: flex;
+                    flex-flow: row nowrap;
+
+                    .command-text {
+                        display: flex;
+                        flex-flow: row nowrap;
+
+                        .command-name {
+                            cursor: pointer;
+                        }
+                        .command-description {
+                            margin-left: 5px;
+                            margin-right: auto;
+                            opacity: 0.5;
+                        }
+                    }
+                    .command-category {
+                        margin-left: auto;
+                        opacity: 0.5;
+                    }
+                }
+                .command-footer {
+                    display: flex;
+                    flex-flow: row nowrap;
+                    font-size: 12px;
+                    margin-left: 15px;
+                    opacity: 0.4;
+
+                    .command-usage {
+                        display: flex;
+                        justify-content: center;
+                    }
+                }
+            }
+            .command.opened, .command:hover, .command:focus {
+                //background-color: transparent;
+                color: white;
+            }
+        }
+
+        .tables {
+            display: flex;
+            flex-flow: column nowrap;
+            margin: 0 5px;
+            padding: 0 25px;
+
+            .table {
+                background-color: rgba(0, 0, 0, 0.4);
+                border-radius: 5px;
+                display: flex;
+                flex-flow: column nowrap;
+                margin: 10px 0;
+                max-width: 100%;
+
+                .table-header {
+                    display: flex;
+                    flex-flow: row nowrap;
+                    justify-content: center;
+                    padding: 10px 0;
+
+                    span {
+                        color: white;
+                        font-size: 18px;
+                    }
+                }
+
+                .command {
+                    background-color: rgba(0, 0, 0, 0.1);
+                    border-top: 1px solid rgba(0, 0, 0, 0.2);
+                    cursor: pointer;
+                    display: flex;
+                    flex-flow: column nowrap;
+                    padding: 5px 25px;
+
+                    transition: background-color 0.125 ease-in-out, color 0.125s ease-in-out;
+
+                    .command-header {
+                        display: flex;
+                        flex-flow: row nowrap;
+
+                        .command-name {
+                            cursor: pointer;
+                        }
+                        .command-description {
+                            margin-left: auto;
+                            text-align: center;
+                        }
+                    }
+                    .command-footer {
+                        display: flex;
+                        flex-flow: row nowrap;
+                        font-size: 12px;
+                        margin-left: 15px;
+                        opacity: 0.6;
+
+                        .command-usage {
+                            display: flex;
+                            justify-content: center;
+                        }
+                    }
+                }
+                .command.opened, .command:hover, .command:focus {
+                    background-color: transparent;
+                    color: white;
+                }
+            }
+        }
+    }
+}
+
+
+:global(.app-desktop) {
+    .page {
+        width: 100%;
+    }
+}
+
+:global(.app-mobile) {
+    .container {
+        flex-flow: column nowrap;
+
+        .column {
+            padding: 0;
+        }
+
+        .search {
+            margin-top: 25px;
+            margin-bottom: 5px;
+        }
+
+        .sidenav {
+            margin: 0 25px;
+        }
+
+        .tables {
+            margin: 0 10px;
+            padding: 0;
+        }
+
+        .commands {
+            .command {
+                padding: 10px;
+
+                .command-header {
+                    .command-text {
+                        display: flex;
+                        flex-flow: column nowrap;
+
+                        .command-description {
+                            margin-left: 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

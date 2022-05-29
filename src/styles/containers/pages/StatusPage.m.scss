@@ -1,0 +1,225 @@
+@import '../../colors';
+@import '../../constants';
+
+
+.page {
+    align-items: center;
+    display: flex;
+    flex-flow: column nowrap;
+    justify-content: center;
+
+    cursor: default;
+
+    .search {
+        align-items: center;
+        display: flex;
+        flex-flow: row nowrap;
+
+        background-color: $NotSoGrayDark;
+        border-radius: 10px;
+        box-sizing: border-box;
+        margin-bottom: 2.5px;
+        padding: 10px 25px 10px 10px;
+        width: 100%;
+
+        i.input-icon {
+            height: 24px;
+            margin-right: 5px;
+            width: 24px;
+        }
+
+        input {
+            flex-grow: 1;
+
+            font-size: 24px;
+        }
+    }
+
+    .clusters {
+        display: flex;
+        flex-flow: row wrap;
+        justify-content: center;
+
+        //background-color: $NotSoGrayDark;
+        border-radius: 10px;
+        //max-width: 1000px;
+        padding: 10px;
+
+        .cluster {
+            display: flex;
+            flex-flow: row wrap;
+
+            background-color: $NotSoGreen;
+            border-radius: 5px;
+            margin: 2px;
+
+            .shards {
+                display: flex;
+                flex-flow: row nowrap;
+
+                .shard {
+                    display: flex;
+                    justify-content: center;
+
+                    background-color: $NotSoRed;
+                    border: 1px solid $NotSoGrayDark;
+                    border-radius: 5px;
+                    height: 35px;
+                    margin: 2px;
+                    width: 35px;
+
+                    span {
+                        margin: auto 0;
+
+                        color: white;
+                        text-shadow: 
+                            -1px -1px 0 black,
+                            1px -1px 0 black,
+                            -1px 1px 0 black,
+                            1px 1px 0 black;
+                    }
+                }
+
+                .shard.closed {
+                    background-color: $NotSoYellowDarkest;
+                }
+
+                .shard.connecting {
+                    background-color: $NotSoYellowDarker;
+                }
+
+                .shard.identifying {
+                    background-color: $NotSoYellow;
+                }
+
+                .shard.open {
+                    background-color: $NotSoYellowDark;
+                }
+
+                .shard.ready {
+                    background-color: $NotSoGreenDark;
+                }
+
+                .shard.resuming {
+                    background-color: $NotSoGreenDarker;
+                }
+            }
+        }
+
+        .cluster.cluster-dead {
+            background-color: $NotSoRed;
+
+            .shards {
+                .shard {
+                    background-color: $NotSoGrayDark;
+                }
+            }
+        }
+    }
+
+    .footer {
+        display: flex;
+        flex-flow: column nowrap;
+
+        background-color: $NotSoGrayDark;
+        border-radius: 10px;
+        width: 100%;
+
+        .row {
+            align-items: center;
+            display: flex;
+            flex-flow: column nowrap;
+
+            padding-bottom: 10px;
+
+            .row-title {
+                color: white;
+                margin: 10px 0;
+            }
+
+            .row-body {
+                display: flex;
+                flex-flow: row wrap;
+                justify-content: center;
+
+                .row-body-text {
+                    display: flex;
+                    flex-flow: row nowrap;
+
+                    white-space: pre;
+
+                    span {
+                        color: white;
+                        flex-grow: 1;
+                        opacity: 0.8;
+                    }
+
+                    span.row-body-text-right {
+                        text-align: right;
+                    }
+                }
+
+                .row-body-icon {
+                    border: 1px solid $NotSoGreen;
+                    border-radius: 5px;
+                    margin: 5px;
+                    padding: 5px;
+
+                    color: white;
+                    text-shadow: 
+                            -1px -1px 0 black,
+                            1px -1px 0 black,
+                            -1px 1px 0 black,
+                            1px 1px 0 black;
+                }
+                .row-body-icon.closed {
+                    background-color: $NotSoYellowDarkest;
+                }
+
+                .row-body-icon.connecting {
+                    background-color: $NotSoYellowDarker;
+                }
+
+                .row-body-icon.identifying {
+                    background-color: $NotSoYellow;
+                }
+
+                .row-body-icon.open {
+                    background-color: $NotSoYellowDark;
+                }
+
+                .row-body-icon.ready {
+                    background-color: $NotSoGreenDark;
+                }
+
+                .row-body-icon.resuming {
+                    background-color: $NotSoGreenDarker;
+                }
+
+                .row-body-icon.dead {
+                    background-color: $NotSoGrayDark;
+                    border: 1px solid $NotSoRed;
+                }
+            }
+
+            .row-body-column {
+                display: flex;
+                flex-flow: column nowrap;
+            }
+        }
+    }
+}
+
+
+:global(.app-desktop) {
+    .page {
+        width: 100%;
+    }
+}
+
+:global(.app-mobile) {
+    .clusters {
+        padding-left: 0;
+        padding-right: 0;
+    }
+}

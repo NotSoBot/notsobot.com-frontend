@@ -1,0 +1,125 @@
+@import './colors';
+@import './General.m';
+
+
+.footer {
+    @extend .noselect;
+
+    display: flex;
+    flex-flow: row nowrap;
+    justify-content: center;
+    margin-top: auto;
+
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    height: auto;
+    width: 100%;
+
+    .container {
+        display: flex;
+        flex-flow: row nowrap;
+        justify-content: center;
+        max-width: var(--page-max-width);
+        padding: 60px var(--padding-gutter-rule) 42px var(--padding-gutter-rule);
+        width: 100%;
+
+        .header {
+            display: flex;
+            flex-flow: column nowrap;
+            justify-content: center;
+            padding-right: 10px;
+
+            .header-title {
+                display: flex;
+                flex-flow: row nowrap;
+                justify-content: flex-start;
+
+                span {
+                    font-weight: bold;
+                    font-size: 32px;
+                }
+            }
+
+            .header-description {
+                display: flex;
+                flex-flow: row nowrap;
+                justify-content: flex-start;
+
+                span {
+                    font-weight: 300px;
+                    font-size: 14px;
+                    opacity: 0.8;
+                }
+            }
+
+            .header-icons {
+                display: flex;
+                flex-flow: row nowrap;
+                justify-content: flex-start;
+                margin: 5px 0;
+
+                a {
+                    span {
+                        display: block;
+                        height: 32px;
+                        width: 32px;
+                        margin: 0 7px;
+                    }
+
+                    .discord {
+                        background-image: url('../assets/images/logos/Discord-Logo-Color.svg');
+                        background-position: center;
+                        background-repeat: no-repeat;
+                        background-size: cover;
+                    }
+                }
+            }
+
+            .header-footer {
+                font-weight: 200px;
+                font-size: 10px;
+                opacity: 0.4;
+            }
+        }
+
+        .sections {
+            display: flex;
+            flex-flow: row nowrap;
+            margin-left: auto;
+            padding: 10px 0;
+
+            .section {
+                display: flex;
+                flex-flow: column nowrap;
+                padding: 0 10px;
+
+                .section-title {
+                    display: flex;
+                    justify-content: flex-start;
+
+                    span {
+                        font-size: 18px;
+                        font-weight: 300;
+                        letter-spacing: 0.96px;
+                        text-transform: uppercase;
+                    }
+                }
+
+                .section-column {
+                    display: flex;
+                    flex-flow: column nowrap;
+                    justify-content: flex-start;
+                    margin: 5px 0;
+
+                    a {
+                        span {
+                            font-size: 12px;
+                            font-weight: 250;
+                            margin: 2px 7px;
+                            opacity: 0.7;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

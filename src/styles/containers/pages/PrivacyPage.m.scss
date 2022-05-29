@@ -1,0 +1,76 @@
+@import '../../colors';
+
+
+.page {
+    display: flex;
+    justify-content: center;
+
+    height: auto;
+    width: 100%;
+
+    .container {
+        display: flex;
+        flex-flow: column nowrap;
+        justify-content: center;
+
+        max-width: 1200px;
+        padding-bottom: var(--padding-section-rule);
+        padding-left: var(--padding-section-rule);
+        padding-right: var(--padding-section-rule);
+        width: 100%;
+
+        .header {
+            display: flex;
+            flex-flow: column nowrap;
+            justify-content: center;
+
+            .header-title {
+                h1 {
+                    color: white;
+                    font-size: 24px;
+                    text-align: center;
+                }
+            }
+            .header-description {
+                display: flex;
+                flex-flow: column nowrap;
+                margin-right: auto;
+
+                span {
+                    color: white;
+                    opacity: 0.7;
+                }
+            }
+        }
+
+        .content {
+            .section {
+                .section-title {
+                    h2 {
+                        opacity: 1;
+                    }
+                }
+                .section-description {
+                    span {
+                        opacity: 0.8;
+                    }
+                    ul {
+                        list-style-type: disc;
+                        margin-left: 16px;
+
+                        li {
+                            opacity: 0.8;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+:global(.app-mobile) {
+    .container {
+        flex-flow: column nowrap;
+    }
+}

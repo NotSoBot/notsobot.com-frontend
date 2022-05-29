@@ -1,0 +1,12 @@
+input[type='text'] {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    box-shadow: none;
+    color: white;
+    outline: none;
+    transition: border-bottom .15s ease-in-out;
+}
+input[type='text']:invalid {
+    border-bottom: 1px solid $NotSoRed;
+}
