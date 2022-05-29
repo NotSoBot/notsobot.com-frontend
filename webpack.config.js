@@ -9,7 +9,7 @@ const WebpackGoogleCloudStoragePlugin  = require('webpack-google-cloud-storage-p
 
 const GOOGLE_CLOUD_BUCKET_NAME = 'notsobot';
 const GOOGLE_CLOUD_PROJECT_ID = 'notsobot';
-const VERSION = 'beta';
+const VERSION = 'stable';
 
 
 const DIR = {

@@ -73,7 +73,6 @@ function NavBarDesktop() {
         <li>
           <NavLink to={Routes.STATUS} className={activeClassName()}>Status</NavLink>
         </li>
-        <NavBarLoginOrUserMe/>
       </ul>
     </React.Fragment>
   );
@@ -99,9 +98,6 @@ function NavBarMobile() {
       <NavLink to={Routes.HOME} className={activeClassName(styles.brand)}>
         <span className={styles.brandLogo}></span>
       </NavLink>
-      <ul>
-        <NavBarLoginOrUserMe/>
-      </ul>
     </React.Fragment>
   );
 }
