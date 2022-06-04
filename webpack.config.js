@@ -2,14 +2,22 @@ const path = require('path');
 
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
+const { DefinePlugin } = require('webpack');
 
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const WebpackGoogleCloudStoragePlugin  = require('webpack-google-cloud-storage-plugin');
 
 
+const EnvironmentTypes = Object.freeze({
+  BETA: 'beta',
+  STABLE: 'stable',
+  STAGING: 'staging',
+});
+
+
 const GOOGLE_CLOUD_BUCKET_NAME = 'notsobot';
 const GOOGLE_CLOUD_PROJECT_ID = 'notsobot';
-const VERSION = 'stable';
+const VERSION = EnvironmentTypes.BETA;
 
 
 const DIR = {
@@ -122,6 +130,9 @@ module.exports = (env) => {
     },
     plugins: [
       new CleanWebpackPlugin(),
+      new DefinePlugin({
+        __ENVIRONMENT__: `'${VERSION}'`,
+      }),
       new WebpackManifestPlugin({
         filename: 'manifest.json',
         filter: (file) => file.isInitial,

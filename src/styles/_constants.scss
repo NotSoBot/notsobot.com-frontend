@@ -1,8 +1,16 @@
 :root {
     --padding-gutter-rule: 24px;
-    --padding-section-rule: 56px;
+    --padding-section-rule: 0px;
     //--page-max-width: 1260px;
     --page-max-width: 80vw;
+}
+
+
+@media screen and (min-width: 600px) {
+    :root {
+        --padding-gutter-rule: 24px;
+        --padding-section-rule: 56px;
+    }
 }
 
 

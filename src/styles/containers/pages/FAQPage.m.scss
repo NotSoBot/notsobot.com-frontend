@@ -1,0 +1,86 @@
+@import '../../colors';
+
+
+.page {
+    display: flex;
+    justify-content: center;
+
+    height: auto;
+    width: 100%;
+
+    .container {
+        display: flex;
+        flex-flow: column nowrap;
+        justify-content: center;
+
+        max-width: 1200px;
+        padding-bottom: var(--padding-section-rule);
+        padding-left: var(--padding-section-rule);
+        padding-right: var(--padding-section-rule);
+        width: 100%;
+
+        .header {
+            display: flex;
+            flex-flow: column nowrap;
+            justify-content: center;
+
+            .header-title {
+                h1 {
+                    color: white;
+                    font-size: 24px;
+                    text-align: center;
+                }
+            }
+        }
+
+        .cards {
+            display: flex;
+            flex-flow: column nowrap;
+
+            .card {
+                align-items: center;
+                display: flex;
+                flex-flow: column nowrap;
+
+                background-color: $NotSoGrayDark;
+                border-radius: 10px;
+                margin: 5px 0;
+                padding: 10px 25px;
+                position: relative;
+
+                transition: background-color 0.125 ease-in-out, color 0.125s ease-in-out;
+
+                .card-toggle {
+                    cursor: pointer;
+                    position: absolute;
+                    right: 10px;
+                }
+
+                .card-title {
+                    display: flex;
+                    flex-flow: row nowrap;
+
+                    h2 {
+                        margin: 5px 0;
+                        opacity: 1;
+                        text-align: center;
+                    }
+                }
+                .divider {
+                    border: 1px solid;
+                    border-color: white;
+                    border-radius: 80%;
+                    margin: 5px 0;
+                    opacity: 0.4;
+                    width: 80%;
+                }
+                .card-description {
+                    opacity: 0.8;
+                }
+            }
+            .card.active {
+
+            }
+        }
+    }
+}

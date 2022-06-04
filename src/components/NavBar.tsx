@@ -5,7 +5,7 @@ import { NavLink } from 'react-router-dom';
 
 import * as styles from '../styles/NavBar.m.scss';
 
-import { Routes } from '../constants';
+import { EnvironmentTypes, Routes, ENVIRONMENT } from '../constants';
 import { queryFetchUserMe } from '../queries';
 import { useStore as useStoreDeviceState } from '../stores/DeviceStateStore';
 import { useStore as useStoreUserMe } from '../stores/UserMeStore';
@@ -73,6 +73,7 @@ function NavBarDesktop() {
         <li>
           <NavLink to={Routes.STATUS} className={activeClassName()}>Status</NavLink>
         </li>
+        {(ENVIRONMENT === EnvironmentTypes.BETA) ? <NavBarLoginOrUserMe/> : null}
       </ul>
     </React.Fragment>
   );
@@ -98,6 +99,9 @@ function NavBarMobile() {
       <NavLink to={Routes.HOME} className={activeClassName(styles.brand)}>
         <span className={styles.brandLogo}></span>
       </NavLink>
+      <ul>
+        {(ENVIRONMENT === EnvironmentTypes.BETA) ? <NavBarLoginOrUserMe/> : null}
+      </ul>
     </React.Fragment>
   );
 }

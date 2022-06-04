@@ -7,6 +7,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import * as React from 'react';
 import create from 'zustand';
 
+import { SearchInput } from '../../components/Inputs';
 import * as styles from '../../styles/containers/pages/StatusPage.m.scss';
 
 import { InfoDiscordShardStates } from '../../constants';
@@ -35,7 +36,7 @@ const useStore = create<StoreState>((set) => ({
 
 
 export function StatusPage() {
-  const { setQuery } = useStore();
+  const { query, setQuery } = useStore();
   const { data, error, isLoading } = queryInfoDiscord();
 
   const totals = {
@@ -80,12 +81,7 @@ export function StatusPage() {
   */
   return (
     <NavPage className={styles.page}>
-      <div className={styles.search}>
-        <i className={styles.inputIcon}>
-          <SearchIcon/>
-        </i>
-        <input placeholder='Enter your Guild ID' type='text' onChange={setQuery}/>
-      </div>
+      <SearchInput placeholder='Enter your Guild ID' type='text' value={query} onChange={setQuery}/>
       <div className={styles.footer}>
         <div className={styles.row}>
           <div className={styles.rowTitle}>
