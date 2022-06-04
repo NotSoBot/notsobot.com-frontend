@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React, { useEffect } from 'react';
 
 import * as styles from '../styles/containers/NavPage.m.scss';
 
@@ -9,6 +9,10 @@ import { NavBar } from '../components/NavBar';
 export function NavPage(
   props: React.PropsWithChildren<{className?: string}>,
 ) {
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
   return (
     <React.Fragment>
       <NavBar/>

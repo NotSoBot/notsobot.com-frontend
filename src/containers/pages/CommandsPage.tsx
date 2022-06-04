@@ -3,10 +3,12 @@ import SearchIcon from '@mui/icons-material/Search';
 import * as React from 'react';
 import create from 'zustand';
 
+import { SearchInput } from '../../components/Inputs';
 import * as styles from '../../styles/containers/pages/CommandsPage.m.scss';
 
 import { CommandCategories, CommandTypes } from '../../constants';
 import { queryCommands } from '../../queries';
+import { useStore as useStoreDeviceState } from '../../stores/DeviceStateStore';
 import { RestTypes } from '../../types';
 
 import { NavPage } from '../NavPage';
@@ -132,19 +134,18 @@ export function CommandsPage() {
           </div>
         </div>
         <div className={`${styles.column} ${styles.columnBig}`}>
-        <div className={styles.search}>
-          <i className={styles.inputIcon}>
-            <SearchIcon/>
-          </i>
-          <input placeholder='Search for a command' type='text' onChange={setQuery}/>
-        </div>
+          <SearchInput className={styles.search} placeholder='Search for a command' type='text' value={search.query} onChange={setQuery}/>
           {
             (isLoading) ? (
               <span>loading ;)</span>
             ): (
-              <div className={styles.commands}>
-                {filtered.map((command) => <CommandComponent key={command.id} command={command} type={search.type}/>)}
-              </div>
+              (filtered.length) ? (
+                <div className={styles.commands}>
+                  {filtered.map((command) => <CommandComponent key={command.id} command={command} type={search.type}/>)}
+                </div>
+              ) : (
+                <span>None found ;(</span>
+              )
             )
           }
         </div>
@@ -176,6 +177,8 @@ function CommandComponent(
     type: CommandTypes,
   }>,
 ) {
+  const isDesktop = useStoreDeviceState((state) => state.isDesktop);
+
   const { command, type } = props;
   const category = ((command.metadata.find((metadata) => metadata.category) || {}) as any).category;
   const metadata = command.metadata.find((metadata) => metadata.type === type)!;
@@ -231,13 +234,22 @@ function CommandComponent(
           <div className={styles.commandName}>
             <span>{commandName}</span>
           </div>
-          <div className={styles.commandDescription}>
-            <span>{metadata.description}</span>
+          {(isDesktop) ? (
+            <div className={styles.commandDescription}>
+              <span>{metadata.description}</span>
+            </div>
+          ) : null}
+          <div className={styles.commandCategory}>
+            <span>{categoryTitle}</span>
           </div>
         </div>
-        <div className={styles.commandCategory}>
-          <span>{categoryTitle}</span>
-        </div>
+        {(isDesktop) ? null : (
+          <div className={styles.commandText}>
+            <div className={styles.commandDescription}>
+              <span>{metadata.description}</span>
+            </div>
+          </div>
+        )}
       </div>
       <div className={styles.commandFooter}>
         <div className={styles.commandUsage}>

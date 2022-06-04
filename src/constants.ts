@@ -1,3 +1,14 @@
+declare const __ENVIRONMENT__: EnvironmentTypes;
+
+export const ENVIRONMENT = __ENVIRONMENT__;
+
+
+export enum EnvironmentTypes {
+  BETA = 'beta',
+  STABLE = 'stable',
+}
+
+
 export enum ClassGlobalKeys {
   APP_DESKTOP = 'app-desktop',
   APP_MOBILE = 'app-mobile',

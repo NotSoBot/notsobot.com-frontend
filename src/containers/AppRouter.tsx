@@ -36,7 +36,7 @@ export function AppRouter() {
         <Route path={Routes.FREQUENTLY_ASKED_QUESTIONS} element={<FAQPage/>}/>
         <Route path={Routes.LEGAL_PRIVACY} element={<PrivacyPage/>}/>
         <Route path={Routes.STATUS} element={<StatusPage/>}/>
-        <Route element={<ErrorPage/>}/>
+        <Route path='*' element={<ErrorPage/>}/>
       </RoutesSwitch>
     </BrowserRouter>
   );

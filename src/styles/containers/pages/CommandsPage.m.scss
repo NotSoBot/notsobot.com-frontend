@@ -28,40 +28,16 @@
         flex-flow: row nowrap;
         justify-content: center;
 
+        width: 80vw;
+
         .column {
+            align-items: center;
             display: flex;
             flex-flow: column nowrap;
         }
         .column-big {
             flex-grow: 1;
             padding: 0 20px;
-        }
-
-        .search {
-            align-items: center;
-            display: flex;
-            flex-flow: row nowrap;
-    
-            background-color: $NotSoGrayDark;
-            border-radius: 10px;
-            margin-bottom: 2.5px;
-            padding: 10px 25px 10px 10px;
-
-            i.input-icon {
-                height: 24px;
-                margin-right: 5px;
-                width: 24px;
-            }
-
-            input {
-                flex-grow: 1;
-                //background: url('../../assets/images/logos/Discord-Logo-White.svg') no-repeat scroll 5px;
-                //background-size: auto 75%;
-                //padding-left: 20px;
-
-                font-size: 24px;
-                //margin: 10px;
-            }
         }
 
         .sidenav {
@@ -120,12 +96,15 @@
             display: flex;
             flex-flow: column nowrap;
 
+            width: 100%;
+
             .command {
+                display: flex;
+                flex-flow: column nowrap;
+
                 background-color: $NotSoGrayDark;
                 border-radius: 10px;
                 cursor: pointer;
-                display: flex;
-                flex-flow: column nowrap;
                 margin: 5px 0;
                 padding: 10px 25px;
 
@@ -139,6 +118,8 @@
                         display: flex;
                         flex-flow: row nowrap;
 
+                        flex-grow: 1;
+
                         .command-name {
                             cursor: pointer;
                         }
@@ -147,10 +128,11 @@
                             margin-right: auto;
                             opacity: 0.5;
                         }
-                    }
-                    .command-category {
-                        margin-left: auto;
-                        opacity: 0.5;
+                        .command-category {
+                            margin-left: auto;
+                            opacity: 0.5;
+                            white-space: nowrap;
+                        }
                     }
                 }
                 .command-footer {
@@ -276,10 +258,9 @@
                 padding: 10px;
 
                 .command-header {
-                    .command-text {
-                        display: flex;
-                        flex-flow: column nowrap;
+                    flex-flow: column nowrap;
 
+                    .command-text {
                         .command-description {
                             margin-left: 0;
                         }
