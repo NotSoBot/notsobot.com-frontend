@@ -27,7 +27,7 @@ export function FooterBar() {
             </a>
           </div>
           <div className={styles.headerFooter}>
-            <span>© 2016-2022 NotSoFoundation. All rights reserved.</span>
+            <span>© 2016-2022 NotSoCompany. All rights reserved.</span>
           </div>
         </div>
         <div className={styles.sections}>
