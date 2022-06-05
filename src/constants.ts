@@ -78,6 +78,7 @@ export enum ReactQueryKeys {
 export enum Routes {
   AUTH_LOGIN = '/auth/login',
   AUTH_LOGIN_CALLBACK = '/auth/login/callback',
+  AUTH_REDIRECT = '/auth/redirect',
   COMMANDS = '/commands',
   DASHBOARD = '/dashboard',
   FREQUENTLY_ASKED_QUESTIONS = '/faq',

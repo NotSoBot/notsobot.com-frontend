@@ -22,6 +22,7 @@ export function AppRouter() {
         <Route path={Routes.HOME} element={<HomePage/>}/>
         <Route path={Routes.AUTH_LOGIN} element={<AuthLogin/>}/>
         <Route path={Routes.AUTH_LOGIN_CALLBACK} element={<AuthLoginCallbackPage/>}/>
+        <Route path={Routes.AUTH_REDIRECT} element={<AuthRedirectPage/>}/>
         <Route path={Routes.COMMANDS} element={<CommandsPage/>}/>
         <Route path={Routes.FREQUENTLY_ASKED_QUESTIONS} element={<FAQPage/>}/>
         <Route path={Routes.FOXBOT} element={<FoxBot/>}/>
@@ -44,6 +45,11 @@ function AuthLogin() {
     return <Outlet/>;
   }
   return <Navigate to={Routes.HOME}/>;
+}
+
+
+function AuthRedirectPage() {
+  return <Navigate to={Routes.COMMANDS}/>;
 }
 
 
