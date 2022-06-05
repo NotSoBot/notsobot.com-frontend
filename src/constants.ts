@@ -90,3 +90,8 @@ export enum Routes {
   SUPPORT_INVITE = '/support/invite',
   STATUS = '/status',
 }
+
+
+export enum Urls {
+  GITHUB = 'https://github.com/notsobot',
+}

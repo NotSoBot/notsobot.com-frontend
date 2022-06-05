@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 
 import * as styles from '../styles/FooterBar.m.scss';
 
-import { Routes } from '../constants';
+import { Routes, Urls } from '../constants';
 import { Timers, activeClassName, shuffleArray } from '../utils';
 
 
@@ -20,7 +20,10 @@ export function FooterBar() {
           </div>
           <div className={styles.headerIcons}>
             <a href={Routes.SUPPORT_INVITE}>
-              <span className={styles.discord}></span>
+              <span className={styles.discord}/>
+            </a>
+            <a href={Urls.GITHUB}>
+              <span className={styles.github}/>
             </a>
           </div>
           <div className={styles.headerFooter}>
