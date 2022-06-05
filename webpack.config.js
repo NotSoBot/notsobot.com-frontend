@@ -8,16 +8,8 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const WebpackGoogleCloudStoragePlugin  = require('webpack-google-cloud-storage-plugin');
 
 
-const EnvironmentTypes = Object.freeze({
-  BETA: 'beta',
-  STABLE: 'stable',
-  STAGING: 'staging',
-});
-
-
 const GOOGLE_CLOUD_BUCKET_NAME = 'notsobot';
 const GOOGLE_CLOUD_PROJECT_ID = 'notsobot';
-const VERSION = EnvironmentTypes.BETA;
 
 
 const DIR = {
@@ -33,12 +25,19 @@ const BabelOptions = {
   ],
 };
 
+const EnvironmentTypes = Object.freeze({
+  BETA: 'beta',
+  STABLE: 'stable',
+  STAGING: 'staging',
+});
+
 
 const FILES_TO_DISALLOW_CACHE = ['manifest.json', 'app.js', 'app.css'];
 
 module.exports = (env) => {
   const production = !!env.production;
   const shouldHash = !!(env.hash || env.production);
+  const VERSION = (env.production) ? EnvironmentTypes.STABLE : EnvironmentTypes.BETA;
 
   return {
     entry: [
