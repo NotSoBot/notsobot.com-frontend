@@ -78,6 +78,7 @@ export enum ReactQueryKeys {
 export enum Routes {
   AUTH_LOGIN = '/auth/login',
   AUTH_LOGIN_CALLBACK = '/auth/login/callback',
+  AUTH_REDIRECT = '/auth/redirect',
   COMMANDS = '/commands',
   DASHBOARD = '/dashboard',
   FREQUENTLY_ASKED_QUESTIONS = '/faq',
@@ -88,4 +89,9 @@ export enum Routes {
   SUPPORT = '/support',
   SUPPORT_INVITE = '/support/invite',
   STATUS = '/status',
+}
+
+
+export enum Urls {
+  GITHUB = 'https://github.com/notsobot',
 }

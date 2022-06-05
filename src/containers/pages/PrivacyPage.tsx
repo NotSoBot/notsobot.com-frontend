@@ -103,7 +103,7 @@ export function PrivacyPage() {
               <h2>Section 9 - Contact Information</h2>
             </div>
             <div className={styles.sectionDescription}>
-              <span>Questions about the Privacy Policy should be sent to us via email at nsb@mods.nyc</span>
+              <span>Questions about the Privacy Policy should be sent to us via email at privacy@notsofoundation.com</span>
             </div>
           </div>
         </div>

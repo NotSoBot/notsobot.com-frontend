@@ -2,8 +2,6 @@
 
 
 .page {
-    align-self: initial;
-
     .modal {
         margin-left: auto;
         margin-top: 15vh;
@@ -77,6 +75,12 @@
     }
 }
 
+
+:global(.app-desktop) {
+    .page {
+        align-self: initial;
+    }
+}
 
 :global(.app-mobile) {
     .page {

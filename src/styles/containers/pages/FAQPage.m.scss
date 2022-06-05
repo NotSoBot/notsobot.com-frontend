@@ -45,41 +45,62 @@
                 background-color: $NotSoGrayDark;
                 border-radius: 10px;
                 margin: 5px 0;
-                padding: 10px 25px;
-                position: relative;
 
-                transition: background-color 0.125 ease-in-out, color 0.125s ease-in-out;
-
-                .card-toggle {
-                    cursor: pointer;
-                    position: absolute;
-                    right: 10px;
-                }
-
-                .card-title {
+                .card-inner {
+                    align-items: center;
                     display: flex;
-                    flex-flow: row nowrap;
+                    flex-flow: column nowrap;
 
-                    h2 {
+                    padding: 10px 25px;
+
+                    .card-title {
+                        display: flex;
+                        flex-flow: row nowrap;
+
+                        h2 {
+                            margin: 5px 0;
+                            opacity: 1;
+                            text-align: center;
+                        }
+                    }
+
+                    .divider {
+                        border: 1px solid;
+                        border-color: white;
+                        border-radius: 80%;
                         margin: 5px 0;
-                        opacity: 1;
-                        text-align: center;
+                        opacity: 0.4;
+                        width: 80%;
+                    }
+
+                    .card-description {
+                        opacity: 0.8;
                     }
                 }
-                .divider {
-                    border: 1px solid;
-                    border-color: white;
-                    border-radius: 80%;
-                    margin: 5px 0;
-                    opacity: 0.4;
-                    width: 80%;
+
+                .card-toggle {
+                    display: flex;
+                    justify-content: center;
+
+                    cursor: pointer;
+                    background-color: $NotSoGrayLight;
+                    border-radius: 0 0 10px 10px;
+                    opacity: 0.3;
+                    width: 100%;
+
+                    transition: opacity 0.125s ease-in-out;
                 }
-                .card-description {
-                    opacity: 0.8;
+                .card-toggle:focus, .card-toggle:hover {
+                    opacity: 0.6;
                 }
             }
             .card.active {
-
+                .card-toggle {
+                    opacity: 0.5;
+                }
+                .card-toggle:focus, .card-toggle:hover {
+                    opacity: 0.6;
+                }
             }
         }
     }
