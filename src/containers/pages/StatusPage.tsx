@@ -40,22 +40,22 @@ export function StatusPage() {
   const { data, error, isLoading } = queryInfoDiscord();
 
   const totals = {
-    events: 0n,
-    guilds: 0n,
-    healthyShards: 0n,
-    ram: 0n,
-    users: 0n,
+    events: 0,
+    guilds: 0,
+    healthyShards: 0,
+    ram: 0,
+    users: 0,
   };
 
   if (data) {
     for (let cluster of data.clusters) {
-      totals.ram += BigInt(cluster.ram_usage);
+      totals.ram += cluster.ram_usage;
       for (let shard of cluster.shards) {
-        totals.events += BigInt(shard.counts.events);
-        totals.guilds += BigInt(shard.counts.guilds);
-        totals.users += BigInt(shard.counts.users);
+        totals.events += shard.counts.events;
+        totals.guilds += shard.counts.guilds;
+        totals.users += shard.counts.users;
         if (shard.status === InfoDiscordShardStates.READY) {
-          totals.healthyShards += 1n;
+          totals.healthyShards += 1;
         }
       }
     }

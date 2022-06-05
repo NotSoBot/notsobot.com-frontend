@@ -32,8 +32,7 @@ export function PrivacyPage() {
               <h2>Section 1 - Definitions</h2>
             </div>
             <div className={styles.sectionDescription}>
-              <span>"Non Personal Information" is information that is not personally identifiable to you and that we automatically collect when you access our Service with a web browser. It may also include publicly available information that is shared between you and others.</span>
-              <span>"Personally Identifiable Information" is non-public information that is personally identifiable to you and obtained in order for us to provide you within our Service. Personally Identifiable Information may include information such as your discord username, discord descriminator, discord avatar, and other related information that you provide to us or that we obtain about you.</span>
+              <span>"Non Personal Information" is information that is not personally identifiable to you and that we automatically collect when you access our Service with a web browser. It may also include publicly available information that is shared between you and others. "Personally Identifiable Information" is non-public information that is personally identifiable to you and obtained in order for us to provide you within our Service. Personally Identifiable Information may include information such as your discord username, discord descriminator, discord avatar, and other related information that you provide to us or that we obtain about you.</span>
             </div>
           </div>
           <div className={styles.section}>
@@ -41,9 +40,7 @@ export function PrivacyPage() {
               <h2>Section 2 - Information We Collect</h2>
             </div>
             <div className={styles.sectionDescription}>
-              <span>Generally, you control the amount and type of information you provide to us when using our Service.</span>
-              <span>As a visitor, you can browse our website to find out more about our Service. You are not required to provide us with any Personally Identifiable Information as a visitor.</span>
-              <span>As a user, you may be required to provide us with Personally Identifiable Information.</span>
+              <span>Generally, you control the amount and type of information you provide to us when using our Service. As a visitor, you can browse our website to find out more about our Service. You are not required to provide us with any Personally Identifiable Information as a visitor. As a user, you may be required to provide us with Personally Identifiable Information.</span>
             </div>
           </div>
           <div className={styles.section}>
