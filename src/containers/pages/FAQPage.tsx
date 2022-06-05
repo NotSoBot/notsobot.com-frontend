@@ -39,7 +39,7 @@ const useStore = create<StoreState>((set, get) => ({
     },
     {
       title: 'How do I change the Bot\'s Prefix?',
-      description: 'Use `.prefixes add <prefix>`. Check the Bot\'s current prefixes by doing `@NotSoBot prefixes`',
+      description: 'Use ".prefixes add <prefix>". Check the Bot\'s current prefixes by doing "@NotSoBot prefixes"',
       open: true,
     },
     {
@@ -47,13 +47,19 @@ const useStore = create<StoreState>((set, get) => ({
       description: 'FaceApp introduced higher ratelimits which caused us to have to remove these commands. Other haven\'t been implemented yet due to our rewrite.',
       open: true,
     },
+    /*
     {
       title: 'Does this Bot have a Leveling System?',
       description: 'We do not wish to add a leveling system to this bot since we believe it just creates more spam in servers.',
     },
+    */
     {
       title: 'Did the Owner(s) of NotSoBot Perish?',
       description: 'no',
+    },
+    {
+      title: 'When was NotSoBot created?',
+      description: 'April 16, 2016',
     },
   ].map((question, i) => ({...question, key: i})),
   setQuery: (event) => {
@@ -114,13 +120,15 @@ function Question(
   const active = question.open;
   return (
     <div className={[styles.card, (active) ? styles.active : null].filter(Boolean).join(' ')}>
+      <div className={styles.cardInner}>
+        <div className={styles.cardTitle}>
+          <h2>{question.title}</h2>
+        </div>
+        {(question.open) ? <QuestionDescription question={question}/> : null}
+      </div>
       <div className={styles.cardToggle} onClick={() => toggleOpen(question.key)}>
         {(question.open) ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>}
       </div>
-      <div className={styles.cardTitle}>
-        <h2>{question.title}</h2>
-      </div>
-      {(question.open) ? <QuestionDescription question={question}/> : null}
     </div>
   );
 }
