@@ -8,6 +8,13 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const WebpackGoogleCloudStoragePlugin  = require('webpack-google-cloud-storage-plugin');
 
 
+const EnvironmentTypes = Object.freeze({
+  BETA: 'beta',
+  STABLE: 'stable',
+  STAGING: 'staging',
+});
+
+
 const GOOGLE_CLOUD_BUCKET_NAME = 'notsobot';
 const GOOGLE_CLOUD_PROJECT_ID = 'notsobot';
 
