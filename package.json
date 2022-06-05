@@ -53,13 +53,13 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "npm run start:prod",
-    "start:dev": "npm run webpack:dev",
-    "start:dev-hash": "npm run webpack:dev-hash",
-    "start:prod": "npm run webpack:prod",
-    "webpack:dev": "webpack --mode=development --progress --watch",
-    "webpack:dev-hash": "webpack --mode=development --progress --watch --env hash",
-    "webpack:prod": "webpack --mode=production --progress --watch --env production",
+    "start": "npm run start:stable",
+    "start:beta": "npm run webpack:beta",
+    "start:beta-nohash": "npm run webpack:beta-nohash",
+    "start:stable": "npm run webpack:stable",
+    "webpack:beta": "webpack --mode=development --progress --watch --env hash",
+    "webpack:beta-nohash": "webpack --mode=development --progress --watch",
+    "webpack:stable": "webpack --mode=production --progress --watch --env production",
     "test": "echo \"Error: no test specified\" && exit 1"
   }
 }

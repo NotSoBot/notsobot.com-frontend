@@ -15,16 +15,6 @@ import { PrivacyPage } from './pages/PrivacyPage';
 import { StatusPage } from './pages/StatusPage';
 
 
-export function AuthLogin() {
-  const user = useStoreUserMe((state) => state.user);
-
-  if (!user) {
-    window.location.replace(ApiEndpoints.PATH + ApiEndpoints.AUTH_LOGIN);
-    return <Outlet/>;
-  }
-  return <Navigate to={Routes.HOME}/>;
-}
-
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -34,10 +24,42 @@ export function AppRouter() {
         <Route path={Routes.AUTH_LOGIN_CALLBACK} element={<AuthLoginCallbackPage/>}/>
         <Route path={Routes.COMMANDS} element={<CommandsPage/>}/>
         <Route path={Routes.FREQUENTLY_ASKED_QUESTIONS} element={<FAQPage/>}/>
+        <Route path={Routes.FOXBOT} element={<FoxBot/>}/>
+        <Route path={Routes.INVITE} element={<Invite/>}/>
         <Route path={Routes.LEGAL_PRIVACY} element={<PrivacyPage/>}/>
         <Route path={Routes.STATUS} element={<StatusPage/>}/>
+        <Route path={Routes.SUPPORT_INVITE} element={<SupportInvite/>}/>
         <Route path='*' element={<ErrorPage/>}/>
       </RoutesSwitch>
     </BrowserRouter>
   );
+}
+
+
+function AuthLogin() {
+  const user = useStoreUserMe((state) => state.user);
+
+  if (!user) {
+    window.location.replace(ApiEndpoints.PATH + ApiEndpoints.AUTH_LOGIN);
+    return <Outlet/>;
+  }
+  return <Navigate to={Routes.HOME}/>;
+}
+
+
+function FoxBot() {
+  window.location.replace('https://discordapp.com/users/66078337084162048');
+  return <Outlet/>;
+}
+
+
+function Invite() {
+  window.location.replace(ApiEndpoints.PATH + ApiEndpoints.HELP_DISCORD_BOT);
+  return <Outlet/>;
+}
+
+
+function SupportInvite() {
+  window.location.replace(ApiEndpoints.PATH + ApiEndpoints.HELP_DISCORD_SERVER);
+  return <Outlet/>;
 }

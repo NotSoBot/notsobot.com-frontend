@@ -81,6 +81,7 @@ export enum Routes {
   COMMANDS = '/commands',
   DASHBOARD = '/dashboard',
   FREQUENTLY_ASKED_QUESTIONS = '/faq',
+  FOXBOT = '/foxbot',
   HOME = '/',
   INVITE = '/invite',
   LEGAL_PRIVACY = '/legal/privacy',
