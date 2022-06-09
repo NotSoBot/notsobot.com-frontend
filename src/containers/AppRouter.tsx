@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes as RoutesSwitch } from 'react-router-dom';
 
-import { Routes } from '../constants';
+import { PlausibleGoals, Routes } from '../constants';
 import { ApiEndpoints } from '../endpoints';
 
 import { useStore as useStoreUserMe } from '../stores/UserMeStore';
@@ -49,6 +49,13 @@ function AuthLogin() {
 
 
 function AuthRedirectPage() {
+  if (window.location.hash) {
+    const parameters = new URLSearchParams(window.location.hash.substring(1));
+    const state = parameters.get('state');
+    if (state) {
+      window.plausible(PlausibleGoals.BOT_ADDED, {props: {from: state}});
+    }
+  }
   return <Navigate to={Routes.COMMANDS}/>;
 }
 

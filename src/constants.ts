@@ -68,6 +68,11 @@ export enum LocalStorageKeys {
 }
 
 
+export enum PlausibleGoals {
+  BOT_ADDED = 'BotAdded',
+}
+
+
 export enum ReactQueryKeys {
   COMMANDS = 'commands',
   INFO_DISCORD = 'info-discord',

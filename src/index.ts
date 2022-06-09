@@ -1,3 +1,5 @@
+import './bootstrap';
+
 import * as Application from './application';
 
 
