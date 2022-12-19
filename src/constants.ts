@@ -91,6 +91,7 @@ export enum Routes {
   HOME = '/',
   INVITE = '/invite',
   LEGAL_PRIVACY = '/legal/privacy',
+  LEGAL_TERMS_OF_SERVICE = '/legal/tos',
   SUPPORT = '/support',
   SUPPORT_INVITE = '/support/invite',
   STATUS = '/status',

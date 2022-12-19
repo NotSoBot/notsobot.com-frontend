@@ -13,6 +13,7 @@ import { FAQPage } from './pages/FAQPage';
 import { HomePage } from './pages/HomePage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { StatusPage } from './pages/StatusPage';
+import { TOSPage } from './pages/TermsOfServicePage';
 
 
 export function AppRouter() {
@@ -28,6 +29,7 @@ export function AppRouter() {
         <Route path={Routes.FOXBOT} element={<FoxBot/>}/>
         <Route path={Routes.INVITE} element={<Invite/>}/>
         <Route path={Routes.LEGAL_PRIVACY} element={<PrivacyPage/>}/>
+        <Route path={Routes.LEGAL_TERMS_OF_SERVICE} element={<TOSPage/>}/>
         <Route path={Routes.STATUS} element={<StatusPage/>}/>
         <Route path={Routes.SUPPORT_INVITE} element={<SupportInvite/>}/>
         <Route path='*' element={<ErrorPage/>}/>

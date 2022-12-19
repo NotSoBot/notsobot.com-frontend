@@ -42,6 +42,9 @@ export function FooterBar() {
               <NavLink to={Routes.LEGAL_PRIVACY} className={activeClassName()}>
                 <span>Privacy Policy</span>
               </NavLink>
+              <NavLink to={Routes.LEGAL_TERMS_OF_SERVICE} className={activeClassName()}>
+                <span>Terms of Service</span>
+              </NavLink>
             </div>
           </div>
         </div>

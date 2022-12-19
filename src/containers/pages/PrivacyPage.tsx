@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import * as styles from '../../styles/containers/pages/PrivacyPage.m.scss';
+import * as styles from '../../styles/containers/pages/LegalPage.m.scss';
 
 import { NavPage } from '../NavPage';
 
