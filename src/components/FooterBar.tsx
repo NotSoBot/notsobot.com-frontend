@@ -65,6 +65,7 @@ const QUOTES = shuffleArray<[string, string]>([
   ['how did you get into my house', 'jakkeri'],
   ['gets banned too much', 'arcs'],
   ['🦎', 'stryxo'],
+  ['can i get on the list of reviews', 'danii'],
 ]);
 
 function FooterQuote() {
