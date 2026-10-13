@@ -1,8 +1,8 @@
-import { Database, LayoutDashboard, Server, Settings, Tags, type LucideIcon } from 'lucide-react';
+import { Database, Flag, Inbox, LayoutDashboard, Server, Settings, ShieldCheck, Tags, Users, type LucideIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
-import { useAuth } from '@/auth';
+import { isOwner, useAuth } from '@/auth';
 import { ToastProvider } from '@/components/ui/Toast';
 import { Routes } from '@/config';
 import { userAvatarUrl } from '@/lib/discord';
@@ -27,6 +27,14 @@ export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_DATA, label: 'Your Data', icon: Database, color: '#ed4245'},
 ];
 
+// only shown to NotSoBot owners (the routes are guarded by <RequireOwner/> too)
+export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
+  {to: Routes.DASHBOARD_ADMIN_TAGS, label: 'Directory Tags', icon: ShieldCheck, color: '#3ba55c'},
+  {to: Routes.DASHBOARD_ADMIN_USERS, label: 'Users', icon: Users, color: '#5865f2'},
+  {to: Routes.DASHBOARD_ADMIN_FLAGS, label: 'Content Flags', icon: Flag, color: '#ed4245'},
+  {to: Routes.DASHBOARD_ADMIN_REPORTS, label: 'Reports', icon: Inbox, color: '#faa81a'},
+];
+
 
 export function DashboardLayout() {
   const { user } = useAuth();
@@ -47,25 +55,14 @@ export function DashboardLayout() {
             ) : null}
             <h2 className='section-label mb-2 hidden px-1 lg:block'>Dashboard</h2>
             <nav aria-label='Dashboard sections'>
-              <ul className='-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0'>
-                {DASHBOARD_SECTIONS.map((section) => (
-                  <li key={section.to} className='shrink-0'>
-                    <NavLink
-                      to={section.to}
-                      end={section.end}
-                      style={{'--cat': section.color} as CSSProperties}
-                      className={({ isActive }) => cn(
-                        'flex items-center gap-2.5 rounded-md border px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-transparent',
-                        isActive ? 'border-brand/70 bg-surface-3 text-white' : 'border-line text-muted hover:bg-surface-2 hover:text-white',
-                      )}
-                    >
-                      <section.icon aria-hidden className='size-4 shrink-0 text-[var(--cat)]'/>
-                      {section.label}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
+              <SectionList sections={DASHBOARD_SECTIONS}/>
             </nav>
+            {(isOwner(user)) ? (
+              <nav aria-label='Admin sections' className='mt-3 lg:mt-6'>
+                <h2 className='section-label mb-2 hidden px-1 lg:block'>Admin</h2>
+                <SectionList sections={ADMIN_SECTIONS}/>
+              </nav>
+            ) : null}
           </aside>
 
           <div className='min-w-0'>
@@ -74,5 +71,29 @@ export function DashboardLayout() {
         </div>
       </div>
     </ToastProvider>
+  );
+}
+
+
+function SectionList({ sections }: {sections: ReadonlyArray<Section>}) {
+  return (
+    <ul className='-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0'>
+      {sections.map((section) => (
+        <li key={section.to} className='shrink-0'>
+          <NavLink
+            to={section.to}
+            end={section.end}
+            style={{'--cat': section.color} as CSSProperties}
+            className={({ isActive }) => cn(
+              'flex items-center gap-2.5 rounded-md border px-3 py-2 text-sm whitespace-nowrap transition-colors lg:border-transparent',
+              isActive ? 'border-brand/70 bg-surface-3 text-white' : 'border-line text-muted hover:bg-surface-2 hover:text-white',
+            )}
+          >
+            <section.icon aria-hidden className='size-4 shrink-0 text-[var(--cat)]'/>
+            {section.label}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
   );
 }

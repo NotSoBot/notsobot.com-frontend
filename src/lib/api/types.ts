@@ -253,6 +253,7 @@ export const ApiErrorCodes = {
   UNKNOWN_TAG: 10009,
   UNKNOWN_TAG_DIRECTORY_ITEM: 10011,
   UNKNOWN_SERVER: 10012,
+  UNKNOWN_REPORT: 10017,
   MISSING_ACCESS: 20004,
   INVALID_FORM_BODY: 50001,
   TAG_LOCKED: 50011,
@@ -433,10 +434,25 @@ export interface UserGuild {
   locale: string | null,
   loggers: Array<GuildLogger>,
   name: string,
+  owner: boolean,
   permissions: string,
   prefixes: Array<GuildPrefix>,
   settings: GuildSettings,
   timezone: string | null,
+}
+
+// owner only: the server's settings and its tags. Logger webhook URLs, tag variables/blobs and the content of
+// directory tags (including what aliases here point to outside the server) are left out, `notes` says so inside the file
+export interface UserGuildDataExport {
+  guild: Omit<UserGuild, 'editable' | 'owner' | 'permissions'>,
+  notes: Array<string>,
+  tags: Array<Tag>,
+  timestamp: number,
+  version: number,
+}
+
+export interface UserGuildDataDelete {
+  tags_deleted: number,
 }
 
 export interface UserGuildPatch {
@@ -459,3 +475,184 @@ export interface TagDirectoryListingInput {
 
 export const TAG_DIRECTORY_TITLE_MAX = 128;
 export const TAG_DIRECTORY_DESCRIPTION_MAX = 2000;
+
+
+// --- Admin (`/admin/...`, owner only, see docs/dashboard-api.md) ---
+
+// `UserFlags` bits on `User.flags`
+export const UserFlags = {
+  OWNER: 1 << 0,
+} as const;
+
+// bigint ids come back as strings, timestamps as ISO strings (be tolerant of epoch numbers too)
+export type ApiTimestamp = string | number;
+
+export interface AdminUserRef {
+  avatar: string | null,
+  discriminator: string,
+  id: string,
+  username: string,
+}
+
+// `Tag.to_dict()` with content, as the admin directory returns it
+export interface AdminDirectoryTag {
+  assets?: Array<unknown>,
+  content: string,
+  created: ApiTimestamp,
+  edited?: ApiTimestamp | null,
+  guild_id?: string | null,
+  id: string,
+  is_command?: boolean,
+  last_used?: ApiTimestamp | null,
+  locked: boolean,
+  name: string,
+  nsfw: boolean,
+  reference_tag?: unknown,
+  server_id: string | null,
+  user_id?: string | null,
+  uses: number,
+  [key: string]: unknown,
+}
+
+export interface AdminTagDirectoryItem {
+  assets: Array<TagDirectoryAsset>,
+  created?: ApiTimestamp,
+  description: string,
+  edited?: ApiTimestamp | null,
+  id: string,
+  server_count: number,
+  tag: AdminDirectoryTag,
+  title: string,
+  user: AdminUserRef | null,
+  verified: number,
+}
+
+export interface AdminTagDirectoryPage {
+  count: number,
+  items: Array<AdminTagDirectoryItem>,
+}
+
+export interface AdminUser extends AdminUserRef {
+  blocked: boolean,
+  blocked_reason: string | null,
+  flags: number,
+  premium_type: number | null,
+}
+
+export interface AdminUserContentFlags {
+  confirmed: number,
+  dismissed: number,
+  flagged: number,
+  last_flagged_at: ApiTimestamp | null,
+  pending: number,
+  reported: number,
+  total: number,
+}
+
+export interface AdminUserEntry {
+  content_flags: AdminUserContentFlags,
+  user: AdminUser,
+}
+
+export interface AdminUsersPage {
+  count: number,
+  items: Array<AdminUserEntry>,
+}
+
+export type AdminUsersSortBy = 'flags' | 'newest' | 'username';
+
+export const ContentFlagStatuses = {
+  PENDING: 0,
+  CONFIRMED: 1,
+  DISMISSED: 2,
+  REPORTED: 3,
+} as const;
+export type ContentFlagStatus = (typeof ContentFlagStatuses)[keyof typeof ContentFlagStatuses];
+
+export const ContentFlagCategories = ['unsafe', 'unsafe_child_safety', 'unsafe_nudity', 'review_child_safety', 'review'] as const;
+export const ContentFlagActions = ['blocked', 'replaced', 'logged', 'not_hosted'] as const;
+
+export interface ContentFlag {
+  action: string | null,
+  category: string | null,
+  channel_id: string | null,
+  command_id: string | null,
+  created: ApiTimestamp,
+  flagged: Array<string> | null,
+  flagged_for_review: Array<string> | null,
+  frames: number | null,
+  frames_flagged: Array<number> | null,
+  guild_id: string | null,
+  id: string,
+  message_id: string | null,
+  mimetype: string | null,
+  model: string | null,
+  needs_human_review: boolean,
+  notes: string | null,
+  pdq: string | null,
+  query: string | null,
+  reviewed_at: ApiTimestamp | null,
+  reviewed_by: string | null,
+  scores_worst: Record<string, unknown> | null,
+  sha256: string | null,
+  size: number | null,
+  // never rendered as media or a link, see AdminContentFlagsPage
+  source_url: string | null,
+  status: number,
+  tag_id: string | null,
+  user: AdminUserRef | null,
+  user_id: string | null,
+}
+
+export interface ContentFlagsPage {
+  count: number,
+  items: Array<ContentFlag>,
+}
+
+export interface ContentFlagPatch {
+  status?: ContentFlagStatus,
+  notes?: string | null,
+}
+
+// what users send with the bot's `report bug|user|server` command
+export const ReportTypes = {
+  BUG: 0,
+  USER: 1,
+  SERVER: 2,
+} as const;
+export type ReportType = (typeof ReportTypes)[keyof typeof ReportTypes];
+
+export const ReportStatuses = {
+  OPEN: 0,
+  RESOLVED: 1,
+  DISMISSED: 2,
+} as const;
+export type ReportStatus = (typeof ReportStatuses)[keyof typeof ReportStatuses];
+
+export interface Report {
+  channel_id: string | null,
+  content: string,
+  created: ApiTimestamp,
+  guild_id: string | null,
+  id: string,
+  message_id: string | null,
+  notes: string | null,
+  reviewed_at: ApiTimestamp | null,
+  reviewed_by: string | null,
+  status: number,
+  // the reported user (USER) or guild (SERVER); null for bugs
+  target_id: string | null,
+  type: number,
+  // the reporter
+  user: User,
+}
+
+export interface ReportsPage {
+  count: number,
+  items: Array<Report>,
+}
+
+export interface ReportPatch {
+  status?: ReportStatus,
+  notes?: string | null,
+}

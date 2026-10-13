@@ -4,11 +4,12 @@ import { Link, useParams } from 'react-router';
 
 import { Routes } from '@/config';
 import { ApiErrorCodes, ApiRequestError, type GuildEditableArea } from '@/lib/api';
-import { errorMessage, isDiscordGrantError, isScopeMismatch, useMeGuildQuery, useMeGuildsQuery } from '@/lib/api/dashboardQueries';
+import { errorMessage, isDiscordGrantError, isScopeMismatch, useMeGuildQuery } from '@/lib/api/dashboardQueries';
 
 import { ErrorPanel, PanelSkeleton, Skeleton, UnsavedChangesGuard } from '../ui';
 import { GuildIcon } from './GuildIcon';
 import { AREA_LABEL, AREA_PERMISSION } from './guildMeta';
+import { ServerDataSection } from './ServerDataSection';
 import { CommandListSection, ListSection, LoggersSection, PrefixesSection } from './ServerSections';
 import { ServerSettingsForm } from './ServerSettingsForm';
 import { ScopeMismatchCard } from './ServersPage';
@@ -17,8 +18,6 @@ import { ScopeMismatchCard } from './ServersPage';
 export function ServerDetailPage() {
   const { guildId = '' } = useParams();
   const { data: guild, isPending, isError, error, refetch, isRefetching } = useMeGuildQuery(guildId);
-  // the list is usually cached already; it tells us if you're the owner
-  const summary = useMeGuildsQuery().data?.find((item) => item.id === guildId);
   const [ settingsDirty, setSettingsDirty ] = useState(false);
 
   const back = (
@@ -73,7 +72,7 @@ export function ServerDetailPage() {
         <div className='min-w-0'>
           <h1 className='flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl'>
             <span className='truncate' title={guild.name}>{guild.name}</span>
-            {(summary?.owner) ? <Crown aria-label='You own this server' className='size-5 shrink-0 text-warning'/> : null}
+            {(guild.owner) ? <Crown aria-label='You own this server' className='size-5 shrink-0 text-warning'/> : null}
           </h1>
           <p className='mt-1 flex flex-wrap gap-x-3 text-sm text-subtle'>
             <span className='font-mono'>{guild.id}</span>
@@ -99,6 +98,7 @@ export function ServerDetailPage() {
         <CommandListSection guild={guild} list='allowlist'/>
         <CommandListSection guild={guild} list='blocklist'/>
         <LoggersSection guild={guild}/>
+        <ServerDataSection guild={guild}/>
       </div>
 
       <UnsavedChangesGuard when={settingsDirty}/>

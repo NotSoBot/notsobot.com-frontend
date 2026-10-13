@@ -21,12 +21,12 @@ import { TagDetailModal } from './TagDetailModal';
 import { AddTagButton, NsfwBadge, tagDirectoryItemPath, VerificationBadge } from './tagDirectory';
 
 
-// URL value -> API value; the first entry of each is the default and is left out of the URL
+// URL value -> API value; defaults are left out of the URL
 const SORT_OPTIONS: Array<{param: string, label: string, value: TagDirectorySortBy}> = [
+  {param: 'uses', label: 'Most used', value: TagDirectorySortByFilters.USES},
   {param: 'verified', label: 'Verified first', value: TagDirectorySortByFilters.VERIFIED},
   {param: 'newest', label: 'Newest', value: TagDirectorySortByFilters.NEWEST},
   {param: 'oldest', label: 'Oldest', value: TagDirectorySortByFilters.OLDEST},
-  {param: 'uses', label: 'Most used', value: TagDirectorySortByFilters.USES},
   {param: 'name', label: 'Name (A–Z)', value: TagDirectorySortByFilters.NAME},
 ];
 
@@ -37,16 +37,13 @@ const STATUS_OPTIONS: Array<{param: string, label: string, value: number | null}
   {param: 'unverified', label: 'Unverified', value: TagDirectoryVerificationStates.NOT_VERIFIED},
 ];
 
-const NSFW_OPTIONS: Array<{param: string, label: string, value: boolean | null}> = [
-  {param: 'all', label: 'All', value: null},
-  {param: 'hide', label: 'Hide NSFW', value: false},
-  {param: 'only', label: 'NSFW only', value: true},
-];
+const DEFAULT_SORT = 'uses';
+const DEFAULT_STATUS = 'verified';
 
 const FILTER_PARAMS = ['q', 'sort', 'status', 'nsfw'];
 
-function findOption<T extends {param: string}>(options: Array<T>, param: string | null): T {
-  return options.find((option) => option.param === param) ?? options[0];
+function findOption<T extends {param: string}>(options: Array<T>, param: string | null, defaultParam: string): T {
+  return options.find((option) => option.param === param) ?? options.find((option) => option.param === defaultParam)!;
 }
 
 
@@ -55,16 +52,17 @@ export function TagDirectoryPage() {
   const query = searchParams.get('q') || '';
   // the API does the searching, so don't hit it on every keystroke
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
-  const sort = findOption(SORT_OPTIONS, searchParams.get('sort'));
-  const status = findOption(STATUS_OPTIONS, searchParams.get('status'));
-  const nsfw = findOption(NSFW_OPTIONS, searchParams.get('nsfw'));
-  const isFiltered = !!debouncedQuery || status.value !== null || nsfw.value !== null;
+  const sort = findOption(SORT_OPTIONS, searchParams.get('sort'), DEFAULT_SORT);
+  const status = findOption(STATUS_OPTIONS, searchParams.get('status'), DEFAULT_STATUS);
+  // NSFW tags are hidden unless asked for
+  const showNsfw = searchParams.get('nsfw') === 'show';
+  const isFiltered = !!debouncedQuery || status.param !== DEFAULT_STATUS || showNsfw;
 
   const { data, isPending, isError, isPlaceholderData, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useTagDirectoryQuery({
     query: debouncedQuery,
     sortBy: sort.value,
     verified: status.value,
-    nsfw: nsfw.value,
+    nsfw: (showNsfw) ? null : false,
   });
 
   const items = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
@@ -112,8 +110,8 @@ export function TagDirectoryPage() {
   };
 
   // defaults stay out of the URL so the plain directory link is the default view
-  const setOption = (key: string, options: Array<{param: string}>, param: string) => {
-    updateParams({[key]: (param === options[0].param) ? null : param});
+  const setOption = (key: string, defaultParam: string, param: string) => {
+    updateParams({[key]: (param === defaultParam) ? null : param});
   };
 
   const clearFilters = () => {
@@ -144,20 +142,23 @@ export function TagDirectoryPage() {
             label='Verification'
             value={status.param}
             options={STATUS_OPTIONS.map(({ param, label }) => ({value: param, label}))}
-            onChange={(value) => setOption('status', STATUS_OPTIONS, value)}
+            onChange={(value) => setOption('status', DEFAULT_STATUS, value)}
           />
-          <Segmented
-            label='NSFW'
-            value={nsfw.param}
-            options={NSFW_OPTIONS.map(({ param, label }) => ({value: param, label}))}
-            onChange={(value) => setOption('nsfw', NSFW_OPTIONS, value)}
-          />
-          <label className='flex items-center gap-2 text-sm text-muted sm:ml-auto'>
+          <label className='flex cursor-pointer items-center gap-1.5 text-xs text-subtle hover:text-muted sm:ml-auto'>
+            <input
+              type='checkbox'
+              className='size-3.5 cursor-pointer accent-brand'
+              checked={showNsfw}
+              onChange={(event) => updateParams({nsfw: (event.target.checked) ? 'show' : null})}
+            />
+            Show NSFW
+          </label>
+          <label className='flex items-center gap-2 text-sm text-muted'>
             Sort by
             <select
               className='input w-auto'
               value={sort.param}
-              onChange={(event) => setOption('sort', SORT_OPTIONS, event.target.value)}
+              onChange={(event) => setOption('sort', DEFAULT_SORT, event.target.value)}
             >
               {SORT_OPTIONS.map((option) => <option key={option.param} value={option.param}>{option.label}</option>)}
             </select>
@@ -259,7 +260,7 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
           <img src={userAvatarUrl(tag.user, 32)} alt='' loading='lazy' className='size-6 rounded-full bg-surface-3'/>
           <span className='truncate text-sm text-muted'>{tag.user.username}</span>
         </div>
-        <AddTagButton/>
+        <AddTagButton tag={tag}/>
       </div>
     </li>
   );

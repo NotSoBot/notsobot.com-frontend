@@ -19,6 +19,7 @@ export const ApiEndpoints = Object.freeze({
   USER_ME_TAG_VARIABLE: (tagId: string, storageType: number, storageId: string) => `/users/@me/tags/${tagId}/variables/${storageType}/${storageId}`,
   USER_ME_TAG_BLOBS: (tagId: string) => `/users/@me/tags/${tagId}/blobs`,
   USER_ME_TAG_DIRECTORY: (tagId: string) => `/users/@me/tags/${tagId}/directory`,
+  USER_ME_TAG_ADD: (tagId: string) => `/users/@me/tags/${tagId}/add`,
   USER_ME_GUILDS: '/users/@me/guilds',
   USER_ME_GUILD: (guildId: string) => `/users/@me/guilds/${guildId}`,
   USER_ME_GUILD_PREFIXES: (guildId: string) => `/users/@me/guilds/${guildId}/prefixes`,
@@ -28,6 +29,17 @@ export const ApiEndpoints = Object.freeze({
     return `/users/@me/guilds/${guildId}/commands/${encodeURIComponent(command)}/${list}/${id}/${type}`;
   },
   USER_ME_GUILD_LOGGERS_DELETE: (guildId: string) => `/users/@me/guilds/${guildId}/loggers/delete`,
+  USER_ME_GUILD_DATA_EXPORT: (guildId: string) => `/users/@me/guilds/${guildId}/data/export`,
+  USER_ME_GUILD_DATA_DELETE: (guildId: string) => `/users/@me/guilds/${guildId}/data/delete`,
   // planned, not built yet (the dashboard treats 404/405 as "not available yet")
   USER_ME_DATA_EXPORT: '/users/@me/data/export',
+
+  // admin (owner only)
+  ADMIN_TAGS_DIRECTORY: '/admin/tags/directory',
+  ADMIN_TAG_DIRECTORY: (tagId: string) => `/admin/tags/directory/${tagId}`,
+  ADMIN_USERS: '/admin/users',
+  ADMIN_CONTENT_FLAGS: '/admin/content-flags',
+  ADMIN_CONTENT_FLAG: (flagId: string) => `/admin/content-flags/${flagId}`,
+  ADMIN_REPORTS: '/admin/reports',
+  ADMIN_REPORT: (reportId: string) => `/admin/reports/${reportId}`,
 });

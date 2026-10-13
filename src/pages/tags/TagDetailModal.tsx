@@ -96,7 +96,7 @@ function TagDetail({ item }: {item: TagDirectoryItem}) {
             {(item.title) ? <p className='mb-3 text-lg text-muted'>{item.title}</p> : null}
             <VerificationBadge verified={item.verified} size='lg'/>
           </div>
-          <AddTagButton size='lg'/>
+          <AddTagButton tag={tag} size='lg'/>
         </div>
       </header>
 

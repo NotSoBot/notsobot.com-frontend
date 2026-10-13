@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 
-import { RequireAuth } from '@/auth';
+import { RequireAuth, RequireOwner } from '@/auth';
 import { ExternalRedirect } from '@/components/ExternalRedirect';
 import { SiteLayout } from '@/components/layout/SiteLayout';
 import { Routes, Urls } from '@/config';
@@ -76,6 +76,17 @@ const routes: Array<RouteObject> = [
               {path: Routes.DASHBOARD_SERVER, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServerDetailPage')).ServerDetailPage}), handle: {title: 'Server'} satisfies RouteHandle},
               {path: Routes.DASHBOARD_SETTINGS, lazy: async () => ({Component: (await import('@/pages/dashboard/settings/SettingsPage')).SettingsPage}), handle: {title: 'Settings'} satisfies RouteHandle},
               {path: Routes.DASHBOARD_DATA, lazy: async () => ({Component: (await import('@/pages/dashboard/data/YourDataPage')).YourDataPage}), handle: {title: 'Your Data'} satisfies RouteHandle},
+              // NotSoBot owners only
+              {
+                element: <RequireOwner/>,
+                children: [
+                  {path: '/dashboard/admin', element: <Navigate to={Routes.DASHBOARD_ADMIN_TAGS} replace/>},
+                  {path: Routes.DASHBOARD_ADMIN_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminTagsPage')).AdminTagsPage}), handle: {title: 'Directory Tags'} satisfies RouteHandle},
+                  {path: Routes.DASHBOARD_ADMIN_USERS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminUsersPage')).AdminUsersPage}), handle: {title: 'Users'} satisfies RouteHandle},
+                  {path: Routes.DASHBOARD_ADMIN_FLAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminContentFlagsPage')).AdminContentFlagsPage}), handle: {title: 'Content Flags'} satisfies RouteHandle},
+                  {path: Routes.DASHBOARD_ADMIN_REPORTS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminReportsPage')).AdminReportsPage}), handle: {title: 'Reports'} satisfies RouteHandle},
+                ],
+              },
             ],
           },
         ],

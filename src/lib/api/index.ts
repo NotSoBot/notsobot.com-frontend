@@ -2,8 +2,18 @@ import { ApiEndpoints } from './endpoints';
 import { ApiRequestError, apiRequest } from './client';
 import { ApiErrorCodes } from './types';
 import type {
+  AdminTagDirectoryItem,
+  AdminTagDirectoryPage,
+  AdminUsersPage,
+  AdminUsersSortBy,
   Command,
+  ContentFlag,
+  ContentFlagPatch,
+  ContentFlagsPage,
   CommandStat,
+  Report,
+  ReportPatch,
+  ReportsPage,
   GuildListKind,
   InfoDiscord,
   Tag,
@@ -19,6 +29,8 @@ import type {
   TagVariable,
   TagVariables,
   UserGuild,
+  UserGuildDataDelete,
+  UserGuildDataExport,
   UserGuildPatch,
   UserGuildSummary,
   UserMe,
@@ -207,11 +219,120 @@ export const api = {
     return apiRequest<void>(ApiEndpoints.USER_ME_GUILD_LOGGERS_DELETE(guildId), {method: 'POST', body});
   },
 
+  // adds a tag directory tag to a server (`guild_id`) or your DMs with the bot (no `guild_id`), as an alias
+  addMeTag: (tagId: string, body: {guild_id?: string, name?: string}) => {
+    return apiRequest<Tag>(ApiEndpoints.USER_ME_TAG_ADD(tagId), {method: 'POST', body});
+  },
+
+  // server owners only
+  exportMeGuildData: (guildId: string) => {
+    return apiRequest<UserGuildDataExport>(ApiEndpoints.USER_ME_GUILD_DATA_EXPORT(guildId), {timeout: 60 * 1000});
+  },
+
+  deleteMeGuildData: (guildId: string) => {
+    return apiRequest<UserGuildDataDelete>(ApiEndpoints.USER_ME_GUILD_DATA_DELETE(guildId), {method: 'POST', timeout: 60 * 1000});
+  },
+
   requestMeDataExport: () => {
     return apiRequest<unknown>(ApiEndpoints.USER_ME_DATA_EXPORT, {method: 'POST'});
   },
 
   deleteMe: () => {
     return apiRequest<void>(ApiEndpoints.USER_ME, {method: 'DELETE'});
+  },
+
+
+  // --- admin (owner only) ---
+
+  fetchAdminTagDirectory: (params: {
+    query?: string,
+    verified?: number | null,
+    nsfw?: boolean | null,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<AdminTagDirectoryPage>(ApiEndpoints.ADMIN_TAGS_DIRECTORY, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        verified: params.verified,
+        nsfw: params.nsfw,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  patchAdminTagDirectory: (tagId: string, body: {verified: number}) => {
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
+  },
+
+  fetchAdminUsers: (params: {
+    query?: string,
+    sortBy?: AdminUsersSortBy,
+    onlyFlagged?: boolean,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<AdminUsersPage>(ApiEndpoints.ADMIN_USERS, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        sort_by: params.sortBy,
+        only_flagged: (params.onlyFlagged) ? true : undefined,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  fetchAdminContentFlags: (params: {
+    userId?: string,
+    status?: number | null,
+    category?: string,
+    needsHumanReview?: boolean | null,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<ContentFlagsPage>(ApiEndpoints.ADMIN_CONTENT_FLAGS, {
+      signal,
+      query: {
+        user_id: params.userId || undefined,
+        status: params.status,
+        category: params.category || undefined,
+        needs_human_review: params.needsHumanReview,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  patchAdminContentFlag: (flagId: string, body: ContentFlagPatch) => {
+    return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG(flagId), {method: 'PATCH', body});
+  },
+
+  fetchAdminReports: (params: {
+    type?: number | null,
+    status?: number | null,
+    userId?: string,
+    targetId?: string,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<ReportsPage>(ApiEndpoints.ADMIN_REPORTS, {
+      signal,
+      query: {
+        type: params.type,
+        status: params.status,
+        user_id: params.userId || undefined,
+        target_id: params.targetId || undefined,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  patchAdminReport: (reportId: string, body: ReportPatch) => {
+    return apiRequest<Report>(ApiEndpoints.ADMIN_REPORT(reportId), {method: 'PATCH', body});
   },
 };

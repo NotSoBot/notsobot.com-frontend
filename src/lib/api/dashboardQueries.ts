@@ -9,7 +9,16 @@ import { ApiRequestError } from './client';
 import { api } from './index';
 import { queryKeys } from './queries';
 import type {
+  AdminTagDirectoryItem,
+  AdminTagDirectoryPage,
+  AdminUsersSortBy,
+  ContentFlag,
+  ContentFlagPatch,
+  ContentFlagsPage,
   GuildListKind,
+  Report,
+  ReportPatch,
+  ReportsPage,
   Tag,
   TagBlobsPut,
   TagDirectoryItem,
@@ -390,7 +399,36 @@ export function useMeGuildMutation(guildId: string) {
 }
 
 
+// a directory tag added to a server or your DMs shows up in your tags
+export function useAddMeTagMutation(tagId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {guild_id?: string, name?: string}) => api.addMeTag(tagId, body),
+    onSuccess: () => queryClient.invalidateQueries({queryKey: queryKeys.meTags(token)}),
+  });
+}
+
+
 /* data */
+
+// server owners only; the delete refetches the server (and your tags) so the page shows it reset
+export function useExportMeGuildDataMutation(guildId: string) {
+  return useMutation({mutationFn: () => api.exportMeGuildData(guildId)});
+}
+
+export function useDeleteMeGuildDataMutation(guildId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.deleteMeGuildData(guildId),
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: queryKeys.meGuild(token, guildId)}),
+      // the server's tags show up in your tags list too
+      queryClient.invalidateQueries({queryKey: queryKeys.meTags(token)}),
+    ]),
+  });
+}
 
 export function useRequestDataExportMutation() {
   return useMutation({mutationFn: () => api.requestMeDataExport()});
@@ -398,4 +436,169 @@ export function useRequestDataExportMutation() {
 
 export function useDeleteMeMutation() {
   return useMutation({mutationFn: () => api.deleteMe()});
+}
+
+
+
+/* admin (owner only) */
+
+export const ADMIN_PAGE_SIZE = 25;
+
+export interface AdminTagDirectoryFilters {
+  query: string,
+  verified: number | null,
+  page: number,
+}
+
+export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminTagDirectory(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminTagDirectory({
+      query: filters.query,
+      verified: filters.verified,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+// shows the new state in place right away, then refetches since the item may leave the current filter
+export function usePatchAdminTagDirectoryMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'tags'];
+  return useMutation({
+    mutationFn: ({ tagId, verified }: {tagId: string, verified: number}) => api.patchAdminTagDirectory(tagId, {verified}),
+    onSuccess: (item: AdminTagDirectoryItem) => {
+      queryClient.setQueriesData<AdminTagDirectoryPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === item.id) ? item : other)};
+      });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({queryKey: listKey});
+      // the public directory shows the badge too
+      void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
+
+export interface AdminUsersFilters {
+  query: string,
+  sortBy: AdminUsersSortBy,
+  onlyFlagged: boolean,
+  page: number,
+}
+
+export function useAdminUsersQuery(filters: AdminUsersFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminUsers(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminUsers({
+      query: filters.query,
+      sortBy: filters.sortBy,
+      onlyFlagged: filters.onlyFlagged,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+export interface AdminContentFlagsFilters {
+  userId: string,
+  status: number | null,
+  category: string,
+  needsHumanReview: boolean | null,
+  page: number,
+}
+
+export function useAdminContentFlagsQuery(filters: AdminContentFlagsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminContentFlags(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminContentFlags({
+      userId: filters.userId,
+      status: filters.status,
+      category: filters.category,
+      needsHumanReview: filters.needsHumanReview,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+export function usePatchAdminContentFlagMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'content-flags'];
+  return useMutation({
+    mutationFn: ({ flagId, patch }: {flagId: string, patch: ContentFlagPatch}) => api.patchAdminContentFlag(flagId, patch),
+    onSuccess: (flag: ContentFlag) => {
+      queryClient.setQueriesData<ContentFlagsPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === flag.id) ? flag : other)};
+      });
+    },
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: listKey}),
+      // the per-user counts change with the status
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'users']}),
+    ]),
+  });
+}
+
+
+export interface AdminReportsFilters {
+  type: number | null,
+  status: number | null,
+  userId: string,
+  targetId: string,
+  page: number,
+}
+
+export function useAdminReportsQuery(filters: AdminReportsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminReports(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminReports({
+      type: filters.type,
+      status: filters.status,
+      userId: filters.userId,
+      targetId: filters.targetId,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+export function usePatchAdminReportMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'reports'];
+  return useMutation({
+    mutationFn: ({ reportId, patch }: {reportId: string, patch: ReportPatch}) => api.patchAdminReport(reportId, patch),
+    onSuccess: (report: Report) => {
+      queryClient.setQueriesData<ReportsPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === report.id) ? report : other)};
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+  });
 }

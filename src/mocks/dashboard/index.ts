@@ -7,7 +7,8 @@
 //
 // In the console: `__dashboardMocks.guildsError('scope' | 'grant' | 'ratelimit' | 'refreshing' | null)` makes
 // `/users/@me/guilds*` fail like the real API does (missing `guilds` scope, revoked Discord grant, Discord 429,
-// token refresh in progress); `__dashboardMocks.latency(ms)` changes the fake delay.
+// token refresh in progress); `__dashboardMocks.latency(ms)` changes the fake delay; `__dashboardMocks.owner(false)`
+// (then reload) drops the owner flag so the admin section disappears and `/admin/*` answers 403.
 // A logger webhook URL whose token contains "invalid" is rejected like a webhook from another channel.
 
 import { tokenStorage } from '@/auth/tokenStorage';
@@ -15,7 +16,12 @@ import { config } from '@/config';
 import { ApiErrorCodes, TagDirectoryVerificationStates, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
 
 import {
+  adminUserEntries,
+  createAdminDirectory,
+  createAdminUsers,
   createBlobs,
+  createContentFlags,
+  createReports,
   createGuilds,
   createSettings,
   createTags,
@@ -28,8 +34,16 @@ import {
 } from './fixtures';
 
 
+const adminUsers = createAdminUsers();
+
 const state = {
   settings: createSettings(),
+  adminUsers,
+  adminDirectory: createAdminDirectory(adminUsers),
+  contentFlags: createContentFlags(adminUsers),
+  reports: createReports(adminUsers),
+  // the mock user is a NotSoBot owner unless turned off (kept across reloads like guildsError)
+  owner: sessionStorage.getItem('dashboardMocks:notOwner') !== '1',
   tags: createTags(),
   variables: createVariables(),
   blobs: createBlobs(),
@@ -110,7 +124,7 @@ function scopeIds(query: URLSearchParams | Record<string, unknown>): Record<TagS
 
 /* user */
 
-route('GET', '/users/@me', () => mockUser);
+route('GET', '/users/@me', () => ({...mockUser, flags: (state.owner) ? (mockUser.flags | 1) : (mockUser.flags & ~1)}));
 route('POST', '/auth/logout', () => undefined);
 route('GET', '/users/@me/settings', () => state.settings);
 route('PATCH', '/users/@me/settings', (_match, { body }) => {
@@ -386,7 +400,15 @@ function throwGuildsError() {
 
 function guildDetail(guildId: string) {
   const entry = findGuild(guildId);
-  return {...entry.detail, permissions: entry.summary.permissions, editable: guildEditable(entry.summary)};
+  return {...entry.detail, owner: entry.summary.owner, permissions: entry.summary.permissions, editable: guildEditable(entry.summary)};
+}
+
+function requireOwner(guildId: string) {
+  const entry = findGuild(guildId);
+  if (!entry.summary.owner) {
+    throw new MockError(403, ApiErrorCodes.MISSING_ACCESS, 'Only the server owner can do this');
+  }
+  return entry;
 }
 
 route('GET', '/users/@me/guilds', () => {
@@ -490,11 +512,244 @@ route('POST', '/users/@me/guilds/(\\d+)/loggers/delete', ([ , guildId ], { body 
 });
 
 
+route('GET', '/users/@me/guilds/(\\d+)/data/export', ([ , guildId ]) => {
+  const { detail } = requireOwner(guildId);
+  // loggers never carry webhook urls here, same as the real api
+  const tags = state.tags.filter((tag) => tag.server_id === guildId).map((tag) => ({
+    ...tag,
+    reference_tag: (tag.reference_tag && tag.reference_tag.server_id !== guildId) ? {...tag.reference_tag, content: ''} : tag.reference_tag,
+  }));
+  return {
+    guild: detail,
+    notes: [
+      'Logger webhook URLs (webhook id and token) are left out because they are sensitive data: anyone with a webhook URL can post messages in that channel.',
+      'Content of directory tags is left out, including the directory or DM tags that aliases in this server point to.',
+      'Tag variables and tag blobs are left out.',
+    ],
+    tags,
+    timestamp: Date.now(),
+    version: 1,
+  };
+});
+
+route('POST', '/users/@me/guilds/(\\d+)/data/delete', ([ , guildId ]) => {
+  const { detail } = requireOwner(guildId);
+  const before = state.tags.length;
+  state.tags = state.tags.filter((tag) => tag.server_id !== guildId);
+  Object.assign(detail, {
+    allowlist: [],
+    blocklist: [],
+    commands_allowlist: [],
+    commands_blocklist: [],
+    disabled_logger_events: 0,
+    locale: null,
+    loggers: [],
+    prefixes: [],
+    settings: {ml_diffusion_model: null, ml_llm_model: null, ml_llm_personality: null, response_display: null},
+    timezone: null,
+  });
+  return {tags_deleted: before - state.tags.length};
+});
+
+
+/* admin (owner only) */
+
+function requireBotOwner() {
+  if (!state.owner) {
+    throw new MockError(403, ApiErrorCodes.MISSING_ACCESS, 'Missing Access');
+  }
+}
+
+function pageOf<T>(items: Array<T>, query: URLSearchParams) {
+  const limit = Math.min(100, Math.max(1, Number(query.get('limit')) || 25));
+  const offset = Math.max(0, Number(query.get('offset')) || 0);
+  return {count: items.length, items: items.slice(offset, offset + limit)};
+}
+
+function parseBool(value: string | null): boolean | null {
+  return (value === 'true' || value === '1') ? true : (value === 'false' || value === '0') ? false : null;
+}
+
+route('GET', '/admin/tags/directory', (_match, { query }) => {
+  requireBotOwner();
+  const needle = (query.get('query') || '').toLowerCase();
+  const verified = query.get('verified');
+  const nsfw = parseBool(query.get('nsfw'));
+  const matching = state.adminDirectory
+    .filter((item) => verified === null || verified === '' || item.verified === Number(verified))
+    .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
+    .filter((item) => !needle || [item.title, item.tag.name, item.tag.content, item.description].some((text) => text.toLowerCase().includes(needle)));
+  return pageOf(matching, query);
+});
+
+route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
+  requireBotOwner();
+  const item = state.adminDirectory.find((other) => other.id === tagId);
+  if (!item) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
+  }
+  const verified = Number(body.verified);
+  if (![0, 1, 2].includes(verified)) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'verified must be 0, 1 or 2', {field: 'verified'});
+  }
+  item.verified = verified;
+  return item;
+});
+
+route('GET', '/admin/users', (_match, { query }) => {
+  requireBotOwner();
+  const needle = (query.get('query') || '').toLowerCase();
+  const sortBy = query.get('sort_by') || 'flags';
+  let entries = adminUserEntries(state.adminUsers, state.contentFlags)
+    .filter((entry) => !needle || entry.user.username.toLowerCase().includes(needle) || entry.user.id === needle);
+  if (parseBool(query.get('only_flagged'))) {
+    entries = entries.filter((entry) => entry.content_flags.total);
+  }
+  entries.sort((a, b) => {
+    if (sortBy === 'username') {
+      return a.user.username.localeCompare(b.user.username);
+    }
+    if (sortBy === 'newest') {
+      return (BigInt(b.user.id) > BigInt(a.user.id)) ? 1 : -1;
+    }
+    return (b.content_flags.flagged - a.content_flags.flagged) || (b.content_flags.total - a.content_flags.total);
+  });
+  return pageOf(entries, query);
+});
+
+route('GET', '/admin/content-flags', (_match, { query }) => {
+  requireBotOwner();
+  const userId = query.get('user_id');
+  const status = query.get('status');
+  const category = query.get('category');
+  const needsReview = parseBool(query.get('needs_human_review'));
+  const matching = state.contentFlags
+    .filter((flag) => !userId || flag.user_id === userId)
+    .filter((flag) => status === null || status === '' || flag.status === Number(status))
+    .filter((flag) => !category || flag.category === category)
+    .filter((flag) => needsReview === null || flag.needs_human_review === needsReview);
+  return pageOf(matching, query);
+});
+
+route('PATCH', '/admin/content-flags/(\\d+)', ([ , flagId ], { body }) => {
+  requireBotOwner();
+  const flag = state.contentFlags.find((other) => other.id === flagId);
+  if (!flag) {
+    throw new MockError(404, 10000, 'Unknown Content Flag');
+  }
+  if (body.status !== undefined) {
+    const status = Number(body.status);
+    if (![0, 1, 2, 3].includes(status)) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'status must be 0-3', {field: 'status'});
+    }
+    flag.status = status;
+    flag.reviewed_at = (status) ? new Date().toISOString() : null;
+    flag.reviewed_by = (status) ? mockUser.id : null;
+  }
+  if (body.notes !== undefined) {
+    flag.notes = (typeof body.notes === 'string' && body.notes) ? body.notes : null;
+  }
+  return flag;
+});
+
+route('GET', '/admin/reports', (_match, { query }) => {
+  requireBotOwner();
+  const type = query.get('type');
+  const status = query.get('status');
+  const userId = query.get('user_id');
+  const targetId = query.get('target_id');
+  const matching = state.reports
+    .filter((report) => type === null || type === '' || report.type === Number(type))
+    .filter((report) => status === null || status === '' || report.status === Number(status))
+    .filter((report) => !userId || report.user.id === userId)
+    .filter((report) => !targetId || report.target_id === targetId);
+  return pageOf(matching, query);
+});
+
+// like the api, any patch stamps reviewed_at/reviewed_by
+route('PATCH', '/admin/reports/(\\d+)', ([ , reportId ], { body }) => {
+  requireBotOwner();
+  const report = state.reports.find((other) => other.id === reportId);
+  if (!report) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_REPORT, 'Unknown Report');
+  }
+  if (body.status !== undefined && body.status !== null) {
+    const status = Number(body.status);
+    if (![0, 1, 2].includes(status)) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'status must be 0-2', {field: 'status'});
+    }
+    report.status = status;
+  }
+  if (body.notes !== undefined) {
+    report.notes = (typeof body.notes === 'string' && body.notes) ? body.notes : null;
+  }
+  report.reviewed_at = new Date().toISOString();
+  report.reviewed_by = mockUser.id;
+  return report;
+});
+
+
+// public tag directory (the real one is `GET /tags/directory`), newest first, `before` + `limit` like the api
+route('GET', '/tags/directory', (_match, { query }) => {
+  const needle = (query.get('query') || '').toLowerCase();
+  const before = query.get('before');
+  const limit = Number(query.get('limit')) || 50;
+  const items = [...state.directory.values()]
+    .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1)
+    .filter((item) => !needle || [item.title, item.tag.name, item.description].some((text) => text.toLowerCase().includes(needle)))
+    .filter((item) => !before || BigInt(item.id) < BigInt(before));
+  return {count: items.length, items: items.slice(0, limit)};
+});
+
+// mirrors `utilities/tools/tags.py` `add_tag_alias`
+route('POST', '/users/@me/tags/(\\d+)/add', ([ , tagId ], { body }) => {
+  const source = state.tags.find((item) => item.id === tagId);
+  if (!source || !state.directory.has(tagId)) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG, 'Unknown Tag');
+  }
+  const guildId = (body.guild_id) ? String(body.guild_id) : null;
+  if (guildId) {
+    findGuild(guildId);
+  }
+  const serverId = guildId || mockUser.channel_id;
+  const name = String(body.name || source.name).toLowerCase();
+  const existing = state.tags.find((item) => item.name === name && item.server_id === serverId);
+  if (existing) {
+    if (existing.user.id !== mockUser.id) {
+      throw new MockError(400, ApiErrorCodes.TAG_NAME_TAKEN, 'A tag with that name already exists here and you don\'t own it');
+    }
+    if (!existing.reference_tag) {
+      throw new MockError(400, ApiErrorCodes.TAG_NAME_TAKEN, 'Cannot turn a regular tag into an alias');
+    }
+    existing.reference_tag = source;
+    return existing;
+  }
+  const created: Tag = {
+    ...source,
+    content: '',
+    created: new Date().toISOString(),
+    edited: null,
+    guild_id: guildId,
+    id: (BigInt(Date.now()) << 22n).toString(),
+    is_command: false,
+    is_on_directory: false,
+    last_used: null,
+    name,
+    reference_tag: source,
+    server_id: serverId,
+    user: {...source.user, id: mockUser.id, username: mockUser.username},
+    uses: 0,
+  };
+  state.tags.unshift(created);
+  return created;
+});
+
+
 /* install */
 
 declare global {
   interface Window {
-    __dashboardMocks?: {guildsError: (value: GuildsError) => void, latency: (ms: number) => void},
+    __dashboardMocks?: {guildsError: (value: GuildsError) => void, latency: (ms: number) => void, owner: (value: boolean) => void},
   }
 }
 
@@ -518,7 +773,8 @@ export function installDashboardMocks(): void {
       await new Promise((resolve) => window.setTimeout(resolve, state.latency));
       init?.signal?.throwIfAborted();
       const headers = new Headers(init?.headers);
-      if (headers.get('authorization') !== MOCK_TOKEN) {
+      // the public tag directory is fetched without a token
+      if (path !== '/tags/directory' && headers.get('authorization') !== MOCK_TOKEN) {
         return json(401, {code: 0, message: '401: Unauthorized', status: 401});
       }
       let body: Record<string, unknown> = {};
@@ -555,6 +811,15 @@ export function installDashboardMocks(): void {
     },
     latency: (ms) => {
       state.latency = ms;
+    },
+    // takes effect after a reload (the user is fetched once)
+    owner: (value) => {
+      state.owner = value;
+      if (value) {
+        sessionStorage.removeItem('dashboardMocks:notOwner');
+      } else {
+        sessionStorage.setItem('dashboardMocks:notOwner', '1');
+      }
     },
   };
 

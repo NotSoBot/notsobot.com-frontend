@@ -1,6 +1,20 @@
 // Fixture data for the dev-only dashboard mocks. Shapes follow notsobot.api's `to_dict()` output.
 
-import type { Tag, TagBlobs, TagVariables, User, UserGuild, UserGuildSummary, UserMe, UserSettings } from '@/lib/api/types';
+import type {
+  AdminTagDirectoryItem,
+  AdminUser,
+  AdminUserEntry,
+  ContentFlag,
+  Report,
+  Tag,
+  TagBlobs,
+  TagVariables,
+  User,
+  UserGuild,
+  UserGuildSummary,
+  UserMe,
+  UserSettings,
+} from '@/lib/api/types';
 
 
 export const MOCK_TOKEN = 'dashboard-mock-token';
@@ -14,7 +28,8 @@ export const mockUser: UserMe = {
   // the user's one-on-one DM channel with the bot
   channel_id: '1300000000000000001',
   discriminator: '0000',
-  flags: 0,
+  // owner, so the admin section is reachable (`__dashboardMocks.owner(false)` to see the dashboard as everyone else)
+  flags: 1,
   id: '300505364032389122',
   premium_type: 3,
   username: 'mockuser',
@@ -145,7 +160,7 @@ const ADMINISTRATOR = 1n << 3n;
 
 export interface MockGuild {
   summary: UserGuildSummary,
-  detail: Omit<UserGuild, 'editable' | 'permissions'>,
+  detail: Omit<UserGuild, 'editable' | 'owner' | 'permissions'>,
 }
 
 function guild(id: string, name: string, icon: string | null, permissions: bigint, owner = false): MockGuild {
@@ -190,4 +205,196 @@ export function guildEditable(summary: UserGuildSummary): UserGuild['editable'] 
   const admin = summary.owner || !!(permissions & ADMINISTRATOR);
   const manage = admin || !!(permissions & MANAGE_GUILD);
   return {prefixes: manage, allowlist: admin, blocklist: admin, commands: manage, loggers: manage, settings: manage};
+}
+
+
+/* admin (owner only) */
+
+const ADMIN_NAMES = ['cake', 'foxbot', 'pixelpanda', 'nightowl', 'tagwizard', 'memelord', 'quietcat', 'bytebard', 'lumen', 'rustacean',
+  'saltyspoon', 'gearhead', 'mossy', 'zephyr', 'kettle', 'orbit', 'pebble', 'velvet', 'wren', 'yonder', 'ziggy', 'acorn', 'blip', 'cobalt',
+  'dune', 'ember', 'fable', 'gully', 'harbor', 'inkwell'];
+
+export function createAdminUsers(): Array<AdminUser> {
+  return ADMIN_NAMES.map((name, i) => ({
+    avatar: null,
+    blocked: i % 11 === 4,
+    blocked_reason: (i % 11 === 4) ? 'Repeated unsafe uploads' : null,
+    discriminator: (i % 7 === 3) ? String(1000 + i * 37).padStart(4, '0') : '0',
+    flags: (i === 0) ? 1 : 0,
+    id: (400000000000000000n + BigInt(i) * 7919n).toString(),
+    premium_type: [0, 0, 2, 0, 3, 0, 1][i % 7],
+    username: name,
+  }));
+}
+
+
+const CATEGORIES = ['unsafe', 'unsafe_child_safety', 'unsafe_nudity', 'review_child_safety', 'review'];
+const ACTIONS = ['blocked', 'replaced', 'logged', 'not_hosted'];
+const LABELS = ['nudity', 'sexual', 'violence', 'gore', 'self_harm', 'hate', 'minor'];
+
+export function createContentFlags(users: Array<AdminUser>): Array<ContentFlag> {
+  const flags: Array<ContentFlag> = [];
+  // a handful of users carry most of the flags, like real data
+  const owners = [1, 1, 1, 1, 2, 2, 2, 5, 5, 7, 9, 12, 12, 12, 12, 12, 15, 18, 21, 21];
+  for (let i = 0; i < 64; i++) {
+    const user = users[owners[i % owners.length]];
+    const category = CATEGORIES[i % CATEGORIES.length];
+    const status = [0, 0, 1, 2, 0, 3, 2][i % 7];
+    const video = i % 4 === 0;
+    const frames = (video) ? 12 + (i % 30) : 1;
+    const flagged = [LABELS[i % LABELS.length], ...((i % 3 === 0) ? [LABELS[(i + 2) % LABELS.length]] : [])];
+    const created = new Date(Date.now() - i * 5 * 3600000).toISOString();
+    flags.push({
+      action: ACTIONS[i % ACTIONS.length],
+      category,
+      channel_id: (i % 5) ? (1200000000000000000n + BigInt(i)).toString() : null,
+      command_id: ['imagine', 'mirror', 'deepfry', 'caption', 'tag'][i % 5],
+      created,
+      flagged: (category.startsWith('unsafe')) ? flagged : [],
+      flagged_for_review: (category.startsWith('review')) ? flagged : [],
+      frames,
+      frames_flagged: (video) ? [2, 3, 7].filter((frame) => frame < frames) : [0],
+      guild_id: (i % 5) ? '1100000000000000001' : null,
+      id: String(9000 + 64 - i),
+      message_id: (i % 5) ? (1310000000000000000n + BigInt(i) * 13n).toString() : null,
+      mimetype: (video) ? 'video/mp4' : ['image/png', 'image/gif', 'image/jpeg', 'image/webp'][i % 4],
+      model: (i % 2) ? 'safety-scan-v3' : 'safety-scan-v2',
+      needs_human_review: category.startsWith('review') || i % 9 === 0,
+      notes: (i % 6 === 0) ? 'Checked hash against known list, no match.' : null,
+      pdq: Array.from({length: 64}, (_, j) => ((i * 31 + j * 7) % 16).toString(16)).join(''),
+      query: (i % 3 === 0) ? `a picture of something weird #${i}` : null,
+      reviewed_at: (status) ? new Date(Date.parse(created) + 3600000).toISOString() : null,
+      reviewed_by: (status) ? mockUser.id : null,
+      scores_worst: {nudity: (i % 10) / 10 + 0.05, violence: ((i * 3) % 10) / 10, minor: (i % 4) / 7},
+      sha256: Array.from({length: 64}, (_, j) => ((i * 13 + j * 5) % 16).toString(16)).join(''),
+      size: 40000 + i * 12345,
+      // never rendered as media; it's only here so the page has something to (not) show
+      source_url: `https://media.invalid/attachments/${1300000000000000000n + BigInt(i)}/upload_${i}.${(video) ? 'mp4' : 'png'}`,
+      status,
+      tag_id: (i % 5 === 4) ? '1290000000000000140' : null,
+      user: {avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username},
+      user_id: user.id,
+    });
+  }
+  return flags;
+}
+
+
+export function adminUserEntries(users: Array<AdminUser>, flags: Array<ContentFlag>): Array<AdminUserEntry> {
+  return users.map((user) => {
+    const own = flags.filter((flag) => flag.user_id === user.id);
+    const last = own.map((flag) => String(flag.created)).sort().pop() ?? null;
+    return {
+      content_flags: {
+        confirmed: own.filter((flag) => flag.status === 1).length,
+        dismissed: own.filter((flag) => flag.status === 2).length,
+        flagged: own.filter((flag) => flag.status !== 2).length,
+        last_flagged_at: last,
+        pending: own.filter((flag) => flag.status === 0).length,
+        reported: own.filter((flag) => flag.status === 3).length,
+        total: own.length,
+      },
+      user,
+    };
+  });
+}
+
+
+const DIRECTORY_SAMPLES: Array<[string, string, string]> = [
+  ['weather', 'Weather lookup', '{js:\nconst city = args.join(" ") || "London";\nconst res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=3`);\nreturn res.text();\n}'],
+  ['8ball', 'Magic 8-ball', '{choose:It is certain.|Ask again later.|Very doubtful.|Without a doubt.|My sources say no.}'],
+  ['hug', 'Hug someone', '{user} hugs {args}! {image:https://example.invalid/hug.gif}'],
+  ['roll', 'Dice roller', '{set:sides;{if:{args}|=|;6;{args}}}You rolled a {random:1;{get:sides}} on a d{get:sides}'],
+  ['counter', 'Global counter', '{setglobal:n;{math:{getglobal:n;0}+1}}This tag has run {getglobal:n} times.'],
+  ['spam', 'Totally normal tag', ('@everyone free nitro https://not-a-scam.invalid\n').repeat(40)],
+];
+
+export function createAdminDirectory(users: Array<AdminUser>): Array<AdminTagDirectoryItem> {
+  const items: Array<AdminTagDirectoryItem> = [];
+  for (let i = 0; i < 34; i++) {
+    const [ name, title, content ] = DIRECTORY_SAMPLES[i % DIRECTORY_SAMPLES.length];
+    const user = users[(i * 3) % users.length];
+    const id = (1280000000000000000n + BigInt(i) * 101n).toString();
+    const created = new Date(Date.now() - (i + 1) * 86400000).toISOString();
+    items.push({
+      assets: (i % 5 === 2) ? [{
+        filename: 'preview.png',
+        filename_base: 'preview',
+        id: `asset-${i}`,
+        metadata: {duration: 0, extension: 'png', framecount: 1, height: 256, mimetype: 'image/png', size: 48213, width: 512},
+        position: 0,
+        urls: {cdn: `https://cdn.invalid/tags/${id}/preview.png`},
+      }] : [],
+      created,
+      description: (i % 4 === 3) ? '' : `${title} tag. Example description that explains what this tag does and how to use it.`,
+      edited: null,
+      id,
+      server_count: (i * 17) % 90,
+      tag: {
+        content,
+        created,
+        edited: null,
+        guild_id: null,
+        id,
+        locked: i % 2 === 1,
+        name: (i < DIRECTORY_SAMPLES.length) ? name : `${name}${i}`,
+        nsfw: i % 8 === 5,
+        server_id: user.id,
+        user_id: user.id,
+        uses: (i * 211) % 5000,
+      },
+      title: (i < DIRECTORY_SAMPLES.length) ? title : `${title} ${i}`,
+      user: (i === 7) ? null : {avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username},
+      verified: [1, 1, 0, 2, 1, 0, 2][i % 7],
+    });
+  }
+  return items;
+}
+
+
+const REPORT_CONTENT = [
+  ['`.imagine` hangs forever on large prompts and never replies, no error either', 'mirror does nothing on gifs with transparency, output is a black box',
+    'tag `weather` throws "Unknown Variable" since yesterday\nworked fine before the update', 'slash `/caption` says the interaction failed but the image still posts'],
+  ['spamming the same tag in every channel and pinging @everyone through it', 'keeps using `.tag` to post slurs after being asked to stop',
+    'impersonating a NotSoBot dev in DMs and asking people for their tokens'],
+  ['whole server is built around abusing the image commands to post gore', 'server advertises selling stolen accounts, bot is in their #shop channel'],
+];
+
+export function createReports(users: Array<AdminUser>): Array<Report> {
+  const reports: Array<Report> = [];
+  for (let i = 0; i < 37; i++) {
+    const reporter = users[(i * 7) % users.length];
+    const type = [0, 1, 0, 2, 1, 0][i % 6];
+    const status = [0, 0, 1, 0, 2, 1, 0][i % 7];
+    const contents = REPORT_CONTENT[type];
+    const dm = i % 4 === 3;
+    const created = new Date(Date.now() - i * 7 * 3600000).toISOString();
+    reports.push({
+      channel_id: (dm) ? (1300000000000000000n + BigInt(i)).toString() : (1200000000000000000n + BigInt(i % 3)).toString(),
+      content: contents[Math.floor(i / 6) % contents.length],
+      created,
+      guild_id: (dm) ? null : '1100000000000000001',
+      id: String(7000 + 37 - i),
+      message_id: (1320000000000000000n + BigInt(i) * 17n).toString(),
+      notes: (status && i % 3 === 0) ? 'Fixed in the last deploy.' : null,
+      reviewed_at: (status) ? new Date(Date.parse(created) + 2 * 3600000).toISOString() : null,
+      reviewed_by: (status) ? mockUser.id : null,
+      status,
+      // a couple of targets get reported more than once
+      target_id: (type === 1) ? users[[4, 12, 4, 21][Math.floor(i / 6) % 4]].id : (type === 2) ? ['1100000000000000099', '1100000000000000042'][i % 2] : null,
+      type,
+      user: {
+        avatar: reporter.avatar,
+        blocked: reporter.blocked,
+        blocked_on: null,
+        blocked_reason: reporter.blocked_reason,
+        bot: false,
+        discriminator: reporter.discriminator,
+        flags: reporter.flags,
+        id: reporter.id,
+        username: reporter.username,
+      },
+    });
+  }
+  return reports;
 }

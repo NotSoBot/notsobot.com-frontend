@@ -23,6 +23,12 @@ export const queryKeys = {
   meTagDirectory: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'directory'] as const,
   meGuilds: (token: string | null) => ['users', '@me', token, 'guilds'] as const,
   meGuild: (token: string | null, guildId: string) => ['users', '@me', token, 'guilds', guildId] as const,
+  // admin (owner only); under the session too so logging out drops it
+  admin: (token: string | null) => ['users', '@me', token, 'admin'] as const,
+  adminTagDirectory: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'tags', filters] as const,
+  adminUsers: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'users', filters] as const,
+  adminContentFlags: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'content-flags', filters] as const,
+  adminReports: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'reports', filters] as const,
 };
 
 

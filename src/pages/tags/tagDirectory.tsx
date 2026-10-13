@@ -1,8 +1,13 @@
 import { AlertTriangle, Check, Plus, Shield, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
+import { useAuth } from '@/auth';
 import { Routes } from '@/config';
-import { TagDirectoryVerificationStates } from '@/lib/api';
+import { TagDirectoryVerificationStates, type Tag } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+import { AddTagDialog } from './AddTagDialog';
 
 
 export function tagDirectoryItemPath(id: string): string {
@@ -86,21 +91,26 @@ export function NsfwBadge({ size = 'sm' }: {size?: 'sm' | 'lg'}) {
 }
 
 
-// TODO: there is no user-facing endpoint for adding a directory tag to a server yet
-export function AddTagButton({ size = 'sm' }: {size?: 'sm' | 'lg'}) {
+// Opens the add dialog (logging in first if needed); the dialog lives outside the card so its clicks
+// don't hit the card's stretched link.
+export function AddTagButton({ tag, size = 'sm' }: {tag: Pick<Tag, 'id' | 'name'>, size?: 'sm' | 'lg'}) {
+  const { isAuthenticated, login } = useAuth();
+  const [ open, setOpen ] = useState(false);
   return (
-    <button
-      type='button'
-      disabled
-      title='Coming soon'
-      className={cn(
-        'relative z-10 flex items-center gap-1 rounded bg-brand font-medium text-white transition-colors hover:bg-brand-hover',
-        'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand',
-        (size === 'lg') ? 'gap-2 rounded-lg px-6 py-3' : 'px-3 py-1.5 text-sm',
-      )}
-    >
-      <Plus className={(size === 'lg') ? 'size-5' : 'size-4'}/>
-      {(size === 'lg') ? 'Add to Server' : 'Add'}
-    </button>
+    <>
+      <button
+        type='button'
+        onClick={() => (isAuthenticated) ? setOpen(true) : login()}
+        title={(isAuthenticated) ? 'Add to a server or your DMs' : 'Log in to add this tag'}
+        className={cn(
+          'relative z-10 flex items-center gap-1 rounded bg-brand font-medium text-white transition-colors hover:bg-brand-hover',
+          (size === 'lg') ? 'gap-2 rounded-lg px-6 py-3' : 'px-3 py-1.5 text-sm',
+        )}
+      >
+        <Plus className={(size === 'lg') ? 'size-5' : 'size-4'}/>
+        {(size === 'lg') ? 'Add Tag' : 'Add'}
+      </button>
+      {(open) ? createPortal(<AddTagDialog tag={tag} onClose={() => setOpen(false)}/>, document.body) : null}
+    </>
   );
 }

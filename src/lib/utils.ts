@@ -40,13 +40,22 @@ export function shardIdForGuild(guildId: string, shardCount: number): number | n
 }
 
 
-export function formatDate(value: string, options: Intl.DateTimeFormatOptions = {year: 'numeric', month: 'short', day: 'numeric'}): string {
-  const date = new Date(value);
+// API timestamps are ISO strings; some admin fields may be epoch numbers (seconds or ms)
+export function toDate(value: string | number): Date {
+  if (typeof value === 'number') {
+    return new Date((value < 1e12) ? value * 1000 : value);
+  }
+  return new Date(value);
+}
+
+
+export function formatDate(value: string | number, options: Intl.DateTimeFormatOptions = {year: 'numeric', month: 'short', day: 'numeric'}): string {
+  const date = toDate(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString(undefined, options);
 }
 
 
-export function formatDateTime(value: string): string {
+export function formatDateTime(value: string | number): string {
   return formatDate(value, {year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'});
 }
 
