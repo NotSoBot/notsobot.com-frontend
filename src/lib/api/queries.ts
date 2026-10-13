@@ -1,0 +1,102 @@
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+
+import { api } from './index';
+import { TagDirectorySortByFilters, type TagDirectoryFilters, type TagDirectoryItem } from './types';
+
+
+export const queryKeys = {
+  commands: ['commands'] as const,
+  commandStats: (since: string) => ['commands', 'stats', {since}] as const,
+  infoDiscord: ['info', 'discord'] as const,
+  tagDirectory: (filters: TagDirectoryFilters) => ['tags', 'directory', filters] as const,
+  tagDirectoryItem: (id: string) => ['tags', 'directory', 'item', id] as const,
+  // keyed on the token so switching accounts never shows a stale user
+  me: (token: string | null) => ['users', '@me', token] as const,
+  meSessions: (token: string | null) => ['users', '@me', token, 'sessions'] as const,
+  // dashboard; everything per-user lives under ['users', '@me'] so logging out drops it
+  meSettings: (token: string | null) => ['users', '@me', token, 'settings'] as const,
+  meTags: (token: string | null) => ['users', '@me', token, 'tags'] as const,
+  meTagsList: (token: string | null, query: string) => ['users', '@me', token, 'tags', 'list', {query}] as const,
+  meTag: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId] as const,
+  meTagVariables: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'variables', scope] as const,
+  meTagBlobs: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'blobs', scope] as const,
+  meTagDirectory: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'directory'] as const,
+  meGuilds: (token: string | null) => ['users', '@me', token, 'guilds'] as const,
+  meGuild: (token: string | null, guildId: string) => ['users', '@me', token, 'guilds', guildId] as const,
+};
+
+
+export function useCommandsQuery() {
+  return useQuery({
+    queryKey: queryKeys.commands,
+    queryFn: ({ signal }) => api.fetchCommands(signal),
+    staleTime: 10 * 60 * 60 * 1000,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+
+// Usage over the last `days` days. `since` is floored to the hour so the key (and the API's
+// response) stays stable for a while instead of changing every millisecond.
+export function useCommandStatsQuery(days = 7) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  since.setUTCMinutes(0, 0, 0);
+  return useQuery({
+    queryKey: queryKeys.commandStats(since.toISOString()),
+    queryFn: ({ signal }) => api.fetchCommandStats(since, signal),
+    staleTime: 10 * 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+// the status page polls every 2s; other pages (home stats) just read it once
+export function useInfoDiscordQuery({ poll = true }: {poll?: boolean} = {}) {
+  return useQuery({
+    queryKey: queryKeys.infoDiscord,
+    queryFn: ({ signal }) => api.fetchInfoDiscord(signal),
+    refetchInterval: (poll) ? 2000 : false,
+    staleTime: (poll) ? 0 : 60 * 1000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+
+const TAG_DIRECTORY_PAGE_SIZE = 48;
+
+// Newest pages `before` the last id we've seen (stable while new tags get published); the other
+// sorts aren't keyed on the id, so they page by how many items are already loaded.
+type TagDirectoryPageParam = {before?: string, offset?: number};
+
+export function useTagDirectoryQuery(filters: TagDirectoryFilters) {
+  const { query, sortBy, verified, nsfw } = filters;
+  return useInfiniteQuery({
+    queryKey: queryKeys.tagDirectory(filters),
+    queryFn: ({ pageParam, signal }) => api.fetchTagDirectory({query, sortBy, verified, nsfw, ...pageParam, limit: TAG_DIRECTORY_PAGE_SIZE}, signal),
+    initialPageParam: {} as TagDirectoryPageParam,
+    getNextPageParam: (lastPage, pages): TagDirectoryPageParam | undefined => {
+      if (lastPage.items.length < TAG_DIRECTORY_PAGE_SIZE) {
+        return undefined;
+      }
+      if (sortBy === TagDirectorySortByFilters.NEWEST) {
+        return {before: lastPage.items[lastPage.items.length - 1].id};
+      }
+      return {offset: pages.reduce((total, page) => total + page.items.length, 0)};
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 60 * 1000,
+  });
+}
+
+
+// `initialData` lets a modal opened from the directory list show the card's data immediately
+export function useTagDirectoryItemQuery(id: string, initialData?: TagDirectoryItem) {
+  return useQuery({
+    queryKey: queryKeys.tagDirectoryItem(id),
+    queryFn: ({ signal }) => api.fetchTagDirectoryItem(id, signal),
+    initialData,
+    staleTime: 60 * 1000,
+  });
+}

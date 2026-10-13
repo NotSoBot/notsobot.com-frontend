@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // a separate script from notsobot.cf-worker ("notsobot-com"), which keeps the cdn/proxy/umami/etc domains.
+  // these routes are more specific than its "*notsobot.com/*", so cloudflare sends the website here instead.
+  "name": "notsobot-com-frontend",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // hashed bundles and the favicon skip the worker (and its request billing) entirely
+    "run_worker_first": ["/*", "!/assets/*", "!/favicon.svg"]
+  },
+  "routes": [
+    {"pattern": "notsobot.com/*", "zone_name": "notsobot.com"},
+    {"pattern": "www.notsobot.com/*", "zone_name": "notsobot.com"}
+  ],
+  "vars": {
+    "SITE_DOMAIN": "notsobot.com",
+    // from oasis.notsobot.com's website settings, analytics stays off while empty
+    "UMAMI_WEBSITE_ID": ""
+  },
+  "env": {
+    "beta": {
+      "routes": [
+        {"pattern": "beta.notsobot.com/*", "zone_name": "notsobot.com"}
+      ],
+      "vars": {
+        "SITE_DOMAIN": "beta.notsobot.com",
+        "UMAMI_WEBSITE_ID": ""
+      }
+    }
+  }
+}

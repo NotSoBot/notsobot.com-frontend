@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* surfaces (Discord dark palette, from the Figma "Discord Bot Command Page" design) */
+  --color-bg: #36393f;
+  --color-surface: #2f3136;
+  --color-surface-2: #34373c;
+  --color-surface-3: #40444b;
+  --color-deep: #202225;
+  --color-line: #202225;
+  --color-line-strong: #42444d;
+
+  /* text */
+  --color-fg: #dcddde;
+  --color-muted: #b9bbbe;
+  --color-subtle: #72767d;
+  --color-code: #00b0f4;
+
+  /* brand */
+  --color-brand: #5865f2;
+  --color-brand-hover: #4752c4;
+  --color-blurple: #5865f2;
+  --color-blurple-hover: #4752c4;
+  --color-success: #3ba55c;
+  --color-warning: #faa81a;
+  --color-danger: #ed4245;
+
+  /* gateway shard states */
+  --color-shard-ready: #3ba55c;
+  --color-shard-resuming: #faa81a;
+  --color-shard-identifying: #f26522;
+  --color-shard-connecting: #5865f2;
+  --color-shard-open: #fee75c;
+  --color-shard-closed: #ed4245;
+  --color-shard-dead: #747f8d;
+
+  --animate-fade-in: fade-in 160ms ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  --animate-modal-in: modal-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+
+  @keyframes modal-in {
+    from { transform: translateY(12px) scale(0.97); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
+  --animate-drawer-in: drawer-in 180ms ease-out;
+
+  @keyframes drawer-in {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+}
+
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-brand) 40%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+}
+
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+      transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer select-none;
+  }
+  .btn-lg {
+    @apply px-8 py-4 text-lg font-medium;
+  }
+  .btn-primary {
+    @apply bg-brand text-white hover:bg-brand-hover;
+  }
+  .btn-discord {
+    @apply bg-blurple text-white hover:bg-blurple-hover;
+  }
+  .btn-secondary {
+    @apply bg-surface-3 text-white hover:bg-line-strong;
+  }
+  .btn-outline-brand {
+    @apply border border-brand bg-line-strong text-white hover:bg-[#4e5058];
+  }
+  .btn-ghost {
+    @apply text-muted hover:bg-surface-2 hover:text-fg;
+  }
+  .btn-danger {
+    @apply bg-danger text-white hover:bg-[#c03537];
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  /* form controls (dashboard) */
+  .input {
+    @apply block w-full min-w-0 rounded-md border border-line bg-deep px-3 py-2 text-sm text-fg placeholder:text-subtle
+      transition-colors outline-none focus:border-brand disabled:cursor-not-allowed disabled:opacity-70;
+  }
+  select.input {
+    @apply cursor-pointer appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23b9bbbe' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.6rem center;
+  }
+
+  .card {
+    @apply rounded-lg border border-line bg-surface;
+  }
+  .card-hover {
+    @apply transition-colors hover:border-line-strong;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded bg-line-strong px-2.5 py-0.5 text-sm text-muted;
+  }
+
+  .section-label {
+    @apply text-xs tracking-wider text-muted uppercase;
+  }
+
+  .code-block {
+    @apply block rounded bg-deep px-3 py-2 font-mono text-sm break-words text-code;
+  }
+
+  .prose-legal {
+    @apply leading-relaxed text-fg;
+  }
+  .prose-legal p + p {
+    @apply mt-4;
+  }
+  .prose-legal ul {
+    @apply mt-3 list-disc space-y-2 pl-5;
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
