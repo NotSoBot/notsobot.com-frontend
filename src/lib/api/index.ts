@@ -4,7 +4,10 @@ import { ApiErrorCodes } from './types';
 import type {
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
+  AdminUser,
+  AdminUserPatch,
   AdminUsersPage,
+  AdminTagDirectorySortBy,
   AdminUsersSortBy,
   Command,
   ContentFlag,
@@ -246,6 +249,7 @@ export const api = {
 
   fetchAdminTagDirectory: (params: {
     query?: string,
+    sortBy?: AdminTagDirectorySortBy,
     verified?: number | null,
     nsfw?: boolean | null,
     offset?: number,
@@ -255,6 +259,7 @@ export const api = {
       signal,
       query: {
         query: params.query || undefined,
+        sort_by: params.sortBy,
         verified: params.verified,
         nsfw: params.nsfw,
         offset: params.offset || undefined,
@@ -265,6 +270,14 @@ export const api = {
 
   patchAdminTagDirectory: (tagId: string, body: {verified: number}) => {
     return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
+  },
+
+  // `deleteTag` also deletes the tag itself (and its aliases), not just the listing
+  deleteAdminTagDirectory: (tagId: string, params: {deleteTag?: boolean} = {}) => {
+    return apiRequest<void>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {
+      method: 'DELETE',
+      query: {delete_tag: (params.deleteTag) ? true : undefined},
+    });
   },
 
   fetchAdminUsers: (params: {
@@ -284,6 +297,10 @@ export const api = {
         limit: params.limit,
       },
     });
+  },
+
+  patchAdminUser: (userId: string, body: AdminUserPatch) => {
+    return apiRequest<AdminUser>(ApiEndpoints.ADMIN_USER(userId), {method: 'PATCH', body});
   },
 
   fetchAdminContentFlags: (params: {

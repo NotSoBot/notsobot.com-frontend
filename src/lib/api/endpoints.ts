@@ -38,6 +38,7 @@ export const ApiEndpoints = Object.freeze({
   ADMIN_TAGS_DIRECTORY: '/admin/tags/directory',
   ADMIN_TAG_DIRECTORY: (tagId: string) => `/admin/tags/directory/${tagId}`,
   ADMIN_USERS: '/admin/users',
+  ADMIN_USER: (userId: string) => `/admin/users/${userId}`,
   ADMIN_CONTENT_FLAGS: '/admin/content-flags',
   ADMIN_CONTENT_FLAG: (flagId: string) => `/admin/content-flags/${flagId}`,
   ADMIN_REPORTS: '/admin/reports',

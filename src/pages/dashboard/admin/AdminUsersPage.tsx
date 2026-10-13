@@ -1,4 +1,5 @@
-import { Users } from 'lucide-react';
+import { Ban, ShieldCheck, Users } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -11,6 +12,7 @@ import { cn, formatDate, formatDateTime } from '@/lib/utils';
 import { premiumLabel } from '../premium';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
 import { Chip, Pagination, useSearchParamState, UserCell } from './adminUi';
+import { BlockUserDialog } from './BlockUserDialog';
 
 
 const SORTS: Array<{value: AdminUsersSortBy, label: string}> = [
@@ -102,19 +104,32 @@ export function AdminUsersPage() {
 function UserRow({ entry }: {entry: AdminUserEntry}) {
   const { user, content_flags: flags } = entry;
   const owner = (user.flags & UserFlags.OWNER) === UserFlags.OWNER;
+  const [ blocking, setBlocking ] = useState(false);
   return (
     <tr className='align-top hover:bg-surface-2'>
       <td className='px-4 py-3'>
         <UserCell user={user}/>
       </td>
       <td className='px-4 py-3'>
-        <div className='flex flex-wrap gap-1'>
+        <div className='flex flex-wrap gap-1 empty:hidden'>
           {(owner) ? <Chip tone='brand'>Owner</Chip> : null}
           {(user.blocked) ? <Chip tone='danger' title={user.blocked_reason || undefined}>Blocked</Chip> : null}
           {(user.premium_type) ? <Chip>{premiumLabel(user.premium_type)}</Chip> : null}
-          {(!owner && !user.blocked && !user.premium_type) ? <span className='text-subtle'>—</span> : null}
         </div>
         {(user.blocked && user.blocked_reason) ? <p className='mt-1 max-w-56 text-xs break-words text-subtle'>{user.blocked_reason}</p> : null}
+        {(!owner) ? (
+          <button
+            type='button'
+            className={cn('btn btn-sm [div:not(:empty)~&]:mt-2', (user.blocked) ? 'btn-secondary' : 'btn-ghost text-danger')}
+            onClick={() => setBlocking(true)}
+          >
+            {(user.blocked) ? <ShieldCheck className='size-4'/> : <Ban className='size-4'/>}
+            {(user.blocked) ? 'Unblock' : 'Block'}
+          </button>
+        ) : null}
+        {(blocking) ? (
+          <BlockUserDialog user={user} blocked={user.blocked} blockedReason={user.blocked_reason} onClose={() => setBlocking(false)}/>
+        ) : null}
       </td>
       <td className='px-4 py-3 text-right tabular-nums'>
         {(flags.total) ? (

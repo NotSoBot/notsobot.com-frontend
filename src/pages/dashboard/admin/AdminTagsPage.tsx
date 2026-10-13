@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Clock, ShieldCheck, ShieldX } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -6,32 +6,49 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { TagDirectoryVerificationStates, type AdminTagDirectoryItem, type TagDirectoryAsset } from '@/lib/api';
+import { TagDirectoryVerificationStates, type AdminTagDirectoryItem, type AdminTagDirectorySortBy, type TagDirectoryAsset } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagDirectoryQuery, usePatchAdminTagDirectoryMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDate, formatDateTime, formatMemory } from '@/lib/utils';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
-import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, DetailList, Pagination, useSearchParamState, UserCell } from './adminUi';
+import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
+import { Chip, DetailList, Pagination, selectAllScope, useSearchParamState, UserCell } from './adminUi';
+import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 
 
+// same order and `status` param as the public directory, but defaults to the review queue
 const FILTERS = [
-  {value: 'pending', label: 'Pending', verified: TagDirectoryVerificationStates.PENDING_VERIFICATION},
-  {value: 'verified', label: 'Verified', verified: TagDirectoryVerificationStates.VERIFIED},
-  {value: 'unverified', label: 'Unverified', verified: TagDirectoryVerificationStates.NOT_VERIFIED},
   {value: 'all', label: 'All', verified: null},
+  {value: 'verified', label: 'Verified', verified: TagDirectoryVerificationStates.VERIFIED},
+  {value: 'pending', label: 'Pending', verified: TagDirectoryVerificationStates.PENDING_VERIFICATION},
+  {value: 'unverified', label: 'Unverified', verified: TagDirectoryVerificationStates.NOT_VERIFIED},
 ] as const;
+
+const DEFAULT_FILTER = FILTERS.find((item) => item.value === 'pending')!;
+
+const SORTS: Array<{value: AdminTagDirectorySortBy, label: string}> = [
+  {value: 'newest', label: 'Newest'},
+  {value: 'oldest', label: 'Oldest'},
+  {value: 'uses', label: 'Most used'},
+  {value: 'name', label: 'Name'},
+  {value: 'title', label: 'Title'},
+];
 
 
 export function AdminTagsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
-  const filter = FILTERS.find((item) => item.value === searchParams.get('verified')) ?? FILTERS[0];
+  const filter = FILTERS.find((item) => item.value === searchParams.get('status')) ?? DEFAULT_FILTER;
+  // admins see NSFW tags unless they hide them
+  const hideNsfw = searchParams.get('nsfw') === 'hide';
+  const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'newest';
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
 
   const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useAdminTagDirectoryQuery({
     query: debouncedQuery,
+    sortBy,
     verified: filter.verified,
+    nsfw: (hideNsfw) ? false : null,
     page,
   });
   const items = data?.items ?? [];
@@ -43,22 +60,34 @@ export function AdminTagsPage() {
         description='Review tags published to the tag directory. Verified tags are marked safe and can’t be edited by their owner.'
       />
 
-      <div className='mb-4 flex flex-col gap-3 sm:flex-row sm:items-center'>
-        <div className='overflow-x-auto'>
-          <Segmented
-            label='Verification'
-            value={filter.value}
-            options={FILTERS.map(({ value, label }) => ({value, label}))}
-            onChange={(value) => update({verified: (value === FILTERS[0].value) ? null : value})}
-          />
-        </div>
+      <div className='mb-4 space-y-3'>
         <SearchInput
-          className='min-w-0 flex-1'
           value={query}
           onValueChange={(value) => update({q: value})}
-          placeholder='Search title, name or content...'
+          placeholder='Search title, name, content, tag id or user id...'
           aria-label='Search directory tags'
         />
+        <div className='flex flex-wrap items-center gap-3'>
+          <div className='overflow-x-auto'>
+            <Segmented
+              label='Verification'
+              value={filter.value}
+              options={FILTERS.map(({ value, label }) => ({value, label}))}
+              onChange={(value) => update({status: (value === DEFAULT_FILTER.value) ? null : value})}
+            />
+          </div>
+          <div className='flex flex-wrap items-center gap-3 sm:ml-auto'>
+            <label className='flex items-center gap-2 text-sm text-muted'>
+              Sort
+              <select className='input w-36' value={sortBy} onChange={(event) => update({sort: (event.target.value === 'newest') ? null : event.target.value})}>
+                {SORTS.map((sort) => <option key={sort.value} value={sort.value}>{sort.label}</option>)}
+              </select>
+            </label>
+            <div className='rounded-md border border-line bg-surface px-3 py-2'>
+              <Toggle label='Show NSFW' checked={!hideNsfw} onChange={(value) => update({nsfw: (value) ? null : 'hide'})}/>
+            </div>
+          </div>
+        </div>
       </div>
 
       {(isPending) ? (
@@ -67,7 +96,14 @@ export function AdminTagsPage() {
         <ErrorPanel title='Couldn’t load directory tags' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
       ) : (!items.length) ? (
         <EmptyState icon={<ShieldCheck className='size-10'/>} title='Nothing here'>
-          {(debouncedQuery) ? 'No directory tags match that search.' : `No ${filter.label.toLowerCase()} directory tags.`}
+          {(debouncedQuery) ? (
+            (filter.verified === null) ? 'No directory tags match that search.' : (
+              <>
+                No {filter.label.toLowerCase()} directory tags match that search.{' '}
+                <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => update({status: 'all'})}>Search all tags</button>
+              </>
+            )
+          ) : `No ${filter.label.toLowerCase()} directory tags.`}
         </EmptyState>
       ) : (
         <>
@@ -90,6 +126,7 @@ function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
   const toast = useToast();
   const mutation = usePatchAdminTagDirectoryMutation();
   const [ expanded, setExpanded ] = useState(false);
+  const [ deleting, setDeleting ] = useState(false);
 
   const content = tag.content ?? '';
   const long = CONTENT_COLLAPSE_LINES < content.split('\n').length || CONTENT_COLLAPSE_CHARS < content.length;
@@ -139,6 +176,14 @@ function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
             pending={pendingTarget === TagDirectoryVerificationStates.NOT_VERIFIED}
             onClick={() => setVerified(TagDirectoryVerificationStates.NOT_VERIFIED, 'set to unverified')}
           />
+          <ActionButton
+            label='Delete'
+            icon={<Trash2 className='size-4'/>}
+            className='btn-danger'
+            disabled={mutation.isPending}
+            pending={false}
+            onClick={() => setDeleting(true)}
+          />
         </div>
       </div>
 
@@ -178,7 +223,9 @@ function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
           className={cn(
             'overflow-x-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg',
             long && !expanded && 'max-h-72 overflow-y-hidden',
+            'focus:border-line-strong focus:outline-none',
           )}
+          {...selectAllScope}
         >
           {content || <span className='text-subtle italic'>(empty)</span>}
         </pre>
@@ -195,6 +242,8 @@ function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
           </ul>
         </div>
       ) : null}
+
+      {(deleting) ? <DeleteDirectoryTagFlow item={item} onClose={() => setDeleting(false)}/> : null}
     </li>
   );
 }

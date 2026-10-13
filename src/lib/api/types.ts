@@ -539,6 +539,11 @@ export interface AdminUser extends AdminUserRef {
   premium_type: number | null,
 }
 
+export interface AdminUserPatch {
+  blocked?: boolean,
+  blocked_reason?: string | null,
+}
+
 export interface AdminUserContentFlags {
   confirmed: number,
   dismissed: number,
@@ -560,6 +565,7 @@ export interface AdminUsersPage {
 }
 
 export type AdminUsersSortBy = 'flags' | 'newest' | 'username';
+export type AdminTagDirectorySortBy = 'newest' | 'oldest' | 'uses' | 'name' | 'title';
 
 export const ContentFlagStatuses = {
   PENDING: 0,

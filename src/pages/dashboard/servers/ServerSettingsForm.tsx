@@ -13,6 +13,7 @@ import {
   RESPONSE_DISPLAY_CHOICES,
   TIMEZONE_CHOICES,
 } from '../settings/settingsChoices';
+import { PersonalityHint } from '../settings/PersonalityHint';
 import { useDraft } from '../settings/useDraft';
 import { CharCounter, Field, InlineError, Panel, SaveBar } from '../ui';
 import { readOnlyMessage } from './guildMeta';
@@ -75,7 +76,7 @@ export function ServerSettingsForm({ guild, onDirtyChange }: {guild: UserGuild, 
             className='md:col-span-2'
             label='AI personality prompt'
             counter={<CharCounter length={personality.length} max={PERSONALITY_MAX}/>}
-            hint='How the AI behaves for people who haven’t set their own.'
+            hint={<PersonalityHint>How the AI behaves for people who haven’t set their own.</PersonalityHint>}
           >
             {(props) => (
               <textarea

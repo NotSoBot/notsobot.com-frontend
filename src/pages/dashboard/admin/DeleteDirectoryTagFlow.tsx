@@ -8,8 +8,8 @@ import type { AdminTagDirectoryItem } from '@/lib/api';
 import { errorMessage, useDeleteAdminTagDirectoryMutation, usePatchAdminUserMutation } from '@/lib/api/dashboardQueries';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
-
-const BLOCK_REASON_MAX = 2000;
+import { selectAllScope } from './adminUi';
+import { BLOCK_REASON_MAX } from './BlockUserDialog';
 
 
 // One dialog for deleting a directory listing and (optionally) blocking whoever published it, decided while the tag
@@ -96,7 +96,7 @@ export function DeleteDirectoryTagFlow({ item, onClose }: {item: AdminTagDirecto
             {(user) ? <span className='font-mono text-xs text-subtle'> ({user.id})</span> : null}
           </p>
           {(item.description) ? <p className='mt-2 text-sm whitespace-pre-wrap break-words text-muted'>{item.description}</p> : null}
-          <pre className='mt-2 max-h-48 overflow-auto rounded border border-line bg-surface p-2 font-mono text-xs whitespace-pre-wrap break-words text-fg'>
+          <pre className='mt-2 max-h-48 overflow-auto rounded border border-line bg-surface p-2 font-mono text-xs whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none' {...selectAllScope}>
             {content || <span className='text-subtle italic'>(empty)</span>}
           </pre>
         </section>

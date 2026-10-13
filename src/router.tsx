@@ -42,6 +42,13 @@ const routes: Array<RouteObject> = [
         // the tag is a modal over the directory, so the directory stays mounted underneath
         children: [{index: true}, {path: ':tagId'}],
       },
+      // the docs content is large, so it's only fetched when someone opens it
+      {
+        path: Routes.TAG_DOCS,
+        lazy: async () => ({Component: (await import('@/pages/docs/TagDocsPage')).TagDocsPage}),
+        handle: {title: 'Tag Scripting'} satisfies RouteHandle,
+      },
+      {path: '/docs', element: <Navigate to={Routes.TAG_DOCS} replace/>},
       {path: Routes.LEGAL_PRIVACY, element: <PrivacyPage/>, handle: {title: 'Privacy Policy'} satisfies RouteHandle},
       {path: Routes.LEGAL_TERMS_OF_SERVICE, element: <TermsPage/>, handle: {title: 'Terms of Service'} satisfies RouteHandle},
 

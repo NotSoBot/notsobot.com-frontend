@@ -6,6 +6,7 @@ import { errorMessage, useMeSettingsQuery, usePatchMeSettingsMutation } from '@/
 
 import { CharCounter, DashboardHeader, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar, UnsavedChangesGuard } from '../ui';
 import { ChoiceSelect } from './ChoiceSelect';
+import { PersonalityHint } from './PersonalityHint';
 import {
   APPLICATION_COMMAND_RESPONSE_CHOICES,
   DIFFUSION_MODEL_CHOICES,
@@ -151,7 +152,7 @@ function AiSection({ settings, onDirtyChange }: SectionProps) {
       <Field
         className='md:col-span-2'
         label='Personality prompt'
-        hint='Describe how the AI should behave when you talk to it. Leave empty for the default.'
+        hint={<PersonalityHint>Describe how the AI should behave when you talk to it. Leave empty for the default.</PersonalityHint>}
         counter={<CharCounter length={personality.length} max={PERSONALITY_MAX}/>}
         error={(PERSONALITY_MAX < personality.length) ? `Up to ${PERSONALITY_MAX.toLocaleString()} characters.` : null}
       >

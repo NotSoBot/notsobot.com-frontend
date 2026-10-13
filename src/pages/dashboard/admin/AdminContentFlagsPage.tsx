@@ -2,18 +2,21 @@
 // NEVER render `source_url` (or any other url here) as <img>/<video>/<iframe>/background-image or any other
 // embed, and never as a link. At most it's plain, selectable text.
 
-import { Flag, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Ban, Flag, X } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+
+import { Modal } from '@/components/ui/Modal';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ContentFlagCategories, ContentFlagStatuses, type ContentFlag, type ContentFlagStatus } from '@/lib/api';
-import { ADMIN_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery, usePatchAdminContentFlagMutation } from '@/lib/api/dashboardQueries';
+import { ADMIN_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery, usePatchAdminContentFlagMutation, usePatchAdminUserMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime, formatMemory } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, CopyableValue, DetailList, Pagination, useSearchParamState, UserCell } from './adminUi';
+import { Chip, CopyableValue, DetailList, Pagination, selectAllScope, useSearchParamState, UserCell } from './adminUi';
+import { BLOCK_REASON_MAX } from './BlockUserDialog';
 
 
 type Tone = 'warning' | 'danger' | 'neutral' | 'brand';
@@ -159,6 +162,7 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
   const [ notes, setNotes ] = useState(flag.notes ?? '');
   useEffect(() => setNotes(flag.notes ?? ''), [flag.notes]);
   const notesDirty = notes !== (flag.notes ?? '');
+  const [ reporting, setReporting ] = useState(false);
 
   const status = statusInfo(flag.status);
   const pendingStatus = (mutation.isPending) ? mutation.variables?.patch.status : undefined;
@@ -202,7 +206,8 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
               type='button'
               className={cn('btn btn-sm', (item.value === ContentFlagStatuses.CONFIRMED) ? 'btn-danger' : 'btn-secondary')}
               disabled={mutation.isPending || flag.status === item.value}
-              onClick={() => setStatus(item.value)}
+              // reporting goes through a dialog so the uploader can be blocked in the same step
+              onClick={() => (item.value === ContentFlagStatuses.REPORTED) ? setReporting(true) : setStatus(item.value)}
             >
               {(pendingStatus === item.value) ? <Spinner className='size-3.5'/> : null}
               {item.action}
@@ -256,7 +261,7 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
       {(flag.query) ? (
         <div className='mt-4'>
           <h3 className='section-label mb-1'>Query</h3>
-          <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-sm whitespace-pre-wrap break-words text-fg'>{flag.query}</p>
+          <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none' {...selectAllScope}>{flag.query}</p>
         </div>
       ) : null}
 
@@ -264,7 +269,7 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
         <div className='mt-4'>
           <h3 className='section-label mb-1'>Source URL <span className='normal-case tracking-normal text-subtle'>(not loaded)</span></h3>
           {/* plain text on purpose: no link, no preview */}
-          <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-xs break-all text-muted select-all'>{flag.source_url}</p>
+          <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-xs break-all text-muted select-all focus:border-line-strong focus:outline-none' {...selectAllScope}>{flag.source_url}</p>
         </div>
       ) : null}
 
@@ -308,7 +313,133 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
           </div>
         ) : null}
       </form>
+
+      {(reporting) ? <ReportFlagDialog flag={flag} onClose={() => setReporting(false)}/> : null}
     </li>
+  );
+}
+
+
+// Marks a flag reported and (optionally) blocks whoever posted it, in one go.
+function ReportFlagDialog({ flag, onClose }: {flag: ContentFlag, onClose: () => void}) {
+  const titleId = useId();
+  const blockId = useId();
+  const reasonId = useId();
+  const toast = useToast();
+  const report = usePatchAdminContentFlagMutation();
+  const block = usePatchAdminUserMutation();
+
+  const { user } = flag;
+  const [ blockUser, setBlockUser ] = useState(false);
+  const [ reason, setReason ] = useState(`Content flag #${flag.id}${(flag.category) ? ` (${flag.category})` : ''}`);
+  // once set, a failed block can be retried without re-reporting
+  const [ reported, setReported ] = useState(false);
+
+  const pending = report.isPending || block.isPending;
+
+  const runBlock = () => {
+    if (!user) {
+      return;
+    }
+    block.mutate({userId: user.id, blocked: true, reason: reason.trim()}, {
+      onSuccess: () => {
+        toast(`Blocked ${user.username}`);
+        onClose();
+      },
+    });
+  };
+
+  const submit = () => {
+    if (reported) {
+      runBlock();
+      return;
+    }
+    report.mutate({flagId: flag.id, patch: {status: ContentFlagStatuses.REPORTED}}, {
+      onSuccess: () => {
+        setReported(true);
+        toast(`Flag ${flag.id}: reported`);
+        if (blockUser && user) {
+          runBlock();
+        } else {
+          onClose();
+        }
+      },
+    });
+  };
+
+  const error = (report.isError) ?
+    errorMessage(report.error, 'Couldn’t mark the flag reported.') :
+    (block.isError) ? `The flag was marked reported, but blocking failed: ${errorMessage(block.error, 'Couldn’t block the user.')}` : null;
+
+  return (
+    <Modal labelledBy={titleId} onClose={() => !pending && onClose()} className='max-w-lg'>
+      <form
+        className='p-5 sm:p-6'
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!pending) {
+            submit();
+          }
+        }}
+      >
+        <h2 id={titleId} className='pr-10 text-lg font-semibold text-white'>Mark flag #{flag.id} reported?</h2>
+
+        <div className='mt-3 rounded-md border border-line bg-deep p-3'>
+          <UserCell user={user} fallbackId={flag.user_id}/>
+          {(flag.category) ? <div className='mt-2'><Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip></div> : null}
+        </div>
+
+        {(user) ? (
+          <div className='mt-3 rounded-md border border-line p-3 text-sm'>
+            <label htmlFor={blockId} className='flex cursor-pointer items-start gap-2'>
+              <input
+                id={blockId}
+                type='checkbox'
+                checked={blockUser}
+                onChange={(event) => setBlockUser(event.target.checked)}
+                disabled={pending || reported}
+                className='mt-0.5'
+              />
+              <span>
+                <span className='flex items-center gap-1.5 font-medium text-white'>
+                  <Ban aria-hidden className='size-4 text-danger'/>
+                  Block {user.username} from NotSoBot
+                </span>
+                <span className='mt-0.5 block text-muted'>Stops them from using NotSoBot anywhere.</span>
+              </span>
+            </label>
+            {(blockUser) ? (
+              <div className='mt-3'>
+                <label htmlFor={reasonId} className='mb-1.5 block text-muted'>Block reason</label>
+                <textarea
+                  id={reasonId}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  maxLength={BLOCK_REASON_MAX}
+                  rows={2}
+                  disabled={pending}
+                  className='input'
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {(error) ? (
+          <p role='alert' className='mt-4 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-fg'>{error}</p>
+        ) : null}
+
+        <div className='mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
+          <button type='button' className='btn btn-secondary' onClick={onClose} disabled={pending}>
+            {(reported) ? 'Close' : 'Cancel'}
+          </button>
+          <button type='submit' className='btn btn-danger' disabled={pending}>
+            {(pending) ? <Spinner className='size-4 border-white/40 border-t-white'/> : null}
+            {(reported) ? 'Retry block' : `Mark reported${(blockUser && user) ? ' and block' : ''}`}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

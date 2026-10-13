@@ -46,6 +46,7 @@ export const Routes = Object.freeze({
   LEGAL_TERMS_OF_SERVICE: '/legal/tos',
   STATUS: '/status',
   TAG_DIRECTORY: '/directory/tags',
+  TAG_DOCS: '/docs/tags',
   TAG_DIRECTORY_ITEM: '/directory/tags/:tagId',
   SUPPORT: '/support',
   SUPPORT_INVITE: '/support/invite',

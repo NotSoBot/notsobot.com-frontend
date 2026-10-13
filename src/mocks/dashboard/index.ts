@@ -14,6 +14,7 @@
 import { tokenStorage } from '@/auth/tokenStorage';
 import { config } from '@/config';
 import { ApiErrorCodes, TagDirectoryVerificationStates, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
+import { toDate } from '@/lib/utils';
 
 import {
   adminUserEntries,
@@ -570,15 +571,43 @@ function parseBool(value: string | null): boolean | null {
   return (value === 'true' || value === '1') ? true : (value === 'false' || value === '0') ? false : null;
 }
 
+// mirrors `utilities/tools/tags.py` `tag_directory_search_condition`
+function matchesDirectorySearch(query: string, tag: {id: string, user_id?: string | null, user?: {id: string}}, texts: Array<string>): boolean {
+  const text = query.trim();
+  if (!text) {
+    return true;
+  }
+  const ownerId = tag.user_id ?? tag.user?.id;
+  const prefixed = /^(id|tag|user|owner):(\d+)$/i.exec(text);
+  if (prefixed) {
+    return (['id', 'tag'].includes(prefixed[1].toLowerCase())) ? tag.id === prefixed[2] : ownerId === prefixed[2];
+  }
+  if (/^\d+$/.test(text) && (tag.id === text || ownerId === text)) {
+    return true;
+  }
+  const needle = text.toLowerCase();
+  return texts.some((value) => value.toLowerCase().includes(needle));
+}
+
 route('GET', '/admin/tags/directory', (_match, { query }) => {
   requireBotOwner();
-  const needle = (query.get('query') || '').toLowerCase();
+  const search = query.get('query') || '';
   const verified = query.get('verified');
   const nsfw = parseBool(query.get('nsfw'));
   const matching = state.adminDirectory
     .filter((item) => verified === null || verified === '' || item.verified === Number(verified))
     .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
-    .filter((item) => !needle || [item.title, item.tag.name, item.tag.content, item.description].some((text) => text.toLowerCase().includes(needle)));
+    .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.tag.content ?? '', item.description]));
+  const createdMs = (item: typeof matching[number]) => (item.created === undefined) ? 0 : toDate(item.created).getTime();
+  const byCreated = (a: typeof matching[number], b: typeof matching[number]) => createdMs(b) - createdMs(a);
+  const sorters: Record<string, (a: typeof matching[number], b: typeof matching[number]) => number> = {
+    oldest: (a, b) => byCreated(b, a),
+    uses: (a, b) => b.tag.uses - a.tag.uses,
+    name: (a, b) => a.tag.name.localeCompare(b.tag.name),
+    title: (a, b) => a.title.localeCompare(b.title),
+  };
+  const pendingFirst = (a: typeof matching[number], b: typeof matching[number]) => Number(b.verified === 1) - Number(a.verified === 1) || byCreated(a, b);
+  matching.sort(sorters[query.get('sort_by') || ''] ?? pendingFirst);
   return pageOf(matching, query);
 });
 
@@ -594,6 +623,30 @@ route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
   }
   item.verified = verified;
   return item;
+});
+
+route('DELETE', '/admin/tags/directory/(\\d+)', ([ , tagId ]) => {
+  requireBotOwner();
+  if (!state.adminDirectory.some((other) => other.id === tagId)) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
+  }
+  state.adminDirectory = state.adminDirectory.filter((other) => other.id !== tagId);
+  return undefined;
+});
+
+route('PATCH', '/admin/users/(\\d+)', ([ , userId ], { body }) => {
+  requireBotOwner();
+  const user = state.adminUsers.find((other) => other.id === userId);
+  if (!user) {
+    throw new MockError(404, 10013, 'Unknown User');
+  }
+  if (body.blocked !== undefined) {
+    user.blocked = !!body.blocked;
+  }
+  if (body.blocked_reason !== undefined) {
+    user.blocked_reason = (body.blocked_reason as string | null) || null;
+  }
+  return user;
 });
 
 route('GET', '/admin/users', (_match, { query }) => {
@@ -691,12 +744,12 @@ route('PATCH', '/admin/reports/(\\d+)', ([ , reportId ], { body }) => {
 
 // public tag directory (the real one is `GET /tags/directory`), newest first, `before` + `limit` like the api
 route('GET', '/tags/directory', (_match, { query }) => {
-  const needle = (query.get('query') || '').toLowerCase();
+  const search = query.get('query') || '';
   const before = query.get('before');
   const limit = Number(query.get('limit')) || 50;
   const items = [...state.directory.values()]
     .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1)
-    .filter((item) => !needle || [item.title, item.tag.name, item.description].some((text) => text.toLowerCase().includes(needle)))
+    .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.description]))
     .filter((item) => !before || BigInt(item.id) < BigInt(before));
   return {count: items.length, items: items.slice(0, limit)};
 });

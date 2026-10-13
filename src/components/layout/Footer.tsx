@@ -45,6 +45,7 @@ export function Footer() {
           <h3 className='section-label mb-3'>Company</h3>
           <ul className='space-y-2 text-sm'>
             <li><Link to={Routes.FAQ} className='text-muted transition-colors hover:text-white'>FAQ</Link></li>
+            <li><Link to={Routes.TAG_DOCS} className='text-muted transition-colors hover:text-white'>Tag Docs</Link></li>
             <li><Link to={Routes.LEGAL_PRIVACY} className='text-muted transition-colors hover:text-white'>Privacy Policy</Link></li>
             <li><Link to={Routes.LEGAL_TERMS_OF_SERVICE} className='text-muted transition-colors hover:text-white'>Terms of Service</Link></li>
           </ul>

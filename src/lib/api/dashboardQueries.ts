@@ -11,6 +11,9 @@ import { queryKeys } from './queries';
 import type {
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
+  AdminUser,
+  AdminUsersPage,
+  AdminTagDirectorySortBy,
   AdminUsersSortBy,
   ContentFlag,
   ContentFlagPatch,
@@ -446,7 +449,9 @@ export const ADMIN_PAGE_SIZE = 25;
 
 export interface AdminTagDirectoryFilters {
   query: string,
+  sortBy: AdminTagDirectorySortBy,
   verified: number | null,
+  nsfw: boolean | null,
   page: number,
 }
 
@@ -456,7 +461,9 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
     queryKey: queryKeys.adminTagDirectory(token, filters),
     queryFn: ({ signal }) => api.fetchAdminTagDirectory({
       query: filters.query,
+      sortBy: filters.sortBy,
       verified: filters.verified,
+      nsfw: filters.nsfw,
       offset: filters.page * ADMIN_PAGE_SIZE,
       limit: ADMIN_PAGE_SIZE,
     }, signal),
@@ -489,6 +496,21 @@ export function usePatchAdminTagDirectoryMutation() {
 }
 
 
+// the listing leaves every page (and the public directory), so just refetch
+export function useDeleteAdminTagDirectoryMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'tags'];
+  return useMutation({
+    mutationFn: ({ tagId, deleteTag }: {tagId: string, deleteTag: boolean}) => api.deleteAdminTagDirectory(tagId, {deleteTag}),
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: listKey}),
+      queryClient.invalidateQueries({queryKey: ['tags', 'directory']}),
+    ]),
+  });
+}
+
+
 export interface AdminUsersFilters {
   query: string,
   sortBy: AdminUsersSortBy,
@@ -508,6 +530,27 @@ export function useAdminUsersQuery(filters: AdminUsersFilters) {
       limit: ADMIN_PAGE_SIZE,
     }, signal),
     placeholderData: keepPreviousData,
+  });
+}
+
+
+export function usePatchAdminUserMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'users'];
+  return useMutation({
+    mutationFn: ({ userId, blocked, reason }: {userId: string, blocked: boolean, reason?: string}) => {
+      return api.patchAdminUser(userId, {blocked, blocked_reason: (blocked) ? (reason || null) : null});
+    },
+    onSuccess: (user: AdminUser) => {
+      queryClient.setQueriesData<AdminUsersPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((entry) => (entry.user.id === user.id) ? {...entry, user} : entry)};
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
   });
 }
 

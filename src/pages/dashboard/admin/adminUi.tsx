@@ -1,5 +1,5 @@
 import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 
 import type { AdminUserRef } from '@/lib/api';
@@ -69,6 +69,25 @@ export function Pagination({ page, count, pageSize, onChange, fetching = false }
 }
 
 
+// Spread onto a read-only text block (url, hash, tag content) so it can take focus from a click and Ctrl/Cmd+A
+// selects just its text instead of the whole page.
+export const selectAllScope = {
+  tabIndex: 0,
+  onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      const selection = window.getSelection();
+      if (selection) {
+        const range = document.createRange();
+        range.selectNodeContents(event.currentTarget);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+  },
+};
+
+
 // avatar + name + id; avatars come from Discord's CDN (never from user-submitted content)
 export function UserCell({ user, fallbackId, size = 'md' }: {user: AdminUserRef | null, fallbackId?: string | null, size?: 'sm' | 'md'}) {
   if (!user) {
@@ -101,7 +120,7 @@ export function CopyableValue({ value, truncate = 16, className }: {value: strin
   const shown = (truncate && truncate < value.length) ? `${value.slice(0, truncate)}…` : value;
   return (
     <span className={cn('inline-flex min-w-0 items-center gap-1', className)}>
-      <code title={value} className='truncate font-mono text-xs text-fg select-all'>{shown}</code>
+      <code title={value} className='truncate font-mono text-xs text-fg select-all focus:outline-none' {...selectAllScope}>{shown}</code>
       <button
         type='button'
         aria-label='Copy'
