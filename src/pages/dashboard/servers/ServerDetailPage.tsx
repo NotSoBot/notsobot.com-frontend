@@ -17,7 +17,7 @@ import { ScopeMismatchCard } from './ServersPage';
 
 export function ServerDetailPage() {
   const { guildId = '' } = useParams();
-  const { data: guild, isPending, isError, error, refetch, isRefetching } = useMeGuildQuery(guildId);
+  const { data: guild, isPending, error, refetch, isRefetching } = useMeGuildQuery(guildId);
   const [ settingsDirty, setSettingsDirty ] = useState(false);
 
   const back = (
@@ -43,7 +43,8 @@ export function ServerDetailPage() {
     );
   }
 
-  if (isError) {
+  // only when there's nothing loaded yet; a failed background refetch keeps the page (and any unsaved settings) as-is
+  if (!guild) {
     const notFound = error instanceof ApiRequestError && (error.status === 404 || error.code === ApiErrorCodes.UNKNOWN_SERVER);
     return (
       <>

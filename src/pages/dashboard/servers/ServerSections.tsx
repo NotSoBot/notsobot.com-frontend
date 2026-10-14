@@ -102,7 +102,9 @@ export function PrefixesSection({ guild }: {guild: UserGuild}) {
   const editable = guild.editable.prefixes;
   const edit = useGuildEdit(guild.id);
   const [ prefix, setPrefix ] = useState('');
-  const exists = guild.prefixes.some((item) => item.prefix === prefix);
+  // the API strips leading/trailing whitespace, so compare (and send) what it'll actually store
+  const trimmed = prefix.trim();
+  const exists = guild.prefixes.some((item) => item.prefix === trimmed);
 
   return (
     <Panel
@@ -134,15 +136,15 @@ export function PrefixesSection({ guild }: {guild: UserGuild}) {
       {(editable) ? (
         <AddRow
           pending={edit.busyKey === '\u0000add'}
-          disabled={!prefix.trim() || exists || 128 < prefix.length || edit.pending}
+          disabled={!trimmed || exists || 128 < trimmed.length || edit.pending}
           label='Add prefix'
           onSubmit={async () => {
-            if (await edit.run('\u0000add', {kind: 'prefix', prefix, present: true}, `Added prefix “${prefix}”`)) {
+            if (await edit.run('\u0000add', {kind: 'prefix', prefix: trimmed, present: true}, `Added prefix “${trimmed}”`)) {
               setPrefix('');
             }
           }}
         >
-          <Field className='flex-1' label='New prefix' hint={(exists) ? 'That prefix is already set.' : 'Up to 128 characters. Trailing spaces count.'}>
+          <Field className='flex-1' label='New prefix' hint={(exists) ? 'That prefix is already set.' : 'Up to 128 characters. Spaces at the start or end are removed.'}>
             {(props) => <input {...props} className='input font-mono' value={prefix} maxLength={128} onChange={(event) => setPrefix(event.target.value)} autoComplete='off' spellCheck={false}/>}
           </Field>
         </AddRow>

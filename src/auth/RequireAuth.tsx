@@ -18,7 +18,7 @@ import { useAuth } from './AuthContext';
  * Anonymous visitors are sent to `/auth/login?next=<current path>` and come back here after Discord.
  */
 export function RequireAuth({ children }: {children?: ReactNode}) {
-  const { status, retry } = useAuth();
+  const { loggedOut, status, retry } = useAuth();
   const location = useLocation();
 
   if (status === 'loading') {
@@ -38,6 +38,10 @@ export function RequireAuth({ children }: {children?: ReactNode}) {
   }
 
   if (status === 'anonymous') {
+    // logging out on a protected page shouldn't immediately start a new login
+    if (loggedOut) {
+      return <Navigate to={Routes.HOME} replace/>;
+    }
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`${Routes.AUTH_LOGIN}?next=${next}`} replace/>;
   }

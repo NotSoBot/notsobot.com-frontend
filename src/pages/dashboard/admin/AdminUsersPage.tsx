@@ -1,7 +1,8 @@
-import { Ban, ShieldCheck, Users } from 'lucide-react';
+import { Ban, Pencil, ShieldCheck, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
+import { isOwner, useAuth } from '@/auth';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -11,8 +12,9 @@ import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 import { premiumLabel } from '../premium';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, Pagination, useSearchParamState, UserCell } from './adminUi';
+import { Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { BlockUserDialog } from './BlockUserDialog';
+import { EditUserDialog } from './EditUserDialog';
 
 
 const SORTS: Array<{value: AdminUsersSortBy, label: string}> = [
@@ -41,6 +43,7 @@ export function AdminUsersPage() {
     page,
   });
   const items = data?.items ?? [];
+  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
 
   return (
     <>
@@ -67,7 +70,7 @@ export function AdminUsersPage() {
         </div>
       </div>
 
-      {(isPending) ? (
+      {(isPending || steppingBack) ? (
         <TableSkeleton/>
       ) : (isError && !items.length) ? (
         <ErrorPanel title='Couldn’t load users' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
@@ -103,33 +106,51 @@ export function AdminUsersPage() {
 
 function UserRow({ entry }: {entry: AdminUserEntry}) {
   const { user, content_flags: flags } = entry;
+  const { user: me } = useAuth();
+  const viewerIsOwner = isOwner(me);
   const owner = (user.flags & UserFlags.OWNER) === UserFlags.OWNER;
+  const moderator = (user.flags & UserFlags.MODERATOR) === UserFlags.MODERATOR;
+  // owners can't be blocked, and moderators can't block other moderators
+  const canBlock = !owner && (viewerIsOwner || !moderator);
   const [ blocking, setBlocking ] = useState(false);
+  const [ editing, setEditing ] = useState(false);
   return (
-    <tr className='align-top hover:bg-surface-2'>
+    <tr className='align-middle hover:bg-surface-2'>
       <td className='px-4 py-3'>
         <UserCell user={user}/>
       </td>
       <td className='px-4 py-3'>
         <div className='flex flex-wrap gap-1 empty:hidden'>
           {(owner) ? <Chip tone='brand'>Owner</Chip> : null}
+          {(moderator) ? <Chip tone='brand'>Moderator</Chip> : null}
           {(user.blocked) ? <Chip tone='danger' title={user.blocked_reason || undefined}>Blocked</Chip> : null}
           {(user.premium_type) ? <Chip>{premiumLabel(user.premium_type)}</Chip> : null}
         </div>
         {(user.blocked && user.blocked_reason) ? <p className='mt-1 max-w-56 text-xs break-words text-subtle'>{user.blocked_reason}</p> : null}
-        {(!owner) ? (
-          <button
-            type='button'
-            className={cn('btn btn-sm [div:not(:empty)~&]:mt-2', (user.blocked) ? 'btn-secondary' : 'btn-ghost text-danger')}
-            onClick={() => setBlocking(true)}
-          >
-            {(user.blocked) ? <ShieldCheck className='size-4'/> : <Ban className='size-4'/>}
-            {(user.blocked) ? 'Unblock' : 'Block'}
-          </button>
+        {(canBlock || viewerIsOwner) ? (
+          <div className='-ml-3 flex flex-wrap gap-1 [div:not(:empty)~&]:mt-2'>
+            {(canBlock) ? (
+              <button
+                type='button'
+                className={cn('btn btn-sm', (user.blocked) ? 'btn-secondary' : 'btn-ghost text-danger')}
+                onClick={() => setBlocking(true)}
+              >
+                {(user.blocked) ? <ShieldCheck className='size-4'/> : <Ban className='size-4'/>}
+                {(user.blocked) ? 'Unblock' : 'Block'}
+              </button>
+            ) : null}
+            {(viewerIsOwner) ? (
+              <button type='button' className='btn btn-sm btn-ghost' onClick={() => setEditing(true)}>
+                <Pencil className='size-4'/>
+                Edit
+              </button>
+            ) : null}
+          </div>
         ) : null}
         {(blocking) ? (
           <BlockUserDialog user={user} blocked={user.blocked} blockedReason={user.blocked_reason} onClose={() => setBlocking(false)}/>
         ) : null}
+        {(editing) ? <EditUserDialog user={user} onClose={() => setEditing(false)}/> : null}
       </td>
       <td className='px-4 py-3 text-right tabular-nums'>
         {(flags.total) ? (

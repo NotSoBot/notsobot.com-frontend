@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 
+import { config } from '@/config';
 import { api, ApiEndpoints, ApiRequestError, apiUrl } from '@/lib/api';
 import { queryKeys } from '@/lib/api/queries';
 
 import { AuthContext, type AuthContextValue, type AuthStatus } from './AuthContext';
-import { saveReturnTo } from './returnTo';
+import { markLoginPending, saveReturnTo } from './returnTo';
 import { tokenStorage } from './tokenStorage';
 
 
@@ -17,6 +18,7 @@ function isAuthRejection(error: unknown): boolean {
 export function AuthProvider({ children }: {children: ReactNode}) {
   const queryClient = useQueryClient();
   const token = useSyncExternalStore(tokenStorage.subscribe, tokenStorage.get, () => null);
+  const [ loggedOut, setLoggedOut ] = useState(false);
 
   const meQuery = useQuery({
     queryKey: queryKeys.me(token),
@@ -44,7 +46,13 @@ export function AuthProvider({ children }: {children: ReactNode}) {
   }, [queryClient, token]);
 
   const login = useCallback((returnTo?: string) => {
+    // with auth off nothing may start the Discord OAuth flow, whatever button or route asked for it
+    if (!config.authEnabled) {
+      return;
+    }
+    setLoggedOut(false);
     saveReturnTo(returnTo ?? (window.location.pathname + window.location.search));
+    markLoginPending();
     window.location.assign(apiUrl(ApiEndpoints.AUTH_LOGIN));
   }, []);
 
@@ -56,10 +64,12 @@ export function AuthProvider({ children }: {children: ReactNode}) {
         // session may already be gone server-side; clear locally regardless
       }
     }
+    setLoggedOut(true);
     tokenStorage.clear();
   }, []);
 
   const completeLogin = useCallback((value: string) => {
+    setLoggedOut(false);
     tokenStorage.set(value);
   }, []);
 
@@ -86,11 +96,12 @@ export function AuthProvider({ children }: {children: ReactNode}) {
     user,
     token,
     isAuthenticated: status === 'authenticated',
+    loggedOut,
     login,
     logout,
     completeLogin,
     retry,
-  }), [status, user, token, login, logout, completeLogin, retry]);
+  }), [status, user, token, loggedOut, login, logout, completeLogin, retry]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
-import { clearReturnTo, peekReturnTo, useAuth } from '@/auth';
+import { clearReturnTo, consumeLoginPending, peekReturnTo, useAuth } from '@/auth';
 import { FullPageMessage } from '@/components/ui/FullPageMessage';
 import { Spinner } from '@/components/ui/Spinner';
-import { Routes } from '@/config';
+import { config, Routes } from '@/config';
+
+import { LoginDisabledMessage } from './LoginPage';
 
 
 // notsobot.api finishes the Discord OAuth exchange at `/api/auth/login/callback`, then redirects
@@ -24,18 +26,36 @@ export function LoginCallbackPage() {
     }
   });
   const [ returnTo ] = useState(peekReturnTo);
+  // only accept a token for a login this tab started (read once, StrictMode renders twice)
+  const [ started ] = useState(consumeLoginPending);
 
   useEffect(() => {
     // never leave the token in the address bar / history
     window.history.replaceState(window.history.state, '', window.location.pathname);
 
-    if (!token) {
+    // with auth off a token that still arrives here (from the API directly) is never used
+    if (!token || !started || !config.authEnabled) {
       return;
     }
     completeLogin(token);
     clearReturnTo();
     navigate(returnTo, {replace: true});
-  }, [completeLogin, navigate, returnTo, token]);
+  }, [completeLogin, navigate, returnTo, started, token]);
+
+  if (!config.authEnabled) {
+    return <LoginDisabledMessage/>;
+  }
+
+  if (token && !started) {
+    return (
+      <FullPageMessage title='Login link not started here' description="This login wasn't started from this tab, so we didn't use it. Log in again if you meant to.">
+        <div className='flex gap-2'>
+          <Link to={Routes.AUTH_LOGIN} className='btn btn-discord'>Log in</Link>
+          <Link to={Routes.HOME} className='btn btn-secondary'>Go home</Link>
+        </div>
+      </FullPageMessage>
+    );
+  }
 
   if (!token) {
     return (

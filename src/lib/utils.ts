@@ -65,3 +65,14 @@ const compactFormatter = new Intl.NumberFormat(undefined, {notation: 'compact', 
 export function formatCompact(value: number): string {
   return (value < 10000) ? value.toLocaleString() : compactFormatter.format(value);
 }
+
+
+// `#some%20id` -> `some id`; a malformed escape (`#%E0`) would throw, so that falls back to the raw text
+export function decodeHash(hash: string): string {
+  const raw = hash.replace(/^#/, '');
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}

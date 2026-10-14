@@ -5,7 +5,7 @@ import { Link, useLocation } from 'react-router';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Routes } from '@/config';
 import { FAQ_QUESTIONS, FAQ_SECTIONS, faqSearchText, type FaqQuestion, type FaqSectionId } from '@/content/faq';
-import { cn } from '@/lib/utils';
+import { cn, decodeHash } from '@/lib/utils';
 
 
 const SECTION_ICONS: Record<FaqSectionId, LucideIcon> = {
@@ -37,7 +37,7 @@ export function FaqPage() {
   // `/faq#change-prefix` opens and scrolls to that answer. The scroll waits for the answer's
   // open animation (and the router's own scroll handling on load) so it lands in the right place.
   useEffect(() => {
-    const id = decodeURIComponent(location.hash.slice(1));
+    const id = decodeHash(location.hash);
     const isQuestion = FAQ_QUESTIONS.some((question) => question.id === id);
     if (!isQuestion && !id.startsWith('section-')) {
       return;

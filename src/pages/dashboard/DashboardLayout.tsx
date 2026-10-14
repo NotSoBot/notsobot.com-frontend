@@ -2,7 +2,7 @@ import { Database, Flag, Inbox, LayoutDashboard, Server, Settings, ShieldCheck, 
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
-import { isOwner, useAuth } from '@/auth';
+import { isStaff, useAuth } from '@/auth';
 import { ToastProvider } from '@/components/ui/Toast';
 import { Routes } from '@/config';
 import { userAvatarUrl } from '@/lib/discord';
@@ -27,7 +27,7 @@ export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_DATA, label: 'Your Data', icon: Database, color: '#ed4245'},
 ];
 
-// only shown to NotSoBot owners (the routes are guarded by <RequireOwner/> too)
+// only shown to NotSoBot staff, owners and moderators (the routes are guarded by <RequireStaff/> too)
 export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_ADMIN_TAGS, label: 'Directory Tags', icon: ShieldCheck, color: '#3ba55c'},
   {to: Routes.DASHBOARD_ADMIN_USERS, label: 'Users', icon: Users, color: '#5865f2'},
@@ -57,7 +57,7 @@ export function DashboardLayout() {
             <nav aria-label='Dashboard sections'>
               <SectionList sections={DASHBOARD_SECTIONS}/>
             </nav>
-            {(isOwner(user)) ? (
+            {(isStaff(user)) ? (
               <nav aria-label='Admin sections' className='mt-3 lg:mt-6'>
                 <h2 className='section-label mb-2 hidden px-1 lg:block'>Admin</h2>
                 <SectionList sections={ADMIN_SECTIONS}/>

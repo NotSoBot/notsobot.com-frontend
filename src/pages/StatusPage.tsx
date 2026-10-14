@@ -28,6 +28,19 @@ const STATUS_STYLES: Record<DisplayStatus, {label: string, className: string}> =
 const LEGEND_ORDER: Array<DisplayStatus> = ['READY', 'RESUMING', 'IDENTIFYING', 'CONNECTING', 'OPEN', 'CLOSED', 'DEAD'];
 
 
+// how often the page re-checks the clock for dead clusters
+const NOW_TICK = 5 * 1000;
+
+function useNow(interval: number): number {
+  const [ now, setNow ] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), interval);
+    return () => window.clearInterval(timer);
+  }, [interval]);
+  return now;
+}
+
+
 function isClusterDead(cluster: InfoDiscordCluster, now: number): boolean {
   return CLUSTER_DEAD_AFTER <= now - Date.parse(cluster.last_refresh);
 }
@@ -60,8 +73,9 @@ export function StatusPage() {
 
   const totals = useMemo(() => (data) ? computeTotals(data) : null, [data]);
   const allCounts = useMemo(() => (data) ? sumCounts(data.clusters.flatMap((cluster) => cluster.shards)) : null, [data]);
-  // re-rendered on every 2s poll, so wall-clock time keeps dead-cluster detection current even when polls fail
-  const now = Date.now();
+  // ticks on its own: react-query doesn't re-render for failed polls or identical data, so going by renders
+  // would never mark a cluster dead during an outage
+  const now = useNow(NOW_TICK);
 
   const lookup = useMemo(() => (data) ? parseLookup(lookupInput, data) : null, [lookupInput, data]);
   const target = (data && lookup) ? resolveLookup(lookup, data) : null;

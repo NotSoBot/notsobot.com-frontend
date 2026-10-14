@@ -24,8 +24,9 @@ export interface VanityPart {
 
 
 export function parseVanity(pattern: string): Array<VanityPart> {
-  return pattern.split('/').map((part) => {
-    const match = part.trim().match(PART_PATTERN);
+  // the API strips the whole value but not each part, so `5 / 5` falls back to 3–16 per part
+  return pattern.trim().split('/').map((part) => {
+    const match = part.match(PART_PATTERN);
     if (!match) {
       return {min: FALLBACK_PART[0], max: FALLBACK_PART[1], valid: false};
     }
@@ -46,7 +47,8 @@ export function vanityError(pattern: string): string | null {
   if (invalid !== -1) {
     return `Part ${invalid + 1} isn’t a number or range. Use something like 5 or 3-8.`;
   }
-  const slashes = parts.length - 1;
+  // the API counts one slash fewer than there are (`max(count('/') - 1, 0)`), so `1/1` counts as 2 characters (too short) rather than 3
+  const slashes = Math.max(parts.length - 2, 0);
   const min = slashes + parts.reduce((sum, part) => sum + part.min, 0);
   const max = slashes + parts.reduce((sum, part) => sum + part.max, 0);
   if (min < MIN_TOTAL_LENGTH || MAX_TOTAL_LENGTH < max) {

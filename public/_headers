@@ -1,3 +1,8 @@
 # file names under /assets/ contain a content hash, so they never change
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# files served straight from static assets (the worker sets these itself on pages)
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

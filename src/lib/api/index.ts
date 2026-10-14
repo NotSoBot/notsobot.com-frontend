@@ -12,6 +12,7 @@ import type {
   Command,
   ContentFlag,
   ContentFlagPatch,
+  ContentFlagType,
   ContentFlagsPage,
   CommandStat,
   Report,
@@ -305,9 +306,13 @@ export const api = {
 
   fetchAdminContentFlags: (params: {
     userId?: string,
+    guildId?: string,
+    channelId?: string,
     status?: number | null,
     category?: string,
     needsHumanReview?: boolean | null,
+    type?: ContentFlagType | null,
+    search?: string,
     offset?: number,
     limit?: number,
   }, signal?: AbortSignal) => {
@@ -315,9 +320,13 @@ export const api = {
       signal,
       query: {
         user_id: params.userId || undefined,
+        guild_id: params.guildId || undefined,
+        channel_id: params.channelId || undefined,
         status: params.status,
         category: params.category || undefined,
         needs_human_review: params.needsHumanReview,
+        type: params.type || undefined,
+        search: params.search || undefined,
         offset: params.offset || undefined,
         limit: params.limit,
       },

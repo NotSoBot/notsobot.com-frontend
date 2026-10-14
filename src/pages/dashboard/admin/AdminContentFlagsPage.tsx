@@ -6,16 +6,25 @@ import { Ban, Flag, X } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 
 import { Modal } from '@/components/ui/Modal';
+import { SearchInput } from '@/components/ui/SearchInput';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { ContentFlagCategories, ContentFlagStatuses, type ContentFlag, type ContentFlagStatus } from '@/lib/api';
-import { ADMIN_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery, usePatchAdminContentFlagMutation, usePatchAdminUserMutation } from '@/lib/api/dashboardQueries';
+import {
+  CONTENT_FLAG_TEXT_MIMETYPE,
+  ContentFlagCategories,
+  ContentFlagStatuses,
+  ContentFlagTypes,
+  type ContentFlag,
+  type ContentFlagStatus,
+  type ContentFlagType,
+} from '@/lib/api';
+import { ADMIN_CONTENT_FLAGS_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery, usePatchAdminContentFlagMutation, usePatchAdminUserMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime, formatMemory } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, CopyableValue, DetailList, Pagination, selectAllScope, useSearchParamState, UserCell } from './adminUi';
+import { Chip, CopyableValue, DetailList, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { BLOCK_REASON_MAX } from './BlockUserDialog';
 
 
@@ -27,6 +36,8 @@ const STATUSES: Array<{value: ContentFlagStatus, label: string, action: string, 
   {value: ContentFlagStatuses.DISMISSED, label: 'Dismissed', action: 'Dismiss', tone: 'neutral'},
   {value: ContentFlagStatuses.REPORTED, label: 'Reported', action: 'Mark reported', tone: 'brand'},
 ];
+
+const TYPE_LABELS: Record<ContentFlagType, string> = {media: 'Media', text: 'Text'};
 
 function statusInfo(status: number) {
   return STATUSES.find((item) => item.value === status) ?? {value: status, label: `Status ${status}`, action: '', tone: 'neutral' as Tone};
@@ -47,31 +58,39 @@ function parseBool(value: string | null): boolean | null {
 
 export function AdminContentFlagsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
+  // kept here so the dialog survives the card leaving the list (e.g. filtered by a status that excludes "reported")
+  const [ reportingFlag, setReportingFlag ] = useState<ContentFlag | null>(null);
   const userId = (searchParams.get('user_id') || '').trim();
+  const guildId = (searchParams.get('guild_id') || '').trim();
+  const channelId = (searchParams.get('channel_id') || '').trim();
   const status = parseStatus(searchParams.get('status'));
   const category = searchParams.get('category') || '';
   const needsHumanReview = parseBool(searchParams.get('needs_human_review'));
-
-  // the user id box edits locally and lands in the URL once typing stops
-  const [ userIdInput, setUserIdInput ] = useState(userId);
-  useEffect(() => setUserIdInput(userId), [userId]);
-  const debouncedUserId = useDebouncedValue(userIdInput.trim(), 400);
-  useEffect(() => {
-    if (debouncedUserId !== userId && (!debouncedUserId || /^\d+$/.test(debouncedUserId))) {
-      update({user_id: debouncedUserId});
-    }
-    // only when the typed value settles
-  }, [debouncedUserId]);
+  const type = ContentFlagTypes.find((item) => item === searchParams.get('type')) ?? null;
+  const search = searchParams.get('q') || '';
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useAdminContentFlagsQuery({
     userId,
+    guildId,
+    channelId,
     status,
     category,
     needsHumanReview,
+    type,
+    search: debouncedSearch,
     page,
   });
   const items = data?.items ?? [];
-  const filtered = !!(userId || status !== null || category || needsHumanReview !== null);
+  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_CONTENT_FLAGS_PAGE_SIZE});
+  const filtered = !!(userId || guildId || channelId || status !== null || category || needsHumanReview !== null || type || debouncedSearch);
+  const pagination = {
+    page,
+    count: data?.count ?? 0,
+    pageSize: ADMIN_CONTENT_FLAGS_PAGE_SIZE,
+    onChange: setPage,
+    fetching: isFetching && isPlaceholderData,
+  };
 
   return (
     <>
@@ -80,15 +99,30 @@ export function AdminContentFlagsPage() {
         description='Media the safety scan flagged. Shown as metadata only, nothing is previewed.'
       />
 
-      <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4'>
-        <label className='text-sm'>
+      <SearchInput
+        className='mb-4'
+        value={search}
+        onValueChange={(value) => update({q: value})}
+        placeholder='Search by case #, message id, text, prompt, url or hash...'
+        aria-label='Search content flags'
+      />
+
+      <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-12'>
+        <label className='text-sm lg:col-span-3'>
+          <span className='mb-1 block text-subtle'>Type</span>
+          <select className='input' value={type ?? ''} onChange={(event) => update({type: event.target.value})}>
+            <option value=''>Any</option>
+            {ContentFlagTypes.map((item) => <option key={item} value={item}>{TYPE_LABELS[item]}</option>)}
+          </select>
+        </label>
+        <label className='text-sm lg:col-span-3'>
           <span className='mb-1 block text-subtle'>Status</span>
           <select className='input' value={(status === null) ? '' : String(status)} onChange={(event) => update({status: event.target.value})}>
             <option value=''>Any</option>
             {STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
-        <label className='text-sm'>
+        <label className='text-sm lg:col-span-3'>
           <span className='mb-1 block text-subtle'>Category</span>
           <select className='input' value={category} onChange={(event) => update({category: event.target.value})}>
             <option value=''>Any</option>
@@ -96,8 +130,8 @@ export function AdminContentFlagsPage() {
             {ContentFlagCategories.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
-        <label className='text-sm'>
-          <span className='mb-1 block text-subtle'>Needs human review</span>
+        <label className='text-sm lg:col-span-3'>
+          <span className='mb-1 block text-subtle'>Needs review</span>
           <select
             className='input'
             value={(needsHumanReview === null) ? '' : (needsHumanReview) ? '1' : '0'}
@@ -108,34 +142,12 @@ export function AdminContentFlagsPage() {
             <option value='0'>No</option>
           </select>
         </label>
-        <label className='text-sm'>
-          <span className='mb-1 block text-subtle'>User id</span>
-          <span className='relative block'>
-            <input
-              className='input pr-9 font-mono'
-              inputMode='numeric'
-              placeholder='Any user'
-              value={userIdInput}
-              onChange={(event) => setUserIdInput(event.target.value)}
-            />
-            {(userIdInput) ? (
-              <button
-                type='button'
-                aria-label='Clear user filter'
-                className='absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer rounded p-1 text-subtle hover:text-fg'
-                onClick={() => {
-                  setUserIdInput('');
-                  update({user_id: null});
-                }}
-              >
-                <X className='size-4'/>
-              </button>
-            ) : null}
-          </span>
-        </label>
+        <IdFilter label='User id' placeholder='Any user' value={userId} onChange={(value) => update({user_id: value})}/>
+        <IdFilter label='Guild id' placeholder='Any guild' value={guildId} onChange={(value) => update({guild_id: value})}/>
+        <IdFilter label='Channel id' placeholder='Any channel' value={channelId} onChange={(value) => update({channel_id: value})}/>
       </div>
 
-      {(isPending) ? (
+      {(isPending || steppingBack) ? (
         <ListSkeleton/>
       ) : (isError && !items.length) ? (
         <ErrorPanel title='Couldn’t load content flags' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
@@ -145,26 +157,75 @@ export function AdminContentFlagsPage() {
         </EmptyState>
       ) : (
         <>
+          <Pagination {...pagination} className='mt-0 mb-4'/>
           <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
-            {items.map((flag) => <ContentFlagCard key={flag.id} flag={flag}/>)}
+            {items.map((flag) => <ContentFlagCard key={flag.id} flag={flag} onReport={() => setReportingFlag(flag)}/>)}
           </ul>
-          <Pagination page={page} count={data?.count ?? 0} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
+          <Pagination {...pagination}/>
         </>
       )}
+      {(reportingFlag) ? <ReportFlagDialog flag={reportingFlag} onClose={() => setReportingFlag(null)}/> : null}
     </>
   );
 }
 
 
-function ContentFlagCard({ flag }: {flag: ContentFlag}) {
+// edits locally and lands in the URL once typing stops, only for empty or all-digit values
+function IdFilter({ label, placeholder, value, onChange }: {
+  label: string,
+  placeholder: string,
+  value: string,
+  onChange: (value: string | null) => void,
+}) {
+  const [ input, setInput ] = useState(value);
+  useEffect(() => setInput(value), [value]);
+  const debounced = useDebouncedValue(input.trim(), 400);
+  useEffect(() => {
+    if (debounced !== value && (!debounced || /^\d+$/.test(debounced))) {
+      onChange(debounced);
+    }
+    // only when the typed value settles
+  }, [debounced]);
+
+  return (
+    <label className='text-sm lg:col-span-4'>
+      <span className='mb-1 block text-subtle'>{label}</span>
+      <span className='relative block'>
+        <input
+          className='input pr-9 font-mono'
+          inputMode='numeric'
+          placeholder={placeholder}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+        />
+        {(input) ? (
+          <button
+            type='button'
+            aria-label={`Clear ${label.toLowerCase()} filter`}
+            className='absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer rounded p-1 text-subtle hover:text-fg'
+            onClick={() => {
+              setInput('');
+              onChange(null);
+            }}
+          >
+            <X className='size-4'/>
+          </button>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+
+function ContentFlagCard({ flag, onReport }: {flag: ContentFlag, onReport: () => void}) {
   const toast = useToast();
   const mutation = usePatchAdminContentFlagMutation();
   const [ notes, setNotes ] = useState(flag.notes ?? '');
   useEffect(() => setNotes(flag.notes ?? ''), [flag.notes]);
   const notesDirty = notes !== (flag.notes ?? '');
-  const [ reporting, setReporting ] = useState(false);
 
   const status = statusInfo(flag.status);
+  const isText = flag.mimetype === CONTENT_FLAG_TEXT_MIMETYPE;
   const pendingStatus = (mutation.isPending) ? mutation.variables?.patch.status : undefined;
   const savingNotes = mutation.isPending && mutation.variables?.patch.notes !== undefined;
 
@@ -193,6 +254,7 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
           <div className='flex flex-wrap items-center gap-2'>
             <span className='font-mono text-sm text-white'>#{flag.id}</span>
             <Chip tone={status.tone}>{status.label}</Chip>
+            <Chip>{(isText) ? 'text' : 'media'}</Chip>
             {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
             {(flag.action) ? <Chip>action: {flag.action}</Chip> : null}
             {(flag.needs_human_review) ? <Chip tone='warning'>needs human review</Chip> : null}
@@ -207,7 +269,7 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
               className={cn('btn btn-sm', (item.value === ContentFlagStatuses.CONFIRMED) ? 'btn-danger' : 'btn-secondary')}
               disabled={mutation.isPending || flag.status === item.value}
               // reporting goes through a dialog so the uploader can be blocked in the same step
-              onClick={() => (item.value === ContentFlagStatuses.REPORTED) ? setReporting(true) : setStatus(item.value)}
+              onClick={() => (item.value === ContentFlagStatuses.REPORTED) ? onReport() : setStatus(item.value)}
             >
               {(pendingStatus === item.value) ? <Spinner className='size-3.5'/> : null}
               {item.action}
@@ -233,12 +295,12 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
             ['Model', flag.model || '—'],
             ['Mimetype', flag.mimetype || '—'],
             ['Size', (flag.size !== null && flag.size !== undefined) ? `${formatMemory(flag.size, 1)} (${flag.size.toLocaleString()} B)` : '—'],
-            ['Frames', (flag.frames !== null && flag.frames !== undefined)
+            (isText) ? null : ['Frames', (flag.frames !== null && flag.frames !== undefined)
               ? `${framesFlagged.length.toLocaleString()} flagged of ${flag.frames.toLocaleString()}`
               : '—'],
             (framesFlagged.length) ? ['Flagged frames', <span className='font-mono text-xs'>{framesFlagged.join(', ')}</span>] : null,
             ['SHA-256', (flag.sha256) ? <CopyableValue value={flag.sha256}/> : '—'],
-            ['PDQ', (flag.pdq) ? <CopyableValue value={flag.pdq}/> : '—'],
+            (isText) ? null : ['PDQ', (flag.pdq) ? <CopyableValue value={flag.pdq}/> : '—'],
           ]}
         />
         <DetailList
@@ -260,7 +322,7 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
 
       {(flag.query) ? (
         <div className='mt-4'>
-          <h3 className='section-label mb-1'>Query</h3>
+          <h3 className='section-label mb-1'>{(isText) ? 'Flagged text' : 'Query'}</h3>
           <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none' {...selectAllScope}>{flag.query}</p>
         </div>
       ) : null}
@@ -314,7 +376,6 @@ function ContentFlagCard({ flag }: {flag: ContentFlag}) {
         ) : null}
       </form>
 
-      {(reporting) ? <ReportFlagDialog flag={flag} onClose={() => setReporting(false)}/> : null}
     </li>
   );
 }
@@ -341,7 +402,7 @@ function ReportFlagDialog({ flag, onClose }: {flag: ContentFlag, onClose: () => 
     if (!user) {
       return;
     }
-    block.mutate({userId: user.id, blocked: true, reason: reason.trim()}, {
+    block.mutate({userId: user.id, patch: {blocked: true, blocked_reason: reason.trim() || null}}, {
       onSuccess: () => {
         toast(`Blocked ${user.username}`);
         onClose();

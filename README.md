@@ -45,7 +45,8 @@ npm run preview:worker   # run the production build + worker locally
 | `VITE_API_BASE` | `/api` | Where notsobot.api is mounted (same origin in production) |
 | `VITE_AUTH_ENABLED` | `true` in dev, `false` in prod builds | Shows the login/user menu in the navbar. The old site only showed it on beta. |
 | `VITE_UMAMI_SCRIPT_URL`, `VITE_UMAMI_WEBSITE_ID` | *(empty)* | Loads Umami when both are set. Only needed without the worker, which adds the script in production. |
-| `VITE_DEV_API_PROXY` | `https://notsobot.com` | Dev server only: where `/api/*` is proxied |
+| `VITE_DEV_API_PROXY` | *(empty)* | Dev server only: an origin serving the API under `/api` (e.g. local nginx) to proxy `/api/*` to. Empty proxies to a local notsobot.api instead |
+| `VITE_DEV_API_PORT` | `8080` | Dev server only: the local notsobot.api port used when `VITE_DEV_API_PROXY` is empty (`/api` is stripped, like nginx does) |
 
 ## Pages
 

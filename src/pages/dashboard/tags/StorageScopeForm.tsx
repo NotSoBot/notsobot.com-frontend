@@ -45,7 +45,7 @@ export function StorageScopeForm({ scope, onChange }: {scope: TagStorageScope, o
         <Field label='User ID' error={errors.user} hint='Defaults to you.'>
           {(props) => <input {...props} className='input font-mono' inputMode='numeric' value={userId} onChange={(event) => setUserId(event.target.value.trim())}/>}
         </Field>
-        <Field label='Server ID' error={errors.guild}>
+        <Field label='Server ID' error={errors.guild} hint='Leave empty for DMs, the channel ID is used.'>
           {(props) => <input {...props} className='input font-mono' inputMode='numeric' placeholder='Optional' value={guildId} onChange={(event) => setGuildId(event.target.value.trim())}/>}
         </Field>
         <Field label='Channel ID' error={errors.channel}>
@@ -61,11 +61,13 @@ export function StorageScopeForm({ scope, onChange }: {scope: TagStorageScope, o
 
 
 // storage id per type for a scope (global is always 0); null when that id wasn't given
+// server storage falls back to the channel id like the api does (tags in dms keep their "server" storage under the dm channel),
+// otherwise saving with only a channel id hid that slot and the replace-all PUT deleted it
 export function storageIdFor(scope: TagStorageScope, type: number): string | null {
   switch (type) {
     case 0: return scope.user_id || null;
     case 1: return scope.channel_id || null;
-    case 2: return scope.guild_id || null;
+    case 2: return scope.guild_id || scope.channel_id || null;
     default: return '0';
   }
 }

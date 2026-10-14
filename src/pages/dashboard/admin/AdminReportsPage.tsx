@@ -14,7 +14,7 @@ import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportsQuery, usePatchAdminRepor
 import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, CopyableValue, DetailList, Pagination, useSearchParamState, UserCell } from './adminUi';
+import { Chip, CopyableValue, DetailList, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
 type Tone = 'warning' | 'danger' | 'neutral' | 'brand' | 'success';
@@ -63,6 +63,7 @@ export function AdminReportsPage() {
     page,
   });
   const items = data?.items ?? [];
+  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
   const filtered = !!(type !== null || status !== null || userId || targetId);
 
   return (
@@ -101,7 +102,7 @@ export function AdminReportsPage() {
         />
       </div>
 
-      {(isPending) ? (
+      {(isPending || steppingBack) ? (
         <ListSkeleton/>
       ) : (isError && !items.length) ? (
         <ErrorPanel title='Couldn’t load reports' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>

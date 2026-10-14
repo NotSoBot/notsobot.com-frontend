@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useAuth } from '@/auth';
-import { Routes } from '@/config';
+import { config, Routes } from '@/config';
 import { TagDirectoryVerificationStates, type Tag } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -96,6 +96,10 @@ export function NsfwBadge({ size = 'sm' }: {size?: 'sm' | 'lg'}) {
 export function AddTagButton({ tag, size = 'sm' }: {tag: Pick<Tag, 'id' | 'name'>, size?: 'sm' | 'lg'}) {
   const { isAuthenticated, login } = useAuth();
   const [ open, setOpen ] = useState(false);
+  // adding needs an account, and with auth off there's no way to log in
+  if (!isAuthenticated && !config.authEnabled) {
+    return null;
+  }
   return (
     <>
       <button

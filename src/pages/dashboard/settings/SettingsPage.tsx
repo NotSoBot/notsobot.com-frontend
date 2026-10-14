@@ -31,7 +31,7 @@ type SectionProps = {settings: UserSettings, onDirtyChange: (section: string, di
 
 
 export function SettingsPage() {
-  const { data: settings, isPending, isError, error, refetch, isRefetching } = useMeSettingsQuery();
+  const { data: settings, isPending, error, refetch, isRefetching } = useMeSettingsQuery();
   const [ dirtySections, setDirtySections ] = useState<ReadonlySet<string>>(new Set());
 
   const onDirtyChange = useCallback((section: string, dirty: boolean) => {
@@ -61,7 +61,8 @@ export function SettingsPage() {
           <PanelSkeleton rows={3}/>
           <PanelSkeleton rows={4}/>
         </div>
-      ) : (isError) ? (
+      ) : (!settings) ? (
+        // only when nothing loaded; a failed background refetch keeps every section (and its unsaved edits) on screen
         <ErrorPanel title='Couldn’t load your settings' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
       ) : (
         <div className='space-y-4'>

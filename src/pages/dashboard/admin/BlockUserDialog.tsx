@@ -29,7 +29,8 @@ export function BlockUserDialog({ user, blocked, blockedReason, defaultReason = 
   const [ reason, setReason ] = useState(defaultReason);
 
   const submit = () => {
-    mutation.mutate({userId: user.id, blocked: !blocked, reason: reason.trim()}, {
+    const patch = (blocked) ? {blocked: false, blocked_reason: null} : {blocked: true, blocked_reason: reason.trim() || null};
+    mutation.mutate({userId: user.id, patch}, {
       onSuccess: () => {
         toast((blocked) ? `Unblocked ${user.username}` : `Blocked ${user.username}`);
         onClose();

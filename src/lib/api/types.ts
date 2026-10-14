@@ -477,11 +477,12 @@ export const TAG_DIRECTORY_TITLE_MAX = 128;
 export const TAG_DIRECTORY_DESCRIPTION_MAX = 2000;
 
 
-// --- Admin (`/admin/...`, owner only, see docs/dashboard-api.md) ---
+// --- Admin (`/admin/...`, owners and moderators, see docs/dashboard-api.md) ---
 
 // `UserFlags` bits on `User.flags`
 export const UserFlags = {
   OWNER: 1 << 0,
+  MODERATOR: 1 << 1,
 } as const;
 
 // bigint ids come back as strings, timestamps as ISO strings (be tolerant of epoch numbers too)
@@ -542,6 +543,9 @@ export interface AdminUser extends AdminUserRef {
 export interface AdminUserPatch {
   blocked?: boolean,
   blocked_reason?: string | null,
+  // owner only; the OWNER bit can't be changed from the dashboard
+  flags?: number,
+  premium_type?: number,
 }
 
 export interface AdminUserContentFlags {
@@ -576,6 +580,10 @@ export const ContentFlagStatuses = {
 export type ContentFlagStatus = (typeof ContentFlagStatuses)[keyof typeof ContentFlagStatuses];
 
 export const ContentFlagCategories = ['unsafe', 'unsafe_child_safety', 'unsafe_nudity', 'review_child_safety', 'review'] as const;
+export const ContentFlagTypes = ['media', 'text'] as const;
+export type ContentFlagType = (typeof ContentFlagTypes)[number];
+// text flags (filtered tag outputs, prompts) are stored with this mimetype, the text itself is in `query`
+export const CONTENT_FLAG_TEXT_MIMETYPE = 'text/plain';
 export const ContentFlagActions = ['blocked', 'replaced', 'logged', 'not_hosted'] as const;
 
 export interface ContentFlag {

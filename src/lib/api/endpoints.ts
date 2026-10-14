@@ -34,7 +34,7 @@ export const ApiEndpoints = Object.freeze({
   // planned, not built yet (the dashboard treats 404/405 as "not available yet")
   USER_ME_DATA_EXPORT: '/users/@me/data/export',
 
-  // admin (owner only)
+  // admin (owners and moderators)
   ADMIN_TAGS_DIRECTORY: '/admin/tags/directory',
   ADMIN_TAG_DIRECTORY: (tagId: string) => `/admin/tags/directory/${tagId}`,
   ADMIN_USERS: '/admin/users',

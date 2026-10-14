@@ -17,6 +17,8 @@ export interface AuthContextValue {
   user: UserMe | null,
   token: string | null,
   isAuthenticated: boolean,
+  // set after the user logs out on purpose, so protected pages go home instead of straight back to Discord
+  loggedOut: boolean,
   // full-page redirect to Discord OAuth via `/api/auth/login`; returns to `returnTo` (default: current page)
   login: (returnTo?: string) => void,
   // revokes the session server-side (best effort) and clears local state

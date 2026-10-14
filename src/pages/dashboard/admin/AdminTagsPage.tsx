@@ -12,7 +12,7 @@ import { cn, formatDate, formatDateTime, formatMemory } from '@/lib/utils';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, DetailList, Pagination, selectAllScope, useSearchParamState, UserCell } from './adminUi';
+import { Chip, DetailList, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 
 
@@ -37,6 +37,9 @@ const SORTS: Array<{value: AdminTagDirectorySortBy, label: string}> = [
 
 export function AdminTagsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
+  // the dialog lives here, not in the card: deleting refetches the list, which unmounts the card (and used to lose
+  // the dialog with the block request still running, so a failed block was never shown or retryable)
+  const [ deletingItem, setDeletingItem ] = useState<AdminTagDirectoryItem | null>(null);
   const filter = FILTERS.find((item) => item.value === searchParams.get('status')) ?? DEFAULT_FILTER;
   // admins see NSFW tags unless they hide them
   const hideNsfw = searchParams.get('nsfw') === 'hide';
@@ -52,6 +55,7 @@ export function AdminTagsPage() {
     page,
   });
   const items = data?.items ?? [];
+  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
 
   return (
     <>
@@ -64,7 +68,7 @@ export function AdminTagsPage() {
         <SearchInput
           value={query}
           onValueChange={(value) => update({q: value})}
-          placeholder='Search title, name, content, tag id or user id...'
+          placeholder='Search title, name, description or content...'
           aria-label='Search directory tags'
         />
         <div className='flex flex-wrap items-center gap-3'>
@@ -90,7 +94,7 @@ export function AdminTagsPage() {
         </div>
       </div>
 
-      {(isPending) ? (
+      {(isPending || steppingBack) ? (
         <ListSkeleton/>
       ) : (isError && !items.length) ? (
         <ErrorPanel title='Couldn’t load directory tags' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
@@ -108,11 +112,12 @@ export function AdminTagsPage() {
       ) : (
         <>
           <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
-            {items.map((item) => <DirectoryTagCard key={item.id} item={item}/>)}
+            {items.map((item) => <DirectoryTagCard key={item.id} item={item} onDelete={() => setDeletingItem(item)}/>)}
           </ul>
           <Pagination page={page} count={data?.count ?? 0} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
         </>
       )}
+      {(deletingItem) ? <DeleteDirectoryTagFlow item={deletingItem} onClose={() => setDeletingItem(null)}/> : null}
     </>
   );
 }
@@ -121,12 +126,11 @@ export function AdminTagsPage() {
 const CONTENT_COLLAPSE_LINES = 14;
 const CONTENT_COLLAPSE_CHARS = 900;
 
-function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
+function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDelete: () => void}) {
   const { tag } = item;
   const toast = useToast();
   const mutation = usePatchAdminTagDirectoryMutation();
   const [ expanded, setExpanded ] = useState(false);
-  const [ deleting, setDeleting ] = useState(false);
 
   const content = tag.content ?? '';
   const long = CONTENT_COLLAPSE_LINES < content.split('\n').length || CONTENT_COLLAPSE_CHARS < content.length;
@@ -182,7 +186,7 @@ function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
             className='btn-danger'
             disabled={mutation.isPending}
             pending={false}
-            onClick={() => setDeleting(true)}
+            onClick={onDelete}
           />
         </div>
       </div>
@@ -243,7 +247,6 @@ function DirectoryTagCard({ item }: {item: AdminTagDirectoryItem}) {
         </div>
       ) : null}
 
-      {(deleting) ? <DeleteDirectoryTagFlow item={item} onClose={() => setDeleting(false)}/> : null}
     </li>
   );
 }

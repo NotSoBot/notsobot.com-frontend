@@ -17,40 +17,80 @@ const UMAMI_SCRIPT_URL = 'https://oasis.notsobot.com/drink.js';
 const DEFAULT_TITLE = 'NotSoBot';
 const DEFAULT_DESCRIPTION = 'Coolest bot on Discord';
 
-const PAGE_DESCRIPTIONS: Record<string, string> = {
-  '/': DEFAULT_DESCRIPTION,
-  '/auth/login': 'Login here to view your dashboard',
-  '/auth/login/callback': 'Authentication Callback',
-  '/auth/logout': 'NotSoLogout',
-  '/auth/redirect': 'Authentication Redirect',
-  '/commands': 'So many commands here',
-  '/dashboard': 'NotSoDashboard',
-  '/directory/tags': 'Tags made by the community',
-  '/faq': 'Frequently Asked Questions',
-  '/foxbot': 'Foxbot',
-  '/invite': 'NotSoBot\'s Discord Invite',
-  '/legal/privacy': 'Our Privacy Policy',
-  '/legal/tos': 'Our Terms of Service',
-  '/privacy': 'Our Privacy Policy',
-  '/status': 'Shard Status',
-  '/support': 'Something about support',
-  '/support/invite': 'NotSoBot\'s Discord Support Server Invite',
-  '/terms': 'Our Terms of Service',
-};
+// every path src/router.tsx renders a page (or redirect) for, `:param` being any single segment.
+// anything else gets the not-found description and a 404, like the client-side `*` route
+const PAGES: Array<[string, string]> = [
+  ['/', DEFAULT_DESCRIPTION],
+  ['/auth/login', 'Login here to view your dashboard'],
+  ['/auth/login/callback', 'Authentication Callback'],
+  ['/auth/redirect', 'Authentication Redirect'],
+  ['/commands', 'So many commands here'],
+  ['/dashboard', 'NotSoDashboard'],
+  ['/dashboard/tags', 'NotSoDashboard'],
+  ['/dashboard/tags/:tagId', 'NotSoDashboard'],
+  ['/dashboard/servers', 'NotSoDashboard'],
+  ['/dashboard/servers/:guildId', 'NotSoDashboard'],
+  ['/dashboard/settings', 'NotSoDashboard'],
+  ['/dashboard/data', 'NotSoDashboard'],
+  ['/dashboard/admin', 'NotSoDashboard'],
+  ['/dashboard/admin/tags', 'NotSoDashboard'],
+  ['/dashboard/admin/users', 'NotSoDashboard'],
+  ['/dashboard/admin/flags', 'NotSoDashboard'],
+  ['/dashboard/admin/reports', 'NotSoDashboard'],
+  ['/directory/tags', 'Tags made by the community'],
+  ['/directory/tags/:tagId', 'Tags made by the community'],
+  ['/docs', 'How to write your own NotSoBot tags'],
+  ['/docs/tags', 'How to write your own NotSoBot tags'],
+  ['/faq', 'Frequently Asked Questions'],
+  ['/foxbot', 'Foxbot'],
+  ['/invite', 'NotSoBot\'s Discord Invite'],
+  ['/legal/privacy', 'Our Privacy Policy'],
+  ['/legal/tos', 'Our Terms of Service'],
+  ['/privacy', 'Our Privacy Policy'],
+  ['/status', 'Shard Status'],
+  ['/support', 'Something about support'],
+  ['/support/invite', 'NotSoBot\'s Discord Support Server Invite'],
+  ['/terms', 'Our Terms of Service'],
+];
+
+// react router matches case-insensitively and ignores trailing slashes
+const PAGE_MATCHERS = PAGES.map(([ path, description ]): [RegExp, string] => {
+  const source = path.split('/').map((segment) => {
+    return (segment.startsWith(':')) ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }).join('/');
+  return [new RegExp(`^${(source === '/') ? '' : source}/*$`, 'i'), description];
+});
 
 const NOT_FOUND_DESCRIPTION = 'We couldn\'t find that page, stop that';
 
 
-function describe(pathname: string): string {
-  const path = (pathname.length > 1) ? pathname.replace(/\/+$/, '') : pathname;
-  if (path in PAGE_DESCRIPTIONS) {
-    return PAGE_DESCRIPTIONS[path];
+function describe(pathname: string): string | null {
+  for (const [ matcher, description ] of PAGE_MATCHERS) {
+    if (matcher.test(pathname)) {
+      return description;
+    }
   }
-  if (path.startsWith('/directory/tags/')) {
-    return PAGE_DESCRIPTIONS['/directory/tags'];
-  }
-  return NOT_FOUND_DESCRIPTION;
+  return null;
 }
+
+
+// enforced: nothing may frame the site (the admin pages have one-click actions). frame-ancestors only works when
+// enforced, so it lives here rather than in the report-only policy below
+const FRAME_POLICY = 'frame-ancestors \'none\'; object-src \'none\'; base-uri \'self\'';
+// report-only for now: command previews come from the API and can point at any image host, so this can't be
+// enforced until it's been watched in production for a while. once the browser console stays quiet, move it
+// into Content-Security-Policy (and add a report endpoint to hear about breakage)
+const CONTENT_POLICY = [
+  'default-src \'self\'',
+  `script-src 'self' ${new URL(UMAMI_SCRIPT_URL).origin}`,
+  'style-src \'self\' https://fonts.googleapis.com',
+  'font-src \'self\' https://fonts.gstatic.com',
+  'img-src \'self\' data: https://cdn.discordapp.com https://media.discordapp.net https://cdn.nsb.gg',
+  `connect-src 'self' ${new URL(UMAMI_SCRIPT_URL).origin}`,
+  'frame-src \'none\'',
+  'form-action \'self\'',
+].join('; ');
+
 
 function escapeHtml(value: string): string {
   return value
@@ -81,7 +121,8 @@ export default {
       return shell;
     }
 
-    const description = describe(url.pathname);
+    const page = describe(url.pathname);
+    const description = page ?? NOT_FOUND_DESCRIPTION;
     const metatags: Array<[string, string]> = [
       ['description', description],
       ['og:title', DEFAULT_TITLE],
@@ -108,6 +149,12 @@ export default {
     headers.set('cache-control', 'no-cache');
     // the html now depends on the path, the shell's etag no longer describes it
     headers.delete('etag');
-    return new Response(response.body, {headers, status: 200});
+    headers.set('content-security-policy', FRAME_POLICY);
+    headers.set('content-security-policy-report-only', CONTENT_POLICY);
+    headers.set('x-frame-options', 'DENY');
+    headers.set('x-content-type-options', 'nosniff');
+    headers.set('referrer-policy', 'strict-origin-when-cross-origin');
+    // unknown paths still get the app, so its not-found page renders, but as a real 404
+    return new Response(response.body, {headers, status: (page === null) ? 404 : 200});
   },
 } satisfies ExportedHandler<Env>;

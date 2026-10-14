@@ -88,11 +88,12 @@ endpoints publish, so the running bot picks them up immediately.
 Display data the API doesn't store (channel/role names for allowlist entries, channel lists for loggers)
 is out of scope for v1; the dashboard shows IDs with mentions-style formatting and accepts IDs as input.
 
-## Admin (NotSoBot owners only)
+## Admin (NotSoBot staff: owners and moderators)
 
-Every route here needs a user token whose user has the `OWNER` flag (`flags & 1`); anyone else gets `403`.
-The dashboard only shows the **Admin** nav group (`/dashboard/admin/tags`, `/dashboard/admin/users`,
-`/dashboard/admin/flags`, `/dashboard/admin/reports`) to owners, and `<RequireOwner/>` sends everyone else back to `/dashboard`.
+Every route here needs a user token whose user has the `OWNER` (`flags & 1`) or `MODERATOR` (`flags & 2`) flag; anyone
+else gets `403`. The dashboard only shows the **Admin** nav group (`/dashboard/admin/tags`, `/dashboard/admin/users`,
+`/dashboard/admin/flags`, `/dashboard/admin/reports`) to staff, and `<RequireStaff/>` sends everyone else back to `/dashboard`.
+Moderators can do everything in the panel except edit user profiles (`flags`/`premium_type`), and can't block other moderators.
 Lists page by `limit` (default 25) and `offset` and return `{count, items}`. Bigint ids are strings; timestamps
 are ISO strings (the site also accepts epoch numbers).
 
@@ -101,7 +102,8 @@ are ISO strings (the site also accepts epoch numbers).
 | GET | `/admin/tags/directory` | Query: `limit`, `offset`, `verified` (`0` unverified, `1` pending, `2` verified; omitted = all), `query` (title/name/content; a bare id also matches the tag id or owner id, `id:<tag id>` / `user:<owner id>` match only that), `nsfw` (bool). Items are the public directory shape `{id, title, description, verified, assets, server_count, tag, ...}` except `tag` is the full `Tag.to_dict()` **with `content`** (`name`, `nsfw`, `uses`, `created`, `user_id`, `server_id`, `locked`, ...), plus `user: {id, username, discriminator, avatar} \| null` (the tag owner). |
 | PATCH | `/admin/tags/directory/<tag_id>` | Body `{verified: 0 \| 1 \| 2}`. Returns the same item shape. |
 | GET | `/admin/users` | Query: `limit`, `offset`, `query` (username or id), `sort_by` (`flags` (default) \| `newest` \| `username`), `only_flagged` (bool). Items: `{user: {id, username, discriminator, avatar, flags, blocked, blocked_reason, premium_type}, content_flags: {total, flagged, pending, confirmed, dismissed, reported, last_flagged_at}}`. |
-| GET | `/admin/content-flags` | Query: `limit`, `offset`, `user_id`, `status`, `category`, `needs_human_review` (bool). Items: the `ContentFlag` row (`id, user_id, guild_id, channel_id, message_id, command_id, tag_id, query, source_url, sha256, pdq, mimetype, size, category, flagged[], flagged_for_review[], needs_human_review, frames, frames_flagged[], model, scores_worst{}, action, status, created, reviewed_at, reviewed_by, notes`) plus `user: {id, username, discriminator, avatar} \| null`. |
+| PATCH | `/admin/users/<user_id>` | Body (all optional): `blocked`, `blocked_reason` (max 2000, only kept while blocked), and **owner only** `flags` (the full `UserFlags` bitfield; the `OWNER` bit can't be changed here and is kept as is) and `premium_type` (`0`–`4`, `UserPremiumTypes`). Moderators sending `flags`/`premium_type` get `403`. Owners can't be blocked (`400`), moderators can't block other staff (`403`). Publishes `USER_UPDATE` when something changed. Returns the `user` shape from `GET /admin/users`. |
+| GET | `/admin/content-flags` | Query: `limit`, `offset`, `user_id`, `status`, `category`, `needs_human_review` (bool), `type` (`media` \| `text`; text flags have mimetype `text/plain` and the text in `query`), `search` + `search_in` (`content` matches `query`, `url` matches `source_url`, both case-insensitive substring; `hash` matches `sha256`/`pdq`, exact for a full 64-char hash, prefix otherwise). Items: the `ContentFlag` row (`id, user_id, guild_id, channel_id, message_id, command_id, tag_id, query, source_url, sha256, pdq, mimetype, size, category, flagged[], flagged_for_review[], needs_human_review, frames, frames_flagged[], model, scores_worst{}, action, status, created, reviewed_at, reviewed_by, notes`) plus `user: {id, username, discriminator, avatar} \| null`. |
 | PATCH | `/admin/content-flags/<flag_id>` | Body `{status?, notes?}`. Returns the same item shape. |
 | GET | `/admin/reports` | Query: `limit` (default 50, max 100; the page sends 25), `offset`, `type`, `status`, `user_id` (reporter), `target_id`. Newest first. Items: the `Report` row (`id, type, target_id, content, guild_id, channel_id, message_id, status, created, reviewed_at, reviewed_by, notes`) plus `user`, the reporter's full user dict (`{id, username, discriminator, avatar, bot, flags, blocked, blocked_on, blocked_reason}`). |
 | PATCH | `/admin/reports/<report_id>` | Body `{status?, notes?}` (`notes` max 2000, empty/`null` clears it). Any patch sets `reviewed_at`/`reviewed_by` to now/the caller. Returns the same item shape; unknown id is `404` code `10017`. |

@@ -263,11 +263,12 @@ function VariableEditor({ tagId, scope, storageType, storageId, initialName, ini
   }, [dirtyKey, dirty, setDirty]);
   useEffect(() => () => setDirty(dirtyKey, false), [dirtyKey, setDirty]);
 
-  const nameError = (isNew && name && existingNames.includes(name)) ? 'A variable with this name already exists here.'
+  const nameError = (isNew && name.trim() && existingNames.includes(name.trim())) ? 'A variable with this name already exists here.'
     : (TAG_VARIABLE_NAME_MAX < name.length) ? `Up to ${TAG_VARIABLE_NAME_MAX} characters.` : null;
   const valueError = (TAG_VARIABLE_VALUE_MAX < value.length) ? `Up to ${TAG_VARIABLE_VALUE_MAX.toLocaleString()} characters.` : null;
   const formatted = formatJson(value);
-  const canSave = !!name && !!value && !nameError && !valueError && dirty && !put.isPending;
+  // the API strips whitespace, so a blank value would delete the variable instead of saving it
+  const canSave = !!name.trim() && !!value.trim() && !nameError && !valueError && dirty && !put.isPending;
 
   return (
     <form
@@ -278,8 +279,8 @@ function VariableEditor({ tagId, scope, storageType, storageId, initialName, ini
           return;
         }
         put.mutate({storageType, storageId, name, value}, {
-          onSuccess: () => {
-            toast((isNew) ? `Added “${name}”` : `Saved “${name}”`);
+          onSuccess: (variable) => {
+            toast((isNew) ? `Added “${variable.name}”` : `Saved “${variable.name}”`);
             setDirty(dirtyKey, false);
             onDone();
           },

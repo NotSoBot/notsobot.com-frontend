@@ -22,7 +22,7 @@ import {
   type TagDocGuideSection,
   type TagDocMediaScriptCommand,
 } from '@/content/tagDocs';
-import { cn } from '@/lib/utils';
+import { cn, decodeHash } from '@/lib/utils';
 
 
 type DocsView = 'tagscript' | 'mediascript';
@@ -65,7 +65,7 @@ export function TagDocsPage() {
   const [ searchParams, setSearchParams ] = useSearchParams();
   const [ query, setQuery ] = useState('');
 
-  const hash = decodeURIComponent(location.hash.slice(1));
+  const hash = decodeHash(location.hash);
   const view: DocsView = (searchParams.get('view') === 'mediascript' || hash.startsWith(MEDIASCRIPT_ANCHOR_PREFIX)) ? 'mediascript' : 'tagscript';
   const setView = (value: string) => {
     setSearchParams((value === 'mediascript') ? {view: value} : {}, {replace: true});
@@ -107,7 +107,8 @@ export function TagDocsPage() {
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({block: 'start'});
-    window.history.replaceState(null, '', `${location.search}#${id}`);
+    // keep react router's entry state (key/idx), or back/forward and its scroll restoration lose track
+    window.history.replaceState(window.history.state, '', `${location.search}#${id}`);
   };
 
   // no ligatures: JetBrains Mono would otherwise draw `!=` and `>=` as single glyphs, which can't be typed

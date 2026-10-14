@@ -38,7 +38,7 @@ export function DeleteDirectoryTagFlow({ item, onClose }: {item: AdminTagDirecto
     if (!user) {
       return;
     }
-    block.mutate({userId: user.id, blocked: true, reason: reason.trim()}, {
+    block.mutate({userId: user.id, patch: {blocked: true, blocked_reason: reason.trim() || null}}, {
       onSuccess: () => {
         toast(`Blocked ${user.username}`);
         onClose();

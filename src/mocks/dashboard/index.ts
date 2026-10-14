@@ -13,7 +13,7 @@
 
 import { tokenStorage } from '@/auth/tokenStorage';
 import { config } from '@/config';
-import { ApiErrorCodes, TagDirectoryVerificationStates, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
+import { ApiErrorCodes, TagDirectoryVerificationStates, type ContentFlag, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
 import { toDate } from '@/lib/utils';
 
 import {
@@ -126,7 +126,7 @@ function scopeIds(query: URLSearchParams | Record<string, unknown>): Record<TagS
 /* user */
 
 route('GET', '/users/@me', () => ({...mockUser, flags: (state.owner) ? (mockUser.flags | 1) : (mockUser.flags & ~1)}));
-route('POST', '/auth/logout', () => undefined);
+route('GET', '/auth/logout', () => undefined);
 route('GET', '/users/@me/settings', () => state.settings);
 route('PATCH', '/users/@me/settings', (_match, { body }) => {
   const personality = body.ml_llm_personality;
@@ -311,8 +311,9 @@ route('GET', '/users/@me/tags/(\\d+)/variables', ([ , tagId ], { query }) => {
 route('PUT', '/users/@me/tags/(\\d+)/variables/(\\d)/(\\d+)', ([ , tagId, type, id ], { body }) => {
   findTag(tagId);
   const storageId = (type === '3') ? '0' : id;
-  const name = String(body.name || '');
-  const value = String(body.value ?? '');
+  // like the API's pydantic models (str_strip_whitespace)
+  const name = String(body.name || '').trim();
+  const value = String(body.value ?? '').trim();
   if (!name || 128 < name.length) {
     throw new MockError(400, 50001, 'Variable name must be between 1 and 128 characters');
   }
@@ -441,7 +442,7 @@ route('PATCH', '/users/@me/guilds/(\\d+)', ([ , guildId ], { body }) => {
 
 route('PUT', '/users/@me/guilds/(\\d+)/prefixes', ([ , guildId ], { body }) => {
   const { detail } = requireEditable(guildId, 'prefixes');
-  const prefix = String(body.prefix || '');
+  const prefix = String(body.prefix || '').trim();
   if (!prefix || 128 < prefix.length) {
     throw new MockError(400, 50001, 'Prefix must be between 1 and 128 characters');
   }
@@ -646,6 +647,13 @@ route('PATCH', '/admin/users/(\\d+)', ([ , userId ], { body }) => {
   if (body.blocked_reason !== undefined) {
     user.blocked_reason = (body.blocked_reason as string | null) || null;
   }
+  // the OWNER bit can't be changed from the dashboard
+  if (typeof body.flags === 'number') {
+    user.flags = (body.flags & ~1) | (user.flags & 1);
+  }
+  if (typeof body.premium_type === 'number') {
+    user.premium_type = body.premium_type;
+  }
   return user;
 });
 
@@ -676,11 +684,39 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
   const status = query.get('status');
   const category = query.get('category');
   const needsReview = parseBool(query.get('needs_human_review'));
+  const type = query.get('type');
+  const guildId = query.get('guild_id');
+  const channelId = query.get('channel_id');
+  const search = (query.get('search') || '').trim().toLowerCase();
+  // mirrors `_content_flag_search_condition`
+  const matchesSearch = (flag: ContentFlag) => {
+    if (!search) {
+      return true;
+    }
+    const caseId = (search.startsWith('#')) ? search.slice(1) : search;
+    if (search.startsWith('#') && /^\d+$/.test(caseId)) {
+      return flag.id === caseId;
+    }
+    if (/^\d+$/.test(caseId) && (flag.id === caseId || flag.message_id === caseId)) {
+      return true;
+    }
+    if ([flag.query, flag.source_url].some((value) => value && value.toLowerCase().includes(search))) {
+      return true;
+    }
+    if (search.length >= 6 && /^[0-9a-f]+$/.test(search)) {
+      return [flag.sha256, flag.pdq].some((hash) => hash && ((search.length === 64) ? hash === search : hash.startsWith(search)));
+    }
+    return false;
+  };
   const matching = state.contentFlags
     .filter((flag) => !userId || flag.user_id === userId)
+    .filter((flag) => !guildId || flag.guild_id === guildId)
+    .filter((flag) => !channelId || flag.channel_id === channelId)
     .filter((flag) => status === null || status === '' || flag.status === Number(status))
     .filter((flag) => !category || flag.category === category)
-    .filter((flag) => needsReview === null || flag.needs_human_review === needsReview);
+    .filter((flag) => needsReview === null || flag.needs_human_review === needsReview)
+    .filter((flag) => !type || (flag.mimetype === 'text/plain') === (type === 'text'))
+    .filter(matchesSearch);
   return pageOf(matching, query);
 });
 

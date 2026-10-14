@@ -1,5 +1,5 @@
 import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 
 import type { AdminUserRef } from '@/lib/api';
@@ -38,18 +38,41 @@ export function useSearchParamState() {
 }
 
 
-export function Pagination({ page, count, pageSize, onChange, fetching = false }: {
+// Acting on the last item of the last page (or a refetch shrinking the list) can leave you on a page that's now
+// empty, which would show the empty state with no pagination to go back. Jump to the last page that has items
+// instead; returns true while that's happening so the caller can keep showing its skeleton.
+export function useStepBackFromEmptyPage({ page, setPage, data, isPlaceholderData, pageSize }: {
+  page: number,
+  setPage: (page: number) => void,
+  data: {items: Array<unknown>, count: number} | undefined,
+  isPlaceholderData: boolean,
+  pageSize: number,
+}): boolean {
+  const stepBack = 0 < page && !!data && !isPlaceholderData && !data.items.length;
+  const lastPage = (data) ? Math.max(0, Math.ceil(data.count / pageSize) - 1) : 0;
+  useEffect(() => {
+    if (stepBack) {
+      setPage(Math.min(page - 1, lastPage));
+    }
+    // setPage is recreated every render
+  }, [stepBack, page, lastPage]);
+  return stepBack;
+}
+
+
+export function Pagination({ page, count, pageSize, onChange, fetching = false, className }: {
   page: number,
   count: number,
   pageSize: number,
   onChange: (page: number) => void,
   fetching?: boolean,
+  className?: string,
 }) {
   const pages = Math.max(1, Math.ceil(count / pageSize));
   const start = (count) ? page * pageSize + 1 : 0;
   const end = Math.min(count, (page + 1) * pageSize);
   return (
-    <nav aria-label='Pagination' className='mt-4 flex flex-wrap items-center justify-between gap-3'>
+    <nav aria-label='Pagination' className={cn('mt-4 flex flex-wrap items-center justify-between gap-3', className)}>
       <p className='text-sm text-subtle tabular-nums'>
         {start.toLocaleString()}–{end.toLocaleString()} of {count.toLocaleString()}
       </p>

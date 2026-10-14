@@ -12,11 +12,13 @@ import type {
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
   AdminUser,
+  AdminUserPatch,
   AdminUsersPage,
   AdminTagDirectorySortBy,
   AdminUsersSortBy,
   ContentFlag,
   ContentFlagPatch,
+  ContentFlagType,
   ContentFlagsPage,
   GuildListKind,
   Report,
@@ -118,28 +120,34 @@ export function useMeSettingsQuery() {
 }
 
 
-// optimistic: the form shows the new values right away and rolls back if the API refuses
+// optimistic: the form shows the new values right away and rolls back if the API refuses.
+// every section saves on its own, so each one only ever writes (or rolls back) the fields it sent;
+// restoring a whole snapshot would undo another section's save that finished in the meantime
 export function usePatchMeSettingsMutation() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const key = queryKeys.meSettings(token);
+  const pick = (source: UserSettings, body: UserSettingsPatch): UserSettingsPatch => {
+    return Object.fromEntries(Object.keys(body).map((field) => [field, source[field as keyof UserSettingsPatch]]));
+  };
   return useMutation({
     mutationFn: (body: UserSettingsPatch) => api.patchMeSettings(body),
     onMutate: async (body) => {
       await queryClient.cancelQueries({queryKey: key});
-      const previous = queryClient.getQueryData<UserSettings>(key);
-      if (previous) {
-        queryClient.setQueryData<UserSettings>(key, {...previous, ...body});
+      const current = queryClient.getQueryData<UserSettings>(key);
+      if (current) {
+        queryClient.setQueryData<UserSettings>(key, {...current, ...body});
       }
-      return {previous};
+      return {previous: (current) ? pick(current, body) : undefined};
     },
     onError: (_error, _body, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(key, context.previous);
+      const previous = context?.previous;
+      if (previous) {
+        queryClient.setQueryData<UserSettings>(key, (current) => (current) ? {...current, ...previous} : current);
       }
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(key, data);
+    onSuccess: (data, body) => {
+      queryClient.setQueryData<UserSettings>(key, (current) => (current) ? {...current, ...pick(data, body)} : data);
     },
   });
 }
@@ -280,12 +288,19 @@ export function usePutMeTagVariableMutation(tagId: string, scope: TagStorageScop
     mutationFn: ({ storageType, storageId, name, value }: {storageType: TagStorageType, storageId: string, name: string, value: string}) => {
       return api.putMeTagVariable(tagId, storageType, storageId, {name, value});
     },
-    onSuccess: (_data, { storageType, name, value }) => {
+    // the API strips whitespace and deletes on an empty value, so store what it actually saved
+    onSuccess: (variable, { storageType, name }) => {
       queryClient.setQueryData<TagVariables>(key, (previous) => {
         if (!previous) {
           return previous;
         }
-        const bucket = {...previous[`${storageType}`], [name]: value};
+        const bucket = {...previous[`${storageType}`]};
+        delete bucket[name];
+        if (variable.value) {
+          bucket[variable.name] = variable.value;
+        } else {
+          delete bucket[variable.name];
+        }
         return {...previous, [`${storageType}`]: bucket};
       });
     },
@@ -446,6 +461,7 @@ export function useDeleteMeMutation() {
 /* admin (owner only) */
 
 export const ADMIN_PAGE_SIZE = 25;
+export const ADMIN_CONTENT_FLAGS_PAGE_SIZE = 50;
 
 export interface AdminTagDirectoryFilters {
   query: string,
@@ -539,9 +555,7 @@ export function usePatchAdminUserMutation() {
   const queryClient = useQueryClient();
   const listKey = [...queryKeys.admin(token), 'users'];
   return useMutation({
-    mutationFn: ({ userId, blocked, reason }: {userId: string, blocked: boolean, reason?: string}) => {
-      return api.patchAdminUser(userId, {blocked, blocked_reason: (blocked) ? (reason || null) : null});
-    },
+    mutationFn: ({ userId, patch }: {userId: string, patch: AdminUserPatch}) => api.patchAdminUser(userId, patch),
     onSuccess: (user: AdminUser) => {
       queryClient.setQueriesData<AdminUsersPage>({queryKey: listKey}, (page) => {
         if (!page) {
@@ -557,9 +571,13 @@ export function usePatchAdminUserMutation() {
 
 export interface AdminContentFlagsFilters {
   userId: string,
+  guildId: string,
+  channelId: string,
   status: number | null,
   category: string,
   needsHumanReview: boolean | null,
+  type: ContentFlagType | null,
+  search: string,
   page: number,
 }
 
@@ -569,11 +587,15 @@ export function useAdminContentFlagsQuery(filters: AdminContentFlagsFilters) {
     queryKey: queryKeys.adminContentFlags(token, filters),
     queryFn: ({ signal }) => api.fetchAdminContentFlags({
       userId: filters.userId,
+      guildId: filters.guildId,
+      channelId: filters.channelId,
       status: filters.status,
       category: filters.category,
       needsHumanReview: filters.needsHumanReview,
-      offset: filters.page * ADMIN_PAGE_SIZE,
-      limit: ADMIN_PAGE_SIZE,
+      type: filters.type,
+      search: filters.search,
+      offset: filters.page * ADMIN_CONTENT_FLAGS_PAGE_SIZE,
+      limit: ADMIN_CONTENT_FLAGS_PAGE_SIZE,
     }, signal),
     placeholderData: keepPreviousData,
   });

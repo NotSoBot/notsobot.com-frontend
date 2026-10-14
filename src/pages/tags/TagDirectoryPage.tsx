@@ -133,7 +133,7 @@ export function TagDirectoryPage() {
           size='lg'
           value={query}
           onValueChange={(value) => updateParams({q: value})}
-          placeholder='Search by name, description, tag id or user id...'
+          placeholder='Search by title, name or description...'
           aria-label='Search tags'
         />
 

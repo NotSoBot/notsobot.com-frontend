@@ -49,3 +49,30 @@ export function clearReturnTo(): void {
     // storage unavailable
   }
 }
+
+
+// Set when this tab starts a login, the callback only accepts a token if it's there. Otherwise anyone could send a
+// `/auth/login/callback#<their token>` link and silently log the visitor into their account (login csrf).
+const PENDING_KEY = 'auth:login-pending';
+const PENDING_MAX_AGE = 15 * 60 * 1000; // the api's oauth state is valid for 15 minutes too
+
+
+export function markLoginPending(): void {
+  try {
+    window.sessionStorage.setItem(PENDING_KEY, String(Date.now()));
+  } catch {
+    // storage unavailable
+  }
+}
+
+
+// one use, returns whether this tab started a login recently
+export function consumeLoginPending(): boolean {
+  try {
+    const started = Number(window.sessionStorage.getItem(PENDING_KEY));
+    window.sessionStorage.removeItem(PENDING_KEY);
+    return !!started && Date.now() - started < PENDING_MAX_AGE;
+  } catch {
+    return false;
+  }
+}

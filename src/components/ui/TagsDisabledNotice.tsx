@@ -16,15 +16,17 @@ const TIMELINE: Array<{date: string, text: string}> = [
 ];
 
 const CHANGES = [
-  'All NSFW-specific commands are disabled.',
-  'AI image commands like .imagine, .edit, .reimagine, and .mashup always generate safely. The safe toggle is gone, and NSFW output is blocked in every channel, including age-restricted ones.',
-  'Every media command scans its output before posting, and all media is checked for gore and child safety in every channel. If a scan fails, the output is blocked.',
-  'NSFW detection now uses ShieldStral, a content safety model we run locally on our own servers.',
-  'Prompts, search queries, and tag text are checked against Discord’s Community Guidelines, and are blocked if the check fails.',
-  'Files produced by the code runner are scanned for gore and child safety in every channel, and for NSFW content in non-age-restricted channels.',
+  'All NSFW-specific commands have been removed, along with commands featuring adult branding.',
+  'Every command now runs in safe mode everywhere, including age-restricted channels and DMs.',
+  'AI image commands like .imagine, .edit, .reimagine, and .mashup can’t produce sexual content in any channel.',
+  'Every media command scans its output before posting, and all media is checked for NSFW content, gore, and child safety in every channel. If a scan fails, the output is blocked.',
+  'NSFW detection uses two models we run locally on our own servers, ShieldStral and NudeNet. Content flagged by either one is blocked.',
+  'Prompts, search queries, and text output are checked against Discord’s Community Guidelines, and are blocked if the check fails.',
+  'Files produced by the code runner are scanned for NSFW content, gore, and child safety in every channel.',
   'Search commands like .image now download, scan, and upload results instead of posting a link.',
+  'Results from sources with user-written content, like 4chan and Urban Dictionary, are scanned before they’re shown. Flagged results are hidden.',
   'Before tags were disabled, every tag output, including text inside buttons, menus, and other components, was checked for NSFW content.',
-  'Repeat offenders are now flagged and dealt with.',
+  'Flagged content is logged to a review queue, and repeat offenders are flagged and dealt with.',
   'There is now a report system: use /report to report a user or server abusing NotSoBot to the developers.',
 ];
 

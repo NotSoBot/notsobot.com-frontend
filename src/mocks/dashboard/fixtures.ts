@@ -220,7 +220,7 @@ export function createAdminUsers(): Array<AdminUser> {
     blocked: i % 11 === 4,
     blocked_reason: (i % 11 === 4) ? 'Repeated unsafe uploads' : null,
     discriminator: (i % 7 === 3) ? String(1000 + i * 37).padStart(4, '0') : '0',
-    flags: (i === 0) ? 1 : 0,
+    flags: (i === 0) ? 1 : (i === 5) ? 4 : 0,
     id: (400000000000000000n + BigInt(i) * 7919n).toString(),
     premium_type: [0, 0, 2, 0, 3, 0, 1][i % 7],
     username: name,
@@ -240,8 +240,10 @@ export function createContentFlags(users: Array<AdminUser>): Array<ContentFlag> 
     const user = users[owners[i % owners.length]];
     const category = CATEGORIES[i % CATEGORIES.length];
     const status = [0, 0, 1, 2, 0, 3, 2][i % 7];
-    const video = i % 4 === 0;
-    const frames = (video) ? 12 + (i % 30) : 1;
+    // filtered text (tag outputs, prompts): no media, the text lives in `query`
+    const text = i % 8 === 5;
+    const video = !text && i % 4 === 0;
+    const frames = (text) ? 0 : (video) ? 12 + (i % 30) : 1;
     const flagged = [LABELS[i % LABELS.length], ...((i % 3 === 0) ? [LABELS[(i + 2) % LABELS.length]] : [])];
     const created = new Date(Date.now() - i * 5 * 3600000).toISOString();
     flags.push({
@@ -253,23 +255,23 @@ export function createContentFlags(users: Array<AdminUser>): Array<ContentFlag> 
       flagged: (category.startsWith('unsafe')) ? flagged : [],
       flagged_for_review: (category.startsWith('review')) ? flagged : [],
       frames,
-      frames_flagged: (video) ? [2, 3, 7].filter((frame) => frame < frames) : [0],
+      frames_flagged: (text) ? [] : (video) ? [2, 3, 7].filter((frame) => frame < frames) : [0],
       guild_id: (i % 5) ? '1100000000000000001' : null,
       id: String(9000 + 64 - i),
       message_id: (i % 5) ? (1310000000000000000n + BigInt(i) * 13n).toString() : null,
-      mimetype: (video) ? 'video/mp4' : ['image/png', 'image/gif', 'image/jpeg', 'image/webp'][i % 4],
+      mimetype: (text) ? 'text/plain' : (video) ? 'video/mp4' : ['image/png', 'image/gif', 'image/jpeg', 'image/webp'][i % 4],
       model: (i % 2) ? 'safety-scan-v3' : 'safety-scan-v2',
       needs_human_review: category.startsWith('review') || i % 9 === 0,
       notes: (i % 6 === 0) ? 'Checked hash against known list, no match.' : null,
-      pdq: Array.from({length: 64}, (_, j) => ((i * 31 + j * 7) % 16).toString(16)).join(''),
-      query: (i % 3 === 0) ? `a picture of something weird #${i}` : null,
+      pdq: (text) ? null : Array.from({length: 64}, (_, j) => ((i * 31 + j * 7) % 16).toString(16)).join(''),
+      query: (text) ? `{tag output that tripped the filter #${i}}` : (i % 3 === 0) ? `a picture of something weird #${i}` : null,
       reviewed_at: (status) ? new Date(Date.parse(created) + 3600000).toISOString() : null,
       reviewed_by: (status) ? mockUser.id : null,
       scores_worst: {nudity: (i % 10) / 10 + 0.05, violence: ((i * 3) % 10) / 10, minor: (i % 4) / 7},
       sha256: Array.from({length: 64}, (_, j) => ((i * 13 + j * 5) % 16).toString(16)).join(''),
       size: 40000 + i * 12345,
       // never rendered as media; it's only here so the page has something to (not) show
-      source_url: `https://media.invalid/attachments/${1300000000000000000n + BigInt(i)}/upload_${i}.${(video) ? 'mp4' : 'png'}`,
+      source_url: (text) ? null : `https://media.invalid/attachments/${1300000000000000000n + BigInt(i)}/upload_${i}.${(video) ? 'mp4' : 'png'}`,
       status,
       tag_id: (i % 5 === 4) ? '1290000000000000140' : null,
       user: {avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username},
