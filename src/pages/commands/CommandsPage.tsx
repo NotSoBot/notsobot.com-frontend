@@ -23,7 +23,7 @@ import {
 
 // Filters live in the URL (shareable) and the last-used set is remembered, so coming back to a
 // plain /commands (e.g. from the navbar) restores them. An explicit filter in the URL wins.
-const FILTER_PARAMS = ['type', 'category', 'dm', 'q', 'sort'] as const;
+const FILTER_PARAMS = ['type', 'category', 'in', 'q', 'sort'] as const;
 const STORAGE_FILTERS = 'commands:filters';
 
 const PAGE_SIZE = 60;
@@ -38,7 +38,7 @@ export function CommandsPage() {
 
   const typeOption = typeOptionFromParam(searchParams.get('type'));
   const category = (searchParams.get('category') || '').toUpperCase() || null;
-  const dmOnly = searchParams.get('dm') === '1';
+  const dmOnly = searchParams.get('in') === 'dms';
   const sort: Sort = (searchParams.get('sort') === 'az') ? 'az' : 'popular';
   const query = searchParams.get('q') || '';
   const selectedKey = searchParams.get('cmd');
@@ -233,10 +233,6 @@ export function CommandsPage() {
                 );
               })}
             </ul>
-
-            <label className='group mt-4 hidden w-fit cursor-pointer items-center gap-3 px-1 lg:flex'>
-              <DmCheckbox checked={dmOnly} onChange={(value) => updateParams({dm: value ? '1' : null})}/>
-            </label>
           </aside>
 
           <div ref={resultsRef} className='min-w-0 scroll-mt-20'>
@@ -255,6 +251,7 @@ export function CommandsPage() {
                   options={TYPE_OPTIONS.map((option) => ({value: option.param, label: option.label}))}
                   onChange={(value) => updateParams({type: (value === 'all') ? null : value})}
                 />
+                <DmToggle checked={dmOnly} onChange={(value) => updateParams({in: value ? 'dms' : null})}/>
                 <Segmented
                   label='Sort'
                   value={sort}
@@ -269,20 +266,15 @@ export function CommandsPage() {
                 {(isPending) ? 'Loading commands…' : `${filtered.length.toLocaleString()} ${filtered.length === 1 ? 'command' : 'commands'}`}
                 {(category) ? <> in <span className='text-white'>{categoryMeta(category).label}</span></> : null}
               </span>
-              <div className='flex items-center gap-3'>
-                <label className='group flex cursor-pointer items-center gap-2 lg:hidden'>
-                  <DmCheckbox checked={dmOnly} onChange={(value) => updateParams({dm: value ? '1' : null})} compact/>
-                </label>
-                {(activeFilterCount) ? (
-                  <button
-                    type='button'
-                    onClick={() => updateParams({type: null, category: null, dm: null})}
-                    className='cursor-pointer text-muted transition-colors hover:text-white'
-                  >
-                    Clear filters
-                  </button>
-                ) : null}
-              </div>
+              {(activeFilterCount) ? (
+                <button
+                  type='button'
+                  onClick={() => updateParams({type: null, category: null, in: null})}
+                  className='cursor-pointer text-muted transition-colors hover:text-white'
+                >
+                  Clear filters
+                </button>
+              ) : null}
             </div>
 
             {(isPending) ? (
@@ -350,9 +342,15 @@ function CategoryButton({ active, count, color, onClick, children }: {
 }
 
 
-function DmCheckbox({ checked, onChange, compact = false }: {checked: boolean, onChange: (value: boolean) => void, compact?: boolean}) {
+// sits in the toolbar next to the type/sort controls, sized to match their height
+function DmToggle({ checked, onChange }: {checked: boolean, onChange: (value: boolean) => void}) {
   return (
-    <>
+    <label
+      className={cn(
+        'group flex cursor-pointer items-center gap-2 rounded-lg border bg-deep px-3 py-2.5 text-sm whitespace-nowrap transition-colors',
+        checked ? 'border-brand/60 text-white' : 'border-line text-muted hover:text-white',
+      )}
+    >
       <input type='checkbox' className='peer sr-only' checked={checked} onChange={(event) => onChange(event.target.checked)}/>
       <span
         aria-hidden
@@ -363,8 +361,8 @@ function DmCheckbox({ checked, onChange, compact = false }: {checked: boolean, o
       >
         {checked ? <Check className='size-3.5 text-white'/> : null}
       </span>
-      <span className='text-sm text-muted'>{compact ? 'DM only' : 'Works in DMs only'}</span>
-    </>
+      Works in DMs
+    </label>
   );
 }
 

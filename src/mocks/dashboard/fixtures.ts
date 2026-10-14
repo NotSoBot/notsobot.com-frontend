@@ -4,7 +4,9 @@ import type {
   AdminTagDirectoryItem,
   AdminUser,
   AdminUserEntry,
+  AdminVoice,
   ContentFlag,
+  Reminder,
   Report,
   Tag,
   TagBlobs,
@@ -399,4 +401,52 @@ export function createReports(users: Array<AdminUser>): Array<Report> {
     });
   }
   return reports;
+}
+
+
+// the mock user's own reminders (`/users/@me/reminders`), soonest first
+export function createReminders(): Array<Reminder> {
+  const hour = 3600000;
+  const rows: Array<[number, string, string | null, boolean, number | null]> = [
+    // [hours from now, content, guild id, all day, length in hours]
+    [0.5, 'take the pizza out', '1100000000000000002', false, null],
+    [5, '', '1100000000000000001', false, null],
+    [26, 'dentist appointment\nbring the insurance card', null, true, null],
+    [72, 'stream with the club', '1100000000000000002', false, 3],
+    [24 * 30, 'renew the domain before it expires!! '.repeat(4).trim(), '1100000000000000004', false, null],
+  ];
+  return rows.map(([ hours, content, guildId, isAllDay, length ], i) => {
+    const start = Date.now() + hours * hour;
+    return {
+      channel_id: (guildId) ? (1200000000000000000n + BigInt(i)).toString() : mockUser.channel_id,
+      content,
+      guild_id: guildId,
+      id: (1320000000000000000n + BigInt(i) * 4194304n).toString(),
+      is_all_day: isAllDay,
+      message_id: (i % 2 === 0) ? (1330000000000000000n + BigInt(i)).toString() : null,
+      position: i + 1,
+      timestamp_end: (length) ? new Date(start + length * hour).toISOString() : null,
+      timestamp_start: new Date(start).toISOString(),
+    };
+  });
+}
+
+
+const VOICE_NAMES = ['narrator', 'gravelly old man', 'chipmunk', 'radio host', 'whisper', 'announcer', 'my cat (allegedly)', 'robot',
+  'pirate captain', 'sports commentator', 'sleepy', 'news anchor'];
+
+// every cloned voice (`/admin/voices`); the mock user owns the first two, which `/users/@me/voices` returns
+export function createVoices(users: Array<AdminUser>): Array<AdminVoice> {
+  const owners = [mockUser, mockUser, ...users];
+  return Array.from({length: 31}, (_, i) => {
+    const owner = owners[i % owners.length];
+    return {
+      created: new Date(Date.now() - i * 29 * 3600000).toISOString(),
+      id: (1310000000000000000n + BigInt(31 - i) * 4194304n).toString(),
+      name: VOICE_NAMES[i % VOICE_NAMES.length],
+      platform_id: `mockEl${(i * 2654435761 % 0xffffffff).toString(36).padStart(14, 'x')}`,
+      platform_type: 0,
+      user: {avatar: owner.avatar, discriminator: owner.discriminator, id: owner.id, username: owner.username},
+    };
+  });
 }

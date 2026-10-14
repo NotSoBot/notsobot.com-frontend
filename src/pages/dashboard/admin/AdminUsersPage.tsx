@@ -1,4 +1,4 @@
-import { Ban, Pencil, ShieldCheck, Tags, Users } from 'lucide-react';
+import { Ban, Pencil, ShieldCheck, Tags, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -9,12 +9,13 @@ import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { UserFlags, type AdminUserEntry, type AdminUsersSortBy } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminUsersQuery } from '@/lib/api/dashboardQueries';
-import { cn, formatDate, formatDateTime } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 import { premiumLabel } from '../premium';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { adminTagsPath, Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { adminTagsPath, Chip, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { BlockUserDialog } from './BlockUserDialog';
+import { DeleteUserTagsDialog } from './DeleteUserTagsDialog';
 import { EditUserDialog } from './EditUserDialog';
 
 
@@ -56,6 +57,13 @@ export function AdminUsersPage() {
   });
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
+  const pagination = {
+    page,
+    count: data?.count ?? 0,
+    pageSize: ADMIN_PAGE_SIZE,
+    onChange: setPage,
+    fetching: isFetching && isPlaceholderData,
+  };
 
   return (
     <>
@@ -102,6 +110,7 @@ export function AdminUsersPage() {
         </EmptyState>
       ) : (
         <>
+          <Pagination {...pagination} className='mt-0 mb-4'/>
           <div className={cn('card overflow-x-auto transition-opacity', isPlaceholderData && 'opacity-60')}>
             <table className='w-full min-w-[760px] text-left text-sm'>
               <thead className='border-b border-line text-xs text-subtle uppercase'>
@@ -118,7 +127,7 @@ export function AdminUsersPage() {
               </tbody>
             </table>
           </div>
-          <Pagination page={page} count={data?.count ?? 0} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
+          <Pagination {...pagination}/>
         </>
       )}
     </>
@@ -132,9 +141,10 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
   const viewerIsOwner = isOwner(me);
   const owner = (user.flags & UserFlags.OWNER) === UserFlags.OWNER;
   const moderator = (user.flags & UserFlags.MODERATOR) === UserFlags.MODERATOR;
-  // owners can't be blocked, and moderators can't block other moderators
+  // owners can't be blocked, and moderators can't block other moderators; the same goes for deleting their tags
   const canBlock = !owner && (viewerIsOwner || !moderator);
   const [ blocking, setBlocking ] = useState(false);
+  const [ deletingTags, setDeletingTags ] = useState(false);
   const [ editing, setEditing ] = useState(false);
   return (
     <tr className='align-middle hover:bg-surface-2'>
@@ -170,11 +180,18 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
             <Tags className='size-4'/>
             Tags
           </Link>
+          {(canBlock) ? (
+            <button type='button' className='btn btn-sm btn-ghost text-danger' onClick={() => setDeletingTags(true)}>
+              <Trash2 className='size-4'/>
+              Delete tags
+            </button>
+          ) : null}
         </div>
         {(blocking) ? (
           <BlockUserDialog user={user} blocked={user.blocked} blockedReason={user.blocked_reason} onClose={() => setBlocking(false)}/>
         ) : null}
         {(editing) ? <EditUserDialog user={user} onClose={() => setEditing(false)}/> : null}
+        {(deletingTags) ? <DeleteUserTagsDialog user={user} onClose={() => setDeletingTags(false)}/> : null}
       </td>
       <td className='px-4 py-3 text-right tabular-nums'>
         {(flags.total) ? (
@@ -201,7 +218,7 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
         ) : <span className='text-subtle'>—</span>}
       </td>
       <td className='px-4 py-3 whitespace-nowrap text-muted'>
-        {(flags.last_flagged_at) ? <span title={formatDateTime(flags.last_flagged_at)}>{formatDate(flags.last_flagged_at)}</span> : '—'}
+        {(flags.last_flagged_at) ? <ExactDate value={flags.last_flagged_at}/> : '—'}
       </td>
     </tr>
   );

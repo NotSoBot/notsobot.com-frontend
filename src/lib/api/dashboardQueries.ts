@@ -1,7 +1,7 @@
 // Query/mutation hooks for the user dashboard (`/users/@me/...`, see docs/dashboard-api.md).
 // Every key is scoped to the session token, so switching accounts never shows someone else's data.
 
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
 import { useAuth } from '@/auth';
 
@@ -9,6 +9,9 @@ import { ApiRequestError } from './client';
 import { api } from './index';
 import { queryKeys } from './queries';
 import type {
+  AdminTagBlob,
+  AdminTagStoragePage,
+  AdminTagVariable,
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
   AdminUser,
@@ -17,11 +20,16 @@ import type {
   AdminTagDirectorySortBy,
   AdminTagsSortBy,
   AdminUsersSortBy,
+  AdminVoice,
+  AdminVoicesPage,
   ContentFlag,
   ContentFlagPatch,
   ContentFlagType,
   ContentFlagsPage,
   GuildListKind,
+  Reminder,
+  ReminderPatch,
+  RemindersPage,
   Report,
   ReportPatch,
   ReportsPage,
@@ -37,6 +45,8 @@ import type {
   UserGuildPatch,
   UserSettings,
   UserSettingsPatch,
+  Voice,
+  VoicesPage,
 } from './types';
 import { ApiErrorCodes } from './types';
 
@@ -105,6 +115,14 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
         return 'This listing has already been verified, so the request can’t be canceled.';
       case ApiErrorCodes.MAX_TAG_DIRECTORY:
         return 'You’ve reached the limit of tags you can publish.';
+      case ApiErrorCodes.UNKNOWN_VOICE:
+        return 'That voice doesn’t exist anymore. It may have been deleted with the bot.';
+      case ApiErrorCodes.UNKNOWN_REMINDER:
+        return 'That reminder doesn’t exist anymore. It may have already been sent or deleted with the bot.';
+      case ApiErrorCodes.TEXT_BLOCKED_GUIDELINES:
+        return 'That text was blocked because it may violate Discord’s Community Guidelines.';
+      case ApiErrorCodes.SAFETY_SCAN_FAILED:
+        return 'We couldn’t check that text right now, so it wasn’t saved. Try again in a moment.';
     }
     if (error.status === 0 || 500 <= error.status) {
       return 'NotSoBot had trouble with that. Try again in a moment.';
@@ -189,12 +207,13 @@ export function useMeTagsCountQuery() {
 }
 
 
-export function useMeTagQuery(tagId: string) {
+export function useMeTagQuery(tagId: string, { enabled = true }: {enabled?: boolean} = {}) {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   return useQuery<Tag, Error, Tag, ReturnType<typeof queryKeys.meTag>>({
     queryKey: queryKeys.meTag(token, tagId),
     queryFn: ({ signal }) => api.fetchMeTag(tagId, signal),
+    enabled,
     // show the row from the list immediately when coming from it
     placeholderData: () => {
       const lists = queryClient.getQueriesData<{pages: Array<TagsPage>}>({queryKey: [...queryKeys.meTags(token), 'list']});
@@ -386,6 +405,80 @@ export function usePutMeTagBlobsMutation(tagId: string, scope: TagStorageScope) 
 }
 
 
+/* voices */
+
+export interface VoiceRename {
+  voiceId: string,
+  name: string,
+}
+
+export function useMeRemindersQuery() {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meReminders(token),
+    queryFn: ({ signal }) => api.fetchMeReminders(signal),
+  });
+}
+
+
+export interface ReminderEdit extends ReminderPatch {
+  reminderId: string,
+}
+
+export function usePatchMeReminderMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const key = queryKeys.meReminders(token);
+  return useMutation({
+    mutationFn: ({ reminderId, ...body }: ReminderEdit) => api.patchMeReminder(reminderId, body),
+    onSuccess: (reminder: Reminder) => {
+      queryClient.setQueryData<RemindersPage>(key, (page) => {
+        return (page) ? {...page, items: page.items.map((other) => (other.id === reminder.id) ? reminder : other)} : page;
+      });
+    },
+  });
+}
+
+
+export function useDeleteMeReminderMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const key = queryKeys.meReminders(token);
+  return useMutation({
+    mutationFn: (reminderId: string) => api.deleteMeReminder(reminderId),
+    onSuccess: (_result, reminderId) => {
+      queryClient.setQueryData<RemindersPage>(key, (page) => {
+        return (page) ? {count: Math.max(0, page.count - 1), items: page.items.filter((other) => other.id !== reminderId)} : page;
+      });
+    },
+  });
+}
+
+
+export function useMeVoicesQuery() {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meVoices(token),
+    queryFn: ({ signal }) => api.fetchMeVoices(signal),
+  });
+}
+
+
+export function usePatchMeVoiceMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const key = queryKeys.meVoices(token);
+  return useMutation({
+    mutationFn: ({ voiceId, name }: VoiceRename) => api.patchMeVoice(voiceId, {name}),
+    onSuccess: (voice: Voice) => {
+      queryClient.setQueryData<VoicesPage>(key, (page) => {
+        return (page) ? {...page, items: page.items.map((other) => (other.id === voice.id) ? voice : other)} : page;
+      });
+    },
+  });
+}
+
+
 /* servers */
 
 // 503 EXTERNAL_SERVICE_TIMEOUT = the API is refreshing the Discord token; that clears up by itself
@@ -504,6 +597,27 @@ export interface AdminTagsFilters {
   page: number,
 }
 
+// read-only staff view of a tag's variables/blobs, one page at a time
+export const ADMIN_TAG_VARIABLES_PAGE_SIZE = 50;
+export const ADMIN_TAG_BLOBS_PAGE_SIZE = 10;
+
+export function useAdminTagStorageQuery(tagId: string, kind: 'variables', filters: {storageType: number | null, page: number}): UseQueryResult<AdminTagStoragePage<AdminTagVariable>>;
+export function useAdminTagStorageQuery(tagId: string, kind: 'blobs', filters: {storageType: number | null, page: number}): UseQueryResult<AdminTagStoragePage<AdminTagBlob>>;
+export function useAdminTagStorageQuery(tagId: string, kind: 'variables' | 'blobs', filters: {storageType: number | null, page: number}) {
+  const { token } = useAuth();
+  const pageSize = (kind === 'variables') ? ADMIN_TAG_VARIABLES_PAGE_SIZE : ADMIN_TAG_BLOBS_PAGE_SIZE;
+  return useQuery<AdminTagStoragePage<AdminTagVariable> | AdminTagStoragePage<AdminTagBlob>>({
+    queryKey: queryKeys.adminTagStorage(token, tagId, kind, filters),
+    queryFn: ({ signal }) => {
+      const params = {storageType: filters.storageType, offset: filters.page * pageSize, limit: pageSize};
+      return (kind === 'variables') ? api.fetchAdminTagVariables(tagId, params, signal) : api.fetchAdminTagBlobs(tagId, params, signal);
+    },
+    placeholderData: keepPreviousData,
+    enabled: !!token,
+  });
+}
+
+
 export function useAdminTagsQuery(filters: AdminTagsFilters) {
   const { token } = useAuth();
   return useQuery({
@@ -546,6 +660,19 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
 }
 
 
+// one listing (with its content) by tag id, for staff editing it from the public directory; null if it isn't listed.
+// Lives under the admin list keys so `usePatchAdminTagDirectoryMutation` updates and refetches it too.
+export function useAdminTagDirectoryItemQuery(tagId: string, { enabled = true }: {enabled?: boolean} = {}) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminTagDirectory(token, {id: tagId}),
+    queryFn: ({ signal }) => api.fetchAdminTagDirectory({query: `id:${tagId}`, limit: 1}, signal),
+    select: (page) => page.items.find((item) => item.id === tagId) ?? null,
+    enabled: enabled && !!token,
+  });
+}
+
+
 // shows the new state in place right away, then refetches since the item may leave the current filter
 // (`content` edits go through here too, use a separate instance so their pending state doesn't mix with verifying)
 export function usePatchAdminTagDirectoryMutation() {
@@ -553,7 +680,7 @@ export function usePatchAdminTagDirectoryMutation() {
   const queryClient = useQueryClient();
   const listKey = [...queryKeys.admin(token), 'tags'];
   return useMutation({
-    mutationFn: ({ tagId, ...body }: {tagId: string, verified?: number, content?: string, title?: string, description?: string}) => api.patchAdminTagDirectory(tagId, body),
+    mutationFn: ({ tagId, ...body }: {tagId: string, verified?: number, content?: string, name?: string, title?: string, description?: string}) => api.patchAdminTagDirectory(tagId, body),
     onSuccess: (item: AdminTagDirectoryItem) => {
       queryClient.setQueriesData<AdminTagDirectoryPage>({queryKey: listKey}, (page) => {
         if (!page) {
@@ -652,6 +779,21 @@ export function usePatchAdminUserMutation() {
 }
 
 
+export function useDeleteAdminUserTagsMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId }: {userId: string}) => api.deleteAdminUserTags(userId),
+    // both admin tag lists, and the public directory if any of them were listed
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'all-tags']}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'tags']}),
+      queryClient.invalidateQueries({queryKey: ['tags', 'directory']}),
+    ]),
+  });
+}
+
+
 export interface AdminContentFlagsFilters {
   userId: string,
   guildId: string,
@@ -746,6 +888,45 @@ export function usePatchAdminReportMutation() {
         }
         return {...page, items: page.items.map((other) => (other.id === report.id) ? report : other)};
       });
+    },
+    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+  });
+}
+
+
+export interface AdminVoicesFilters {
+  query: string,
+  userId: string,
+  page: number,
+}
+
+export function useAdminVoicesQuery(filters: AdminVoicesFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminVoices(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminVoices({
+      query: filters.query,
+      userId: filters.userId,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+export function usePatchAdminVoiceMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'voices'];
+  return useMutation({
+    mutationFn: ({ voiceId, name }: VoiceRename) => api.patchAdminVoice(voiceId, {name}),
+    onSuccess: (voice: AdminVoice) => {
+      queryClient.setQueriesData<AdminVoicesPage>({queryKey: listKey}, (page) => {
+        return (page) ? {...page, items: page.items.map((other) => (other.id === voice.id) ? voice : other)} : page;
+      });
+      // a staff member renaming one of their own voices
+      void queryClient.invalidateQueries({queryKey: queryKeys.meVoices(token)});
     },
     onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
   });

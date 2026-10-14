@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { ApiErrorCodes, ApiRequestError, type Tag } from '@/lib/api';
 import { errorMessage, isDiscordGrantError, isScopeMismatch, useAddMeTagMutation, useMeGuildsQuery } from '@/lib/api/dashboardQueries';
+import { CharCounter } from '@/pages/dashboard/ui';
 
 
 const DM_DESTINATION = 'dm';
@@ -107,7 +108,10 @@ export function AddTagDialog({ tag, onClose }: {tag: Pick<Tag, 'id' | 'name'>, o
             </div>
 
             <div>
-              <label htmlFor={nameId} className='mb-1.5 block text-sm text-muted'>Name</label>
+              <div className='mb-1.5 flex items-baseline justify-between gap-3'>
+                <label htmlFor={nameId} className='text-sm text-muted'>Name</label>
+                <span className='shrink-0 text-xs text-subtle tabular-nums'><CharCounter length={name.length} max={NAME_MAX}/></span>
+              </div>
               <input
                 id={nameId}
                 value={name}

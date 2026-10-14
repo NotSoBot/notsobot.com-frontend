@@ -9,7 +9,7 @@ import { UserPremiumTypes } from '@/lib/api';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { cn } from '@/lib/utils';
 
-import { DASHBOARD_SECTIONS } from './DashboardLayout';
+import { CONTENT_SECTIONS, DASHBOARD_SECTIONS } from './DashboardLayout';
 import { premiumLabel } from './premium';
 import { Skeleton } from './ui';
 
@@ -17,8 +17,8 @@ import { Skeleton } from './ui';
 const SECTION_BLURBS: Record<string, string> = {
   Tags: 'Edit your tags, their variables and stored blobs.',
   Servers: 'Prefixes, allow/blocklists, loggers and server settings.',
-  Settings: 'AI personality, language, timezone, media and more.',
-  'Your Data': 'Export or delete what NotSoBot stores about you.',
+  Voices: 'Rename the voices you cloned with the bot.',
+  Settings: 'AI personality, language, timezone, media, and exporting or deleting your data.',
 };
 
 
@@ -78,7 +78,7 @@ export function OverviewPage() {
       <section aria-labelledby='overview-sections'>
         <h2 id='overview-sections' className='section-label mb-3'>Jump to</h2>
         <ul className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-          {DASHBOARD_SECTIONS.filter((section) => section.label in SECTION_BLURBS).map((section) => (
+          {[...CONTENT_SECTIONS, ...DASHBOARD_SECTIONS].filter((section) => section.label in SECTION_BLURBS).map((section) => (
             <li key={section.to}>
               <Link
                 to={section.to}

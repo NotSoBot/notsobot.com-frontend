@@ -107,7 +107,7 @@ export function AddTagButton({ tag, size = 'sm' }: {tag: Pick<Tag, 'id' | 'name'
         onClick={() => (isAuthenticated) ? setOpen(true) : login()}
         title={(isAuthenticated) ? 'Add to a server or your DMs' : 'Log in to add this tag'}
         className={cn(
-          'relative z-10 flex items-center gap-1 rounded bg-brand font-medium text-white transition-colors hover:bg-brand-hover',
+          'relative z-10 flex cursor-pointer items-center gap-1 rounded bg-brand font-medium text-white transition-colors hover:bg-brand-hover',
           (size === 'lg') ? 'gap-2 rounded-lg px-6 py-3' : 'px-3 py-1.5 text-sm',
         )}
       >

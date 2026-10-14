@@ -1,20 +1,24 @@
-import { ChevronDown, ChevronUp, Clock, Pencil, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Clock, Pencil, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { TagDirectoryVerificationStates, type AdminTagDirectoryItem, type AdminTagDirectorySortBy, type TagAsset, type TagDirectoryAsset } from '@/lib/api';
+import { ApiErrorCodes, ApiRequestError, TagDirectoryVerificationStates, type AdminTagDirectoryItem, type AdminTagDirectorySortBy, type TagAsset, type TagDirectoryAsset } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagDirectoryQuery, usePatchAdminTagDirectoryMutation } from '@/lib/api/dashboardQueries';
-import { cn, formatDate, formatDateTime, formatMemory } from '@/lib/utils';
+import { cn, formatMemory } from '@/lib/utils';
+import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
-import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, DetailList, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
+import { Chip, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 import { TagAssetsPanel } from './TagAssetsPanel';
+import { TagStoragePanel } from './TagStoragePanel';
 
 
 // same order and `status` param as the public directory, but defaults to the review queue
@@ -58,9 +62,20 @@ export function AdminTagsPage() {
   });
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
+  const pagination = {
+    page,
+    count: data?.count ?? 0,
+    pageSize: ADMIN_PAGE_SIZE,
+    onChange: setPage,
+    fetching: isFetching && isPlaceholderData,
+  };
 
   return (
     <>
+      <Link to={Routes.DASHBOARD_ADMIN_ALL_TAGS} className='mb-4 inline-flex items-center gap-1.5 rounded text-sm text-muted transition-colors hover:text-white'>
+        <ArrowLeft aria-hidden className='size-4'/>
+        All tags
+      </Link>
       <DashboardHeader
         title='Directory tags'
         description='Review tags published to the tag directory. Verified tags are marked safe and can’t be edited by their owner.'
@@ -113,10 +128,11 @@ export function AdminTagsPage() {
         </EmptyState>
       ) : (
         <>
+          <Pagination {...pagination} className='mt-0 mb-4'/>
           <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
             {items.map((item) => <DirectoryTagCard key={item.id} item={item} onDelete={() => setDeletingItem(item)}/>)}
           </ul>
-          <Pagination page={page} count={data?.count ?? 0} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
+          <Pagination {...pagination}/>
         </>
       )}
       {(deletingItem) ? <DeleteDirectoryTagFlow item={deletingItem} onClose={() => setDeletingItem(null)}/> : null}
@@ -143,7 +159,7 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
   const listingMutation = usePatchAdminTagDirectoryMutation();
   // null when not editing
   const [ draft, setDraft ] = useState<string | null>(null);
-  const [ listingDraft, setListingDraft ] = useState<{title: string, description: string} | null>(null);
+  const [ listingDraft, setListingDraft ] = useState<{name: string, title: string, description: string} | null>(null);
 
   const content = tag.content ?? '';
   const long = CONTENT_COLLAPSE_LINES < content.split('\n').length || CONTENT_COLLAPSE_CHARS < content.length;
@@ -161,8 +177,14 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
     });
   };
 
-  const listingChanged = listingDraft !== null && (listingDraft.title !== item.title || listingDraft.description !== item.description);
-  const listingTooLong = listingDraft !== null && (TITLE_MAX < listingDraft.title.length || DESCRIPTION_MAX < listingDraft.description.length);
+  // names are saved lowercased, without newlines
+  const draftName = listingDraft?.name.trim().toLowerCase() ?? '';
+  const nameChanged = listingDraft !== null && draftName !== tag.name;
+  const listingChanged = listingDraft !== null && (nameChanged || listingDraft.title !== item.title || listingDraft.description !== item.description);
+  const listingInvalid = listingDraft !== null && (
+    !draftName || TAG_NAME_MAX < draftName.length || TITLE_MAX < listingDraft.title.length || DESCRIPTION_MAX < listingDraft.description.length
+  );
+  const nameTaken = listingMutation.error instanceof ApiRequestError && listingMutation.error.code === ApiErrorCodes.TAG_NAME_TAKEN;
 
   const saveListing = () => {
     if (listingDraft === null) {
@@ -171,14 +193,19 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
     // only send what changed, the api skips undefined fields
     listingMutation.mutate({
       tagId: item.id,
+      name: (nameChanged) ? draftName : undefined,
       title: (listingDraft.title !== item.title) ? listingDraft.title : undefined,
       description: (listingDraft.description !== item.description) ? listingDraft.description : undefined,
     }, {
       onSuccess: (updated) => {
         setListingDraft(null);
-        toast(`${updated.title || tag.name}: listing saved`);
+        toast(`${updated.title || updated.tag.name}: listing saved`);
       },
-      onError: (error) => toast(errorMessage(error), 'error'),
+      onError: (error) => {
+        if (!(error instanceof ApiRequestError && error.code === ApiErrorCodes.TAG_NAME_TAKEN)) {
+          toast(errorMessage(error), 'error');
+        }
+      },
     });
   };
 
@@ -254,47 +281,64 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
       </div>
 
       {(listingDraft !== null) ? (
-        <div className='mt-3 space-y-2'>
-          <label className='block'>
-            <span className='section-label'>
-              Title{' '}
-              <span className={cn('normal-case tracking-normal', (TITLE_MAX < listingDraft.title.length) ? 'text-danger' : 'text-subtle')}>
-                ({listingDraft.title.length.toLocaleString()} / {TITLE_MAX.toLocaleString()} chars)
-              </span>
-            </span>
-            <input
-              className='input mt-1.5'
-              value={listingDraft.title}
-              disabled={listingMutation.isPending}
-              onChange={(event) => setListingDraft({...listingDraft, title: event.target.value})}
-            />
-          </label>
-          <label className='block'>
-            <span className='section-label'>
-              Description{' '}
-              <span className={cn('normal-case tracking-normal', (DESCRIPTION_MAX < listingDraft.description.length) ? 'text-danger' : 'text-subtle')}>
-                ({listingDraft.description.length.toLocaleString()} / {DESCRIPTION_MAX.toLocaleString()} chars)
-              </span>
-            </span>
-            <textarea
-              className='input mt-1.5 resize-y leading-relaxed'
-              rows={Math.min(12, Math.max(3, listingDraft.description.split('\n').length + 1))}
-              value={listingDraft.description}
-              disabled={listingMutation.isPending}
-              onChange={(event) => setListingDraft({...listingDraft, description: event.target.value})}
-            />
-          </label>
+        <div className='mt-3 space-y-3'>
+          <Field
+            label='Tag name'
+            counter={<CharCounter length={draftName.length} max={TAG_NAME_MAX}/>}
+            error={(!draftName) ? 'A tag needs a name.' : (nameTaken) ? 'The owner already has a tag with this name there.' : null}
+          >
+            {(props) => (
+              <input
+                {...props}
+                className='input font-mono'
+                value={listingDraft.name}
+                disabled={listingMutation.isPending}
+                autoComplete='off'
+                spellCheck={false}
+                onChange={(event) => {
+                  listingMutation.reset();
+                  setListingDraft({...listingDraft, name: event.target.value.replace(/[\r\n]/g, '')});
+                }}
+              />
+            )}
+          </Field>
+          <Field label='Title' counter={<CharCounter length={listingDraft.title.length} max={TITLE_MAX}/>}>
+            {(props) => (
+              <input
+                {...props}
+                className='input'
+                value={listingDraft.title}
+                disabled={listingMutation.isPending}
+                onChange={(event) => setListingDraft({...listingDraft, title: event.target.value})}
+              />
+            )}
+          </Field>
+          <Field label='Description' counter={<CharCounter length={listingDraft.description.length} max={DESCRIPTION_MAX}/>}>
+            {(props) => (
+              <textarea
+                {...props}
+                className='input resize-y leading-relaxed'
+                rows={Math.min(12, Math.max(3, listingDraft.description.split('\n').length + 1))}
+                value={listingDraft.description}
+                disabled={listingMutation.isPending}
+                onChange={(event) => setListingDraft({...listingDraft, description: event.target.value})}
+              />
+            )}
+          </Field>
           <div className='flex flex-wrap items-center gap-2'>
             <ActionButton
               label='Save listing'
               icon={<Pencil className='size-4'/>}
               className='btn-primary'
-              disabled={listingMutation.isPending || !listingChanged || listingTooLong}
+              disabled={listingMutation.isPending || !listingChanged || listingInvalid}
               pending={listingMutation.isPending}
               onClick={saveListing}
             />
-            <button type='button' className='btn btn-sm btn-ghost' disabled={listingMutation.isPending} onClick={() => setListingDraft(null)}>Cancel</button>
-            <span className='text-xs text-subtle'>Works on pending and verified listings too, the owner isn’t notified.</span>
+            <button type='button' className='btn btn-sm btn-ghost' disabled={listingMutation.isPending} onClick={() => {
+              listingMutation.reset();
+              setListingDraft(null);
+            }}>Cancel</button>
+            <span className='text-xs text-subtle'>Works on locked, pending and verified tags too, the owner isn’t notified.</span>
           </div>
         </div>
       ) : (
@@ -307,10 +351,10 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
           <button
             type='button'
             className='btn btn-ghost btn-sm shrink-0'
-            onClick={() => setListingDraft({title: item.title ?? '', description: item.description ?? ''})}
+            onClick={() => setListingDraft({name: tag.name, title: item.title ?? '', description: item.description ?? ''})}
           >
             <Pencil className='size-4'/>
-            Edit title &amp; description
+            Edit name, title &amp; description
           </button>
         </div>
       )}
@@ -321,9 +365,9 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
             ['Tag id', <span className='font-mono'>{tag.id}</span>],
             ['Uses', (tag.uses ?? 0).toLocaleString()],
             ['Servers', (item.server_count ?? 0).toLocaleString()],
-            ['Created', <span title={formatDateTime(tag.created)}>{formatDate(tag.created)}</span>],
-            (tag.edited) ? ['Edited', formatDate(tag.edited)] : null,
-            (item.created) ? ['Listed', formatDate(item.created)] : null,
+            ['Created', <ExactDate value={tag.created}/>],
+            (tag.edited) ? ['Edited', <ExactDate value={tag.edited}/>] : null,
+            (item.created) ? ['Listed', <ExactDate value={item.created}/>] : null,
             (tag.server_id) ? ['Server id', <span className='font-mono'>{tag.server_id}</span>] : null,
           ]}
         />
@@ -331,13 +375,9 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
 
       <div className='mt-4'>
         <div className='mb-1.5 flex items-center justify-between gap-2'>
-          <h3 className='section-label'>
-            Content{' '}
-            <span className={cn('normal-case tracking-normal', (draft !== null && CONTENT_MAX < draft.length) ? 'text-danger' : 'text-subtle')}>
-              ({(draft ?? content).length.toLocaleString()}{(draft !== null) ? ` / ${CONTENT_MAX.toLocaleString()}` : ''} chars)
-            </span>
-          </h3>
-          <div className='flex gap-1'>
+          <h3 className='section-label'>Content</h3>
+          <div className='flex items-center gap-1'>
+            <span className='mr-1 text-xs text-subtle tabular-nums'><CharCounter length={(draft ?? content).length} max={CONTENT_MAX}/></span>
             {(draft === null && long) ? (
               <button type='button' className='btn btn-ghost btn-sm' onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
                 {(expanded) ? <ChevronUp className='size-4'/> : <ChevronDown className='size-4'/>}
@@ -393,6 +433,8 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
       </div>
 
       <TagAssetsPanel tagId={item.id} assets={tag.assets ?? []} onArchived={onArchived}/>
+
+      <TagStoragePanel tagId={item.id} className='mt-4'/>
 
       {(item.assets?.length) ? (
         <div className='mt-4'>

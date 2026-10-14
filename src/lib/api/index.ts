@@ -2,6 +2,7 @@ import { ApiEndpoints } from './endpoints';
 import { ApiRequestError, apiRequest } from './client';
 import { ApiErrorCodes } from './types';
 import type {
+  AdminTagBlob,
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
   AdminUser,
@@ -10,13 +11,20 @@ import type {
   AdminTagDirectorySortBy,
   AdminTagsPage,
   AdminTagsSortBy,
+  AdminTagStoragePage,
+  AdminTagVariable,
   AdminUsersSortBy,
+  AdminVoice,
+  AdminVoicesPage,
   Command,
   ContentFlag,
   ContentFlagPatch,
   ContentFlagType,
   ContentFlagsPage,
   CommandStat,
+  Reminder,
+  ReminderPatch,
+  RemindersPage,
   Report,
   ReportPatch,
   ReportsPage,
@@ -44,6 +52,9 @@ import type {
   UserSession,
   UserSettings,
   UserSettingsPatch,
+  Voice,
+  VoicePatch,
+  VoicesPage,
 } from './types';
 
 
@@ -204,7 +215,27 @@ export const api = {
     return apiRequest<TagBlobs>(ApiEndpoints.USER_ME_TAG_BLOBS(tagId), {method: 'PUT', body});
   },
 
-  fetchMeGuilds: (signal?: AbortSignal) => {
+  fetchMeReminders: (signal?: AbortSignal) => {
+    return apiRequest<RemindersPage>(ApiEndpoints.USER_ME_REMINDERS, {signal});
+  },
+
+  patchMeReminder: (reminderId: string, body: ReminderPatch) => {
+    return apiRequest<Reminder>(ApiEndpoints.USER_ME_REMINDER(reminderId), {method: 'PATCH', body});
+  },
+
+  deleteMeReminder: (reminderId: string) => {
+    return apiRequest<void>(ApiEndpoints.USER_ME_REMINDER(reminderId), {method: 'DELETE'});
+  },
+
+  fetchMeVoices: (signal?: AbortSignal) => {
+    return apiRequest<VoicesPage>(ApiEndpoints.USER_ME_VOICES, {signal});
+  },
+
+  patchMeVoice: (voiceId: string, body: VoicePatch) => {
+    return apiRequest<Voice>(ApiEndpoints.USER_ME_VOICE(voiceId), {method: 'PATCH', body});
+  },
+
+  fetchMeGuilds:(signal?: AbortSignal) => {
     return apiRequest<Array<UserGuildSummary>>(ApiEndpoints.USER_ME_GUILDS, {signal});
   },
 
@@ -282,6 +313,21 @@ export const api = {
     });
   },
 
+  // read-only, every storage the tag has (filtered to one storage type with `storageType`)
+  fetchAdminTagVariables: (tagId: string, params: {storageType?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<AdminTagStoragePage<AdminTagVariable>>(ApiEndpoints.ADMIN_TAG_VARIABLES(tagId), {
+      signal,
+      query: {storage_type: params.storageType ?? undefined, offset: params.offset || undefined, limit: params.limit},
+    });
+  },
+
+  fetchAdminTagBlobs: (tagId: string, params: {storageType?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<AdminTagStoragePage<AdminTagBlob>>(ApiEndpoints.ADMIN_TAG_BLOBS(tagId), {
+      signal,
+      query: {storage_type: params.storageType ?? undefined, offset: params.offset || undefined, limit: params.limit},
+    });
+  },
+
   fetchAdminTagDirectory: (params: {
     query?: string,
     sortBy?: AdminTagDirectorySortBy,
@@ -304,7 +350,7 @@ export const api = {
   },
 
   // `content` rewrites the tag even though it's locked (verified/pending)
-  patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, title?: string, description?: string}) => {
+  patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, name?: string, title?: string, description?: string}) => {
     return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
   },
 
@@ -357,6 +403,11 @@ export const api = {
 
   patchAdminUser: (userId: string, body: AdminUserPatch) => {
     return apiRequest<AdminUser>(ApiEndpoints.ADMIN_USER(userId), {method: 'PATCH', body});
+  },
+
+  // every tag the user owns, everywhere; `count` is how many of theirs were deleted
+  deleteAdminUserTags: (userId: string) => {
+    return apiRequest<{count: number}>(ApiEndpoints.ADMIN_USER_TAGS(userId), {method: 'DELETE'});
   },
 
   fetchAdminContentFlags: (params: {
@@ -415,5 +466,21 @@ export const api = {
 
   patchAdminReport: (reportId: string, body: ReportPatch) => {
     return apiRequest<Report>(ApiEndpoints.ADMIN_REPORT(reportId), {method: 'PATCH', body});
+  },
+
+  fetchAdminVoices: (params: {query?: string, userId?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<AdminVoicesPage>(ApiEndpoints.ADMIN_VOICES, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        user_id: params.userId || undefined,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  patchAdminVoice: (voiceId: string, body: VoicePatch) => {
+    return apiRequest<AdminVoice>(ApiEndpoints.ADMIN_VOICE(voiceId), {method: 'PATCH', body});
   },
 };

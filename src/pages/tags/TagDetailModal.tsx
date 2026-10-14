@@ -1,5 +1,5 @@
 import { AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight, Hash, Server, type LucideIcon } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
@@ -9,6 +9,7 @@ import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 import { AddTagButton, NsfwBadge, verificationInfo, VerificationBadge } from './tagDirectory';
+import { HiddenContentSection, ListingEditForm, ManageListingCard, useListingAccess } from './TagListingManager';
 
 
 const TITLE_ID = 'tag-modal-title';
@@ -24,17 +25,23 @@ export function TagDetailModal({ tagId, initialItem, previousId, nextId, onNavig
   onClose: () => void,
 }) {
   const { data: item, isPending, isError, refetch } = useTagDirectoryItemQuery(tagId, initialItem);
+  // keyed on the tag so stepping to another one leaves edit mode
+  const [ editingId, setEditingId ] = useState<string | null>(null);
+  const editing = editingId === tagId;
 
-  // ← / → step through the tags loaded behind the modal (ignored while typing)
-  const navigation = useRef({previousId, nextId, onNavigate});
-  navigation.current = {previousId, nextId, onNavigate};
+  // ← / → step through the tags loaded behind the modal (ignored while typing or editing the listing)
+  const navigation = useRef({previousId, nextId, onNavigate, editing});
+  navigation.current = {previousId, nextId, onNavigate, editing};
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       if (event.altKey || event.ctrlKey || event.metaKey || (target instanceof Element && target.closest('input, textarea, [contenteditable]'))) {
         return;
       }
-      const { previousId, nextId, onNavigate } = navigation.current;
+      const { previousId, nextId, onNavigate, editing } = navigation.current;
+      if (editing) {
+        return;
+      }
       if (event.key === 'ArrowLeft' && previousId) {
         onNavigate(previousId);
       } else if (event.key === 'ArrowRight' && nextId) {
@@ -59,17 +66,17 @@ export function TagDetailModal({ tagId, initialItem, previousId, nextId, onNavig
       ) : (!item) ? (
         <TagMessage title='Tag Not Found' description="The tag you're looking for doesn't exist or has been removed from the directory."/>
       ) : (
-        <TagDetail item={item}/>
+        <TagDetail item={item} editing={editing} onEditingChange={(value) => setEditingId((value) ? tagId : null)}/>
       )}
 
       {(previousId || nextId) ? (
         <footer className='flex items-center justify-between gap-3 border-t border-line px-6 py-3'>
-          <button type='button' className='btn btn-ghost px-2' disabled={!previousId} onClick={() => previousId && onNavigate(previousId)}>
+          <button type='button' className='btn btn-ghost px-2' disabled={!previousId || editing} onClick={() => previousId && onNavigate(previousId)}>
             <ChevronLeft className='size-4'/>
             Previous
           </button>
           <span className='hidden text-xs text-subtle sm:block'>Use ← → to browse</span>
-          <button type='button' className='btn btn-ghost px-2' disabled={!nextId} onClick={() => nextId && onNavigate(nextId)}>
+          <button type='button' className='btn btn-ghost px-2' disabled={!nextId || editing} onClick={() => nextId && onNavigate(nextId)}>
             Next
             <ChevronRight className='size-4'/>
           </button>
@@ -80,9 +87,11 @@ export function TagDetailModal({ tagId, initialItem, previousId, nextId, onNavig
 }
 
 
-function TagDetail({ item }: {item: TagDirectoryItem}) {
+function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, editing: boolean, onEditingChange: (editing: boolean) => void}) {
   const { tag } = item;
   const verification = verificationInfo(item.verified);
+  const access = useListingAccess(item);
+  const canManage = access.owner || access.staff;
 
   return (
     <>
@@ -106,20 +115,29 @@ function TagDetail({ item }: {item: TagDirectoryItem}) {
             <p className='text-sm text-muted'>{verification.description}</p>
           </div>
 
-          {(item.description) ? (
-            <section>
-              <h3 className='section-label mb-2'>Description</h3>
-              <p className='whitespace-pre-wrap text-white'>{item.description}</p>
-            </section>
-          ) : null}
+          {(editing && canManage) ? (
+            <ListingEditForm item={item} access={access} onDone={() => onEditingChange(false)}/>
+          ) : (
+            <>
+              {(item.description) ? (
+                <section>
+                  <h3 className='section-label mb-2'>Description</h3>
+                  <p className='whitespace-pre-wrap text-white'>{item.description}</p>
+                </section>
+              ) : null}
 
-          {/* only filled in when the owner chose to show it */}
-          {(item.content_public && tag.content) ? (
-            <section>
-              <h3 className='section-label mb-2'>Content</h3>
-              <pre className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg'>{tag.content}</pre>
-            </section>
-          ) : null}
+              {/* only filled in when the owner chose to show it */}
+              {(item.content_public && tag.content) ? (
+                <section>
+                  <h3 className='section-label mb-2'>Content</h3>
+                  <pre className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg'>{tag.content}</pre>
+                </section>
+              ) : null}
+
+              {/* the owner and staff still see hidden content, with a note that nobody else can */}
+              <HiddenContentSection item={item} access={access}/>
+            </>
+          )}
 
           <div className='grid grid-cols-2 gap-3'>
             <StatTile icon={BarChart3} label='Uses'><span className='text-2xl font-bold'>{tag.uses.toLocaleString()}</span></StatTile>
@@ -144,6 +162,7 @@ function TagDetail({ item }: {item: TagDirectoryItem}) {
         </div>
 
         <aside className='space-y-4'>
+          <ManageListingCard item={item} access={access} editing={editing} onEdit={() => onEditingChange(true)}/>
           <section className='card p-5'>
             <h3 className='section-label mb-4'>Created By</h3>
             <div className='flex items-center gap-3'>

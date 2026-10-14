@@ -8,24 +8,27 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Routes, Urls } from '@/config';
 import { errorMessage, isNotAvailableYet, useDeleteMeMutation, useRequestDataExportMutation } from '@/lib/api/dashboardQueries';
 
-import { DashboardHeader, Panel } from '../ui';
+import { Panel } from '../ui';
 
 
 const DELETE_PHRASE = 'delete my data';
 
+const YOUR_DATA_ANCHOR = 'your-data';
 
-export function YourDataPage() {
+
+// Export/delete, at the bottom of the settings page. Not tied to the settings loading, so it works even when they don't.
+export function YourDataSection() {
   return (
-    <>
-      <DashboardHeader
-        title='Your data'
-        description={<>What NotSoBot stores about you, and how to get or remove it. See the <Link to={Routes.LEGAL_PRIVACY} className='text-code hover:underline'>privacy policy</Link> for details.</>}
-      />
+    <section id={YOUR_DATA_ANCHOR} aria-labelledby={`${YOUR_DATA_ANCHOR}-title`} className='mt-10 scroll-mt-24'>
+      <h2 id={`${YOUR_DATA_ANCHOR}-title`} className='text-xl font-bold text-white'>Your data</h2>
+      <p className='mt-1 mb-4 text-muted'>
+        What NotSoBot stores about you, and how to get or remove it. See the <Link to={Routes.LEGAL_PRIVACY} className='text-code hover:underline'>privacy policy</Link> for details.
+      </p>
       <div className='space-y-4'>
         <ExportPanel/>
         <DeletePanel/>
       </div>
-    </>
+    </section>
   );
 }
 
@@ -54,7 +57,7 @@ function Notice({ tone, children }: {tone: 'info' | 'success' | 'error', childre
 function ExportPanel() {
   const exportData = useRequestDataExportMutation();
   return (
-    <Panel title='Export my data' accent='#5865f2' description='Get a copy of everything NotSoBot stores about you.'>
+    <Panel headingLevel={3} title='Export my data' accent='#5865f2' description='Get a copy of everything NotSoBot stores about you.'>
       <ul className='list-disc space-y-1 pl-5 text-sm text-muted'>
         <li>Your account record and settings</li>
         <li>Your tags, including their variables and blobs</li>
@@ -84,7 +87,7 @@ function DeletePanel() {
   const unavailable = isNotAvailableYet(remove.error);
 
   return (
-    <Panel title='Delete my data' accent='#ed4245' description='Permanently remove what NotSoBot stores about you.'>
+    <Panel headingLevel={3} title='Delete my data' accent='#ed4245' description='Permanently remove what NotSoBot stores about you.'>
       <ul className='list-disc space-y-1 pl-5 text-sm text-muted'>
         <li>Your settings, tags (with their variables and blobs), reminders and saved voices are deleted.</li>
         <li>Tags others use in their servers stop working.</li>
@@ -100,7 +103,7 @@ function DeletePanel() {
       {(confirming) ? (
         <ConfirmDialog
           title='Delete all your NotSoBot data?'
-          description='Everything listed on this page is removed permanently and you’ll be logged out.'
+          description='Everything listed under “Delete my data” is removed permanently and you’ll be logged out.'
           confirmLabel='Delete everything'
           confirmPhrase={DELETE_PHRASE}
           pending={remove.isPending}

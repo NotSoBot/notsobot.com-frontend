@@ -13,7 +13,7 @@
 
 import { tokenStorage } from '@/auth/tokenStorage';
 import { config } from '@/config';
-import { ApiErrorCodes, TagDirectoryVerificationStates, type ContentFlag, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
+import { ApiErrorCodes, TagDirectoryVerificationStates, type AdminTagDirectoryItem, type ContentFlag, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
 import { toDate } from '@/lib/utils';
 
 import {
@@ -22,10 +22,12 @@ import {
   createAdminUsers,
   createBlobs,
   createContentFlags,
+  createReminders,
   createReports,
   createGuilds,
   createSettings,
   createTags,
+  createVoices,
   createVariables,
   emptyBlobs,
   emptyVariables,
@@ -42,7 +44,9 @@ const state = {
   adminUsers,
   adminDirectory: createAdminDirectory(adminUsers),
   contentFlags: createContentFlags(adminUsers),
+  reminders: createReminders(),
   reports: createReports(adminUsers),
+  voices: createVoices(adminUsers),
   // the mock user is a NotSoBot owner unless turned off (kept across reloads like guildsError)
   owner: sessionStorage.getItem('dashboardMocks:notOwner') !== '1',
   tags: createTags(),
@@ -639,12 +643,60 @@ function matchesDirectorySearch(query: string, tag: {id: string, user_id?: strin
   return texts.some((value) => value.toLowerCase().includes(needle));
 }
 
+// The real directory is one table: staff see the mock user's own listings too, and the public directory shows everyone's.
+// The mock user's listings live in `state.directory`, everyone else's in `state.adminDirectory`; these convert between them.
+function ownListingAsAdmin(item: TagDirectoryItem): AdminTagDirectoryItem {
+  const source = state.tags.find((tag) => tag.id === item.id);
+  return {
+    ...item,
+    tag: {...item.tag, assets: [], content: source?.content ?? '', locked: source?.locked ?? false, user_id: mockUser.id},
+    user: {avatar: mockUser.avatar, discriminator: mockUser.discriminator, id: mockUser.id, username: mockUser.username},
+  };
+}
+
+function adminListingAsPublic(item: AdminTagDirectoryItem): TagDirectoryItem {
+  const { tag } = item;
+  const user = item.user ?? {avatar: null, discriminator: '0', id: tag.user_id ?? '0', username: 'Deleted User'};
+  const timestamp = (value: unknown) => (value === undefined || value === null) ? null : toDate(value as string).toISOString();
+  return {
+    assets: item.assets,
+    // fixtures never show their content publicly
+    content_public: false,
+    created: timestamp(item.created) ?? new Date(0).toISOString(),
+    description: item.description,
+    edited: timestamp(item.edited),
+    id: item.id,
+    server_count: item.server_count,
+    tag: {
+      assets: [],
+      content: '',
+      created: timestamp(tag.created)!,
+      edited: timestamp(tag.edited),
+      guild_id: null,
+      id: tag.id,
+      is_command: !!tag.is_command,
+      is_on_directory: true,
+      last_used: timestamp(tag.last_used),
+      locked: tag.locked,
+      name: tag.name,
+      nsfw: tag.nsfw,
+      reference_tag: null,
+      scanned: 0,
+      server_id: tag.server_id,
+      user: {...user, blocked: false, blocked_on: null, blocked_reason: null, bot: false, flags: 0},
+      uses: tag.uses,
+    },
+    title: item.title,
+    verified: item.verified,
+  };
+}
+
 route('GET', '/admin/tags/directory', (_match, { query }) => {
   requireBotOwner();
   const search = query.get('query') || '';
   const verified = query.get('verified');
   const nsfw = parseBool(query.get('nsfw'));
-  const matching = state.adminDirectory
+  const matching = [...state.adminDirectory, ...[...state.directory.values()].map(ownListingAsAdmin)]
     .filter((item) => verified === null || verified === '' || item.verified === Number(verified))
     .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
     .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.tag.content ?? '', item.description]));
@@ -673,9 +725,13 @@ route('GET', '/admin/tags', (_match, { query }) => {
     ...state.tags.map((tag) => ({
       directory: (state.directory.get(tag.id)) ? {title: state.directory.get(tag.id)!.title, verified: state.directory.get(tag.id)!.verified} : null,
       tag: {...tag, user_id: mockUser.id},
-      user: ref(mockUser),
+      user: {...ref(mockUser), channel_id: mockUser.channel_id},
     })),
-    ...state.adminDirectory.map((item) => ({directory: {title: item.title, verified: item.verified}, tag: item.tag, user: item.user})),
+    ...state.adminDirectory.map((item) => ({
+      directory: {title: item.title, verified: item.verified},
+      tag: item.tag,
+      user: (item.user) ? {...item.user, channel_id: null} : null,
+    })),
   ]
     .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
     .filter((item) => {
@@ -699,6 +755,31 @@ route('GET', '/admin/tags', (_match, { query }) => {
 
 route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
   requireBotOwner();
+  // the mock user's own listing: apply the same edits to `state.directory` and its source tag
+  const own = state.directory.get(tagId);
+  if (own) {
+    const source = findTag(tagId);
+    if (body.verified !== undefined) {
+      own.verified = Number(body.verified);
+      source.locked = own.verified !== TagDirectoryVerificationStates.NOT_VERIFIED;
+    }
+    if (typeof body.content === 'string') {
+      if (!body.content || 2000 < body.content.length) {
+        throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'content must be 1 to 2000 characters', {field: 'content'});
+      }
+      source.content = body.content;
+      own.tag.content = (own.content_public) ? body.content : '';
+    }
+    if (typeof body.name === 'string') {
+      source.name = body.name.trim().toLowerCase();
+      own.tag.name = source.name;
+    }
+    if (typeof body.title === 'string' || typeof body.description === 'string') {
+      Object.assign(own, directoryFields({title: body.title, description: body.description}));
+      own.edited = new Date().toISOString();
+    }
+    return ownListingAsAdmin(own);
+  }
   const item = state.adminDirectory.find((other) => other.id === tagId);
   if (!item) {
     throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
@@ -716,6 +797,13 @@ route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
     }
     item.tag.content = body.content;
   }
+  if (typeof body.name === 'string') {
+    const name = body.name.trim().toLowerCase();
+    if (!name || 64 < name.length) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'name must be 1 to 64 characters', {field: 'name'});
+    }
+    item.tag.name = name;
+  }
   if (typeof body.title === 'string') {
     if (128 < body.title.length) {
       throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'title must be at most 128 characters', {field: 'title'});
@@ -729,6 +817,41 @@ route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
     item.description = body.description;
   }
   return item;
+});
+
+// mirror `GET /admin/tags/<tag_id>/variables|blobs`: every storage the tag has, read-only, paged
+function adminStoragePage<T extends {storage_type: number}>(entries: Array<T>, query: URLSearchParams) {
+  const counts: Record<string, number> = {};
+  for (const entry of entries) {
+    counts[entry.storage_type] = (counts[entry.storage_type] ?? 0) + 1;
+  }
+  const type = query.get('storage_type');
+  const filtered = (type === null) ? entries : entries.filter((entry) => `${entry.storage_type}` === type);
+  const offset = Number(query.get('offset') ?? 0);
+  const limit = Number(query.get('limit') ?? 50);
+  return {count: filtered.length, counts, items: filtered.slice(offset, offset + limit)};
+}
+
+route('GET', '/admin/tags/(\\d+)/variables', ([ , tagId ], { query }) => {
+  requireBotOwner();
+  const entries = [...(state.variables.get(tagId) ?? new Map<string, Record<string, string>>()).entries()]
+    .flatMap(([ key, values ]) => {
+      const [ type, id ] = key.split(':');
+      return Object.entries(values).map(([ name, value ]) => ({name, storage_id: id, storage_type: Number(type) as TagStorageType, value}));
+    })
+    .sort((a, b) => a.storage_type - b.storage_type || a.storage_id.localeCompare(b.storage_id) || a.name.localeCompare(b.name));
+  return adminStoragePage(entries, query);
+});
+
+route('GET', '/admin/tags/(\\d+)/blobs', ([ , tagId ], { query }) => {
+  requireBotOwner();
+  const entries = [...(state.blobs.get(tagId) ?? new Map<string, string>()).entries()]
+    .map(([ key, value ]) => {
+      const [ type, id ] = key.split(':');
+      return {size: atob(value).length, storage_id: id, storage_type: Number(type) as TagStorageType, truncated: false, value};
+    })
+    .sort((a, b) => a.storage_type - b.storage_type || a.storage_id.localeCompare(b.storage_id));
+  return adminStoragePage(entries, query);
 });
 
 // mirrors `POST /admin/tags/directory/<tag_id>/assets`, nothing is stored so the cdn url won't load
@@ -764,12 +887,17 @@ route('DELETE', '/admin/tags/directory/(\\d+)/assets/(\\d+)', ([ , tagId, assetI
   return undefined;
 });
 
-route('DELETE', '/admin/tags/directory/(\\d+)', ([ , tagId ]) => {
+route('DELETE', '/admin/tags/directory/(\\d+)', ([ , tagId ], { query }) => {
   requireBotOwner();
-  if (!state.adminDirectory.some((other) => other.id === tagId)) {
+  // the mock user's own listings live in `state.directory`, everyone else's in `state.adminDirectory`
+  if (!state.adminDirectory.some((other) => other.id === tagId) && !state.directory.has(tagId)) {
     throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
   }
   state.adminDirectory = state.adminDirectory.filter((other) => other.id !== tagId);
+  state.directory.delete(tagId);
+  if (parseBool(query.get('delete_tag'))) {
+    state.tags = state.tags.filter((tag) => tag.id !== tagId);
+  }
   return undefined;
 });
 
@@ -793,6 +921,24 @@ route('PATCH', '/admin/users/(\\d+)', ([ , userId ], { body }) => {
     user.premium_type = body.premium_type;
   }
   return user;
+});
+
+// mirrors `DELETE /admin/users/<user_id>/tags`: the mock user's tags and every directory tag they own
+route('DELETE', '/admin/users/(\\d+)/tags', ([ , userId ]) => {
+  requireBotOwner();
+  const user = state.adminUsers.find((other) => other.id === userId);
+  if (user && (user.flags & 1)) {
+    throw new MockError(400, 50035, 'Bot owners\' tags can\'t be deleted');
+  }
+  const owned = state.adminDirectory.filter((item) => item.tag.user_id === userId || item.user?.id === userId);
+  state.adminDirectory = state.adminDirectory.filter((item) => !owned.includes(item));
+  let count = owned.length;
+  if (userId === mockUser.id) {
+    count += state.tags.length;
+    state.tags = [];
+    state.directory.clear();
+  }
+  return {count};
 });
 
 route('GET', '/admin/users', (_match, { query }) => {
@@ -925,12 +1071,109 @@ route('PATCH', '/admin/reports/(\\d+)', ([ , reportId ], { body }) => {
 });
 
 
+// voices: only the name can be changed, from either side
+function findVoice(voiceId: string) {
+  const voice = state.voices.find((other) => other.id === voiceId);
+  if (!voice) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_VOICE, 'Unknown Voice Clone');
+  }
+  return voice;
+}
+
+function renameVoice(voiceId: string, body: Record<string, unknown>) {
+  const voice = findVoice(voiceId);
+  const name = (typeof body.name === 'string') ? body.name.replace(/[\r\n]+/g, ' ').trim() : '';
+  if (!name || 128 < name.length) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'name must be 1-128 characters', {field: 'name'});
+  }
+  voice.name = name;
+  return voice;
+}
+
+route('GET', '/users/@me/reminders', () => {
+  return {count: state.reminders.length, items: state.reminders};
+});
+
+function findReminder(reminderId: string) {
+  const reminder = state.reminders.find((other) => other.id === reminderId);
+  if (!reminder) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_REMINDER, 'Unknown Reminder');
+  }
+  return reminder;
+}
+
+route('PATCH', '/users/@me/reminders/(\\d+)', ([ , reminderId ], { body }) => {
+  const reminder = findReminder(reminderId);
+  const content = body.content;
+  if (content === undefined && !body.move_to_dms) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Nothing to change');
+  }
+  if (typeof content === 'string' && content !== reminder.content) {
+    if (512 < content.length) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Content is too long');
+    }
+    // stands in for the content scanner: "scanfail" acts like the scanner being down, "blockme" gets blocked
+    if (content.toLowerCase().includes('scanfail')) {
+      throw new MockError(400, ApiErrorCodes.SAFETY_SCAN_FAILED, 'The safety scan failed, try again in a moment');
+    }
+    if (content.toLowerCase().includes('blockme')) {
+      throw new MockError(400, ApiErrorCodes.TEXT_BLOCKED_GUIDELINES, 'The text was blocked because it may violate Discord\'s Community Guidelines');
+    }
+    reminder.content = content;
+  }
+  if (body.move_to_dms) {
+    reminder.channel_id = mockUser.channel_id;
+    reminder.guild_id = null;
+    reminder.message_id = null;
+  }
+  return reminder;
+});
+
+route('DELETE', '/users/@me/reminders/(\\d+)', ([ , reminderId ]) => {
+  findReminder(reminderId);
+  state.reminders = state.reminders.filter((other) => other.id !== reminderId);
+});
+
+// the dashboard shape leaves out the platform id and the owner
+function meVoice({ created, id, name, platform_type }: (typeof state.voices)[number]) {
+  return {created, id, name, platform_type};
+}
+
+route('GET', '/users/@me/voices', () => {
+  const items = state.voices.filter((voice) => voice.user?.id === mockUser.id).map(meVoice);
+  return {count: items.length, items};
+});
+
+route('PATCH', '/users/@me/voices/(\\d+)', ([ , voiceId ], { body }) => {
+  if (findVoice(voiceId).user?.id !== mockUser.id) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_VOICE, 'Unknown Voice Clone');
+  }
+  return meVoice(renameVoice(voiceId, body));
+});
+
+route('GET', '/admin/voices', (_match, { query }) => {
+  requireBotOwner();
+  const text = (query.get('query') || '').trim().toLowerCase();
+  const userId = query.get('user_id');
+  const matching = state.voices
+    .filter((voice) => !userId || voice.user?.id === userId)
+    .filter((voice) => !text || voice.name.toLowerCase().includes(text) || !!voice.user?.username.toLowerCase().includes(text)
+      || voice.id === text || voice.user?.id === text);
+  return pageOf(matching, query);
+});
+
+route('PATCH', '/admin/voices/(\\d+)', ([ , voiceId ], { body }) => {
+  requireBotOwner();
+  return renameVoice(voiceId, body);
+});
+
+
 // public tag directory (the real one is `GET /tags/directory`), newest first, `before` + `limit` like the api
 route('GET', '/tags/directory', (_match, { query }) => {
   const search = query.get('query') || '';
   const before = query.get('before');
   const limit = Number(query.get('limit')) || 50;
-  const items = [...state.directory.values()]
+  const items = [...state.directory.values(), ...state.adminDirectory.map(adminListingAsPublic)]
     .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1)
     .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.description]))
     .filter((item) => !before || BigInt(item.id) < BigInt(before));

@@ -14,7 +14,7 @@ import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportsQuery, usePatchAdminRepor
 import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, CopyableValue, DetailList, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyableValue, DetailList, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
 type Tone = 'warning' | 'danger' | 'neutral' | 'brand' | 'success';
@@ -64,6 +64,13 @@ export function AdminReportsPage() {
   });
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
+  const pagination = {
+    page,
+    count: data?.count ?? 0,
+    pageSize: ADMIN_PAGE_SIZE,
+    onChange: setPage,
+    fetching: isFetching && isPlaceholderData,
+  };
   const filtered = !!(type !== null || status !== null || userId || targetId);
 
   return (
@@ -112,6 +119,7 @@ export function AdminReportsPage() {
         </EmptyState>
       ) : (
         <>
+          <Pagination {...pagination} className='mt-0 mb-4'/>
           <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
             {items.map((report) => (
               <ReportCard
@@ -122,7 +130,7 @@ export function AdminReportsPage() {
               />
             ))}
           </ul>
-          <Pagination page={page} count={data?.count ?? 0} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
+          <Pagination {...pagination}/>
         </>
       )}
     </>
@@ -240,7 +248,7 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
             <Chip tone={type.tone}>{type.label}</Chip>
             <Chip tone={status.tone}>{status.label}</Chip>
           </div>
-          <p className='mt-1 text-xs text-subtle'>{formatDateTime(report.created)}</p>
+          <p className='mt-1 text-xs text-subtle'><ExactDate value={report.created} format={formatDateTime}/></p>
         </div>
         <div className='flex flex-wrap gap-2'>
           {STATUSES.map((item) => (
@@ -311,7 +319,7 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
             ) : '—'],
             (report.reviewed_at || report.reviewed_by) ? ['Reviewed', (
               <span>
-                {(report.reviewed_at) ? formatDateTime(report.reviewed_at) : null}
+                {(report.reviewed_at) ? <ExactDate value={report.reviewed_at} format={formatDateTime}/> : null}
                 {(report.reviewed_by) ? <> by <span className='font-mono'>{report.reviewed_by}</span></> : null}
               </span>
             )] : null,

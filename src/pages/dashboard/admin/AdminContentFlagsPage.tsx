@@ -24,7 +24,7 @@ import { ADMIN_CONTENT_FLAGS_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery,
 import { cn, formatDateTime, formatMemory } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, CopyableValue, DetailList, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyableValue, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { BLOCK_REASON_MAX } from './BlockUserDialog';
 
 
@@ -259,7 +259,7 @@ function ContentFlagCard({ flag, onReport }: {flag: ContentFlag, onReport: () =>
             {(flag.action) ? <Chip>action: {flag.action}</Chip> : null}
             {(flag.needs_human_review) ? <Chip tone='warning'>needs human review</Chip> : null}
           </div>
-          <p className='mt-1 text-xs text-subtle'>{formatDateTime(flag.created)}</p>
+          <p className='mt-1 text-xs text-subtle'><ExactDate value={flag.created} format={formatDateTime}/></p>
         </div>
         <div className='flex flex-wrap gap-2'>
           {STATUSES.map((item) => (
@@ -312,7 +312,7 @@ function ContentFlagCard({ flag, onReport }: {flag: ContentFlag, onReport: () =>
             (flag.tag_id) ? ['Tag', <CopyableValue value={flag.tag_id} truncate={0}/>] : null,
             (flag.reviewed_at || flag.reviewed_by) ? ['Reviewed', (
               <span>
-                {(flag.reviewed_at) ? formatDateTime(flag.reviewed_at) : null}
+                {(flag.reviewed_at) ? <ExactDate value={flag.reviewed_at} format={formatDateTime}/> : null}
                 {(flag.reviewed_by) ? <> by <span className='font-mono'>{flag.reviewed_by}</span></> : null}
               </span>
             )] : null,

@@ -21,15 +21,19 @@ export const queryKeys = {
   meTagVariables: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'variables', scope] as const,
   meTagBlobs: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'blobs', scope] as const,
   meTagDirectory: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'directory'] as const,
+  meReminders: (token: string | null) => ['users', '@me', token, 'reminders'] as const,
+  meVoices: (token: string | null) => ['users', '@me', token, 'voices'] as const,
   meGuilds: (token: string | null) => ['users', '@me', token, 'guilds'] as const,
   meGuild: (token: string | null, guildId: string) => ['users', '@me', token, 'guilds', guildId] as const,
   // admin (owner only); under the session too so logging out drops it
   admin: (token: string | null) => ['users', '@me', token, 'admin'] as const,
   adminTags: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'all-tags', filters] as const,
   adminTagDirectory: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'tags', filters] as const,
+  adminTagStorage: (token: string | null, tagId: string, kind: 'variables' | 'blobs', filters: object) => ['users', '@me', token, 'admin', 'tag-storage', tagId, kind, filters] as const,
   adminUsers: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'users', filters] as const,
   adminContentFlags: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'content-flags', filters] as const,
   adminReports: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'reports', filters] as const,
+  adminVoices: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'voices', filters] as const,
 };
 
 

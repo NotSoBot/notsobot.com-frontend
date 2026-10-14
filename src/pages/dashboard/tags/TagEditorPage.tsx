@@ -2,7 +2,7 @@ import { ArrowLeft, BookOpen, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
-import { useAuth } from '@/auth';
+import { isStaff, useAuth } from '@/auth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { Routes } from '@/config';
@@ -103,6 +103,9 @@ function TagEditor({ tag }: {tag: Tag}) {
     }
   };
 
+  // staff can still edit their own tags while they're locked (pending/verified in the directory)
+  const readOnly = tag.locked && !isStaff(user);
+
   // which storage ids variables/blobs are read for; global needs none, user defaults to you
   const [ scope, setScope ] = useState<TagStorageScope>(() => ({user_id: user?.id ?? ''}));
 
@@ -164,18 +167,18 @@ function TagEditor({ tag }: {tag: Tag}) {
 
       {/* panels stay mounted so unsaved edits survive switching tabs */}
       <div id={`${tabsId}-content-panel`} role='tabpanel' aria-labelledby={`${tabsId}-content`} hidden={tab !== 'content'}>
-        <TagContentForm tag={tag} onDirtyChange={setContentDirty}/>
+        <TagContentForm tag={tag} readOnly={readOnly} onDirtyChange={setContentDirty}/>
       </div>
       <div id={`${tabsId}-variables-panel`} role='tabpanel' aria-labelledby={`${tabsId}-variables`} hidden={tab !== 'variables'} className='space-y-4'>
         <StorageScopeForm scope={scope} onChange={setScope}/>
         {(tab === 'variables' || variablesDirty) ? (
-          <TagVariablesEditor tag={tag} scope={scope} readOnly={tag.locked} onDirtyChange={setVariablesDirty}/>
+          <TagVariablesEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setVariablesDirty}/>
         ) : null}
       </div>
       <div id={`${tabsId}-blobs-panel`} role='tabpanel' aria-labelledby={`${tabsId}-blobs`} hidden={tab !== 'blobs'} className='space-y-4'>
         <StorageScopeForm scope={scope} onChange={setScope}/>
         {(tab === 'blobs' || blobsDirty) ? (
-          <TagBlobsEditor tag={tag} scope={scope} readOnly={tag.locked} onDirtyChange={setBlobsDirty}/>
+          <TagBlobsEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setBlobsDirty}/>
         ) : null}
       </div>
 
@@ -196,7 +199,7 @@ interface Draft {
 }
 
 
-function TagContentForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: boolean) => void}) {
+function TagContentForm({ tag, readOnly, onDirtyChange }: {tag: Tag, readOnly: boolean, onDirtyChange: (dirty: boolean) => void}) {
   const toast = useToast();
   const navigate = useNavigate();
   const patch = usePatchMeTagMutation(tag.id);
@@ -227,7 +230,7 @@ function TagContentForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty
   const invalid = !trimmedName || TAG_NAME_MAX < trimmedName.length || !!contentError;
 
   const save = () => {
-    if (!dirty || invalid || patch.isPending || tag.locked) {
+    if (!dirty || invalid || patch.isPending || readOnly) {
       return;
     }
     const body: {name?: string, content?: string, nsfw?: boolean} = {};
@@ -278,15 +281,17 @@ function TagContentForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty
         <Panel
           title='Tag'
           accent='#3ba55c'
-          actions={(!tag.locked) ? (
+          actions={(!readOnly) ? (
             <button type='button' className='btn btn-ghost btn-sm text-danger hover:text-danger' onClick={() => setConfirmingDelete(true)}>
               <Trash2 aria-hidden className='size-4'/>
               Delete
             </button>
           ) : null}
         >
-          {(tag.locked) ? (
+          {(readOnly) ? (
             <ReadOnlyNote>This tag is locked, so it can’t be edited or deleted right now. Ask in the support server if you think that’s a mistake.</ReadOnlyNote>
+          ) : (tag.locked) ? (
+            <ReadOnlyNote>This tag is locked, you can edit it because you’re staff.</ReadOnlyNote>
           ) : null}
 
           <div className='space-y-5'>
@@ -301,7 +306,7 @@ function TagContentForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty
                   {...props}
                   value={values.name}
                   onChange={(event) => update({name: event.target.value.replace(/[\r\n]/g, '')})}
-                  disabled={tag.locked}
+                  disabled={readOnly}
                   autoComplete='off'
                   spellCheck={false}
                   className='input font-mono'
@@ -321,7 +326,7 @@ function TagContentForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty
                   value={values.content}
                   onChange={(content) => update({content})}
                   onSave={onEditorSave}
-                  readOnly={tag.locked}
+                  readOnly={readOnly}
                   maxLength={TAG_CONTENT_MAX}
                 />
               )}
@@ -332,13 +337,13 @@ function TagContentForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty
               description='NSFW tags only run in age-restricted channels.'
               checked={values.nsfw}
               onChange={(nsfw) => update({nsfw})}
-              disabled={tag.locked}
+              disabled={readOnly}
             />
           </div>
 
           {(patch.isError && !nameError) ? <InlineError>{errorMessage(patch.error, 'Couldn’t save the tag.')}</InlineError> : null}
 
-          {(!tag.locked) ? (
+          {(!readOnly) ? (
             <SaveBar dirty={dirty} pending={patch.isPending} disabled={invalid} onDiscard={() => {
               patch.reset();
               setDraft(null);

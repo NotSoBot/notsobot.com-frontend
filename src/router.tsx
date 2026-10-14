@@ -82,17 +82,19 @@ const routes: Array<RouteObject> = [
               {path: Routes.DASHBOARD_SERVERS, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServersPage')).ServersPage}), handle: {title: 'Servers'} satisfies RouteHandle},
               {path: Routes.DASHBOARD_SERVER, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServerDetailPage')).ServerDetailPage}), handle: {title: 'Server'} satisfies RouteHandle},
               {path: Routes.DASHBOARD_SETTINGS, lazy: async () => ({Component: (await import('@/pages/dashboard/settings/SettingsPage')).SettingsPage}), handle: {title: 'Settings'} satisfies RouteHandle},
-              {path: Routes.DASHBOARD_DATA, lazy: async () => ({Component: (await import('@/pages/dashboard/data/YourDataPage')).YourDataPage}), handle: {title: 'Your Data'} satisfies RouteHandle},
+              {path: Routes.DASHBOARD_REMINDERS, lazy: async () => ({Component: (await import('@/pages/dashboard/reminders/RemindersPage')).RemindersPage}), handle: {title: 'Your Reminders'} satisfies RouteHandle},
+              {path: Routes.DASHBOARD_VOICES, lazy: async () => ({Component: (await import('@/pages/dashboard/voices/VoicesPage')).VoicesPage}), handle: {title: 'Your Voices'} satisfies RouteHandle},
               // NotSoBot staff only (owners and moderators)
               {
                 element: <RequireStaff/>,
                 children: [
-                  {path: '/dashboard/admin', element: <Navigate to={Routes.DASHBOARD_ADMIN_TAGS} replace/>},
+                  {path: '/dashboard/admin', element: <Navigate to={Routes.DASHBOARD_ADMIN_ALL_TAGS} replace/>},
                   {path: Routes.DASHBOARD_ADMIN_ALL_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminAllTagsPage')).AdminAllTagsPage}), handle: {title: 'Tags'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminTagsPage')).AdminTagsPage}), handle: {title: 'Directory Tags'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_USERS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminUsersPage')).AdminUsersPage}), handle: {title: 'Users'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_FLAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminContentFlagsPage')).AdminContentFlagsPage}), handle: {title: 'Content Flags'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_REPORTS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminReportsPage')).AdminReportsPage}), handle: {title: 'Reports'} satisfies RouteHandle},
+                  {path: Routes.DASHBOARD_ADMIN_VOICES, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminVoicesPage')).AdminVoicesPage}), handle: {title: 'Voices'} satisfies RouteHandle},
                 ],
               },
             ],

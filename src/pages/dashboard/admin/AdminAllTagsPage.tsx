@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronUp, Tags } from 'lucide-react';
-import { useState } from 'react';
+import { BookMarked, ChevronDown, ChevronUp, Search, ShieldCheck, Tags } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -7,11 +7,13 @@ import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminTagItem, AdminTagsSortBy } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagsQuery } from '@/lib/api/dashboardQueries';
-import { cn, formatDate, formatDateTime } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { tagLocation, type TagLocation, type TagLocationKind } from '@/pages/dashboard/tags/tagMeta';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, DetailList, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyableValue, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { TagStoragePanel } from './TagStoragePanel';
 
 
 const SORTS: Array<{value: AdminTagsSortBy, label: string}> = [
@@ -43,13 +45,25 @@ export function AdminAllTagsPage() {
   });
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
+  const pagination = {
+    page,
+    count: data?.count ?? 0,
+    pageSize: ADMIN_PAGE_SIZE,
+    onChange: setPage,
+    fetching: isFetching && isPlaceholderData,
+  };
 
   return (
     <>
       <DashboardHeader
         title='Tags'
         description={<>Every tag, personal, server and aliases. A bare id matches the tag, owner or server; <code className='text-code'>user:&lt;id&gt;</code> or <code className='text-code'>id:&lt;tag id&gt;</code> match only that.</>}
-      />
+      >
+        <Link to={Routes.DASHBOARD_ADMIN_TAGS} className='btn btn-secondary'>
+          <ShieldCheck aria-hidden className='size-4'/>
+          Directory
+        </Link>
+      </DashboardHeader>
 
       <div className='mb-4 space-y-3'>
         <SearchInput
@@ -89,10 +103,11 @@ export function AdminAllTagsPage() {
         </EmptyState>
       ) : (
         <>
+          <Pagination {...pagination} className='mt-0 mb-4'/>
           <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
             {items.map((item) => <TagCard key={item.tag.id} item={item} onSearch={(value) => update({q: value})}/>)}
           </ul>
-          <Pagination page={page} count={data?.count ?? 0} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
+          <Pagination {...pagination}/>
         </>
       )}
     </>
@@ -111,14 +126,24 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
   // aliases have no content of their own, they show their source's
   const content = (reference) ? (reference.content ?? '') : (tag.content ?? '');
   const long = CONTENT_PREVIEW_LINES < content.split('\n').length || CONTENT_PREVIEW_CHARS < content.length;
-  const personal = !!ownerId && tag.server_id === ownerId;
+  const location = tagLocation({server_id: tag.server_id, guild_id: tag.guild_id ?? null}, (ownerId) ? {id: ownerId, channel_id: item.user?.channel_id ?? null} : null);
+  const directoryLink = (directory) ? (
+    <Link
+      to={`${Routes.DASHBOARD_ADMIN_TAGS}?${new URLSearchParams({q: `id:${tag.id}`, status: 'all'}).toString()}`}
+      className='inline-flex items-center gap-1.5 hover:opacity-80'
+      title={`Listed in the directory${(directory.title) ? ` as “${directory.title}”` : ''}`}
+    >
+      {(location.kind === 'personal') ? null : <Chip tone='success'>Listed</Chip>}
+      <VerificationBadge verified={directory.verified} hideUnverified/>
+    </Link>
+  ) : null;
 
   return (
-    <li className='card p-4'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='min-w-0 flex-1'>
+    <li className='card overflow-hidden'>
+      <div className='flex flex-col items-start gap-2 px-4 pt-4 pb-3 sm:flex-row sm:justify-between sm:gap-4'>
+        <div className='w-full min-w-0 sm:flex-1'>
           <div className='flex flex-wrap items-center gap-2'>
-            <h2 className='truncate font-mono text-base font-semibold text-code'>{tag.name}</h2>
+            <h2 className='min-w-0 truncate font-mono text-base font-semibold text-code'>{tag.name}</h2>
             {(tag.nsfw) ? <NsfwBadge/> : null}
             {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
             {(tag.is_command) ? <Chip tone='brand'>Command</Chip> : null}
@@ -127,41 +152,36 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
                 <Chip>Alias of {reference.name}</Chip>
               </button>
             ) : null}
-            {(directory) ? (
-              <Link
-                to={`${Routes.DASHBOARD_ADMIN_TAGS}?${new URLSearchParams({q: `id:${tag.id}`, status: 'all'}).toString()}`}
-                className='inline-flex items-center gap-1.5 hover:opacity-80'
-                title={`Listed in the directory${(directory.title) ? ` as “${directory.title}”` : ''}`}
-              >
-                <Chip tone='success'>Directory</Chip>
-                <VerificationBadge verified={directory.verified} hideUnverified/>
-              </Link>
-            ) : null}
+            {(location.kind === 'personal') ? null : directoryLink}
+          </div>
+          <div className='mt-1 flex items-center gap-1.5 text-xs whitespace-nowrap text-subtle'>
+            Tag id
+            <CopyableValue value={tag.id} truncate={0}/>
           </div>
         </div>
-        {(ownerId) ? (
-          <button type='button' className='btn btn-ghost btn-sm' onClick={() => onSearch(`user:${ownerId}`)}>
-            All tags by this user
-          </button>
-        ) : null}
+        <LocationChip location={location} extra={(location.kind === 'personal') ? directoryLink : null}/>
       </div>
 
-      <div className='mt-3 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]'>
-        <UserCell user={item.user} fallbackId={ownerId}/>
-        <DetailList
-          items={[
-            ['Tag id', <span className='font-mono'>{tag.id}</span>],
-            ['Server', (personal) ? 'Personal' : (tag.server_id) ? <span className='font-mono'>{tag.server_id}</span> : '—'],
-            ['Uses', (tag.uses ?? 0).toLocaleString()],
-            ['Created', <span title={formatDateTime(tag.created)}>{formatDate(tag.created)}</span>],
-            (tag.edited) ? ['Edited', formatDate(tag.edited)] : null,
-            (tag.last_used) ? ['Last used', <span title={formatDateTime(tag.last_used)}>{formatDate(tag.last_used)}</span>] : null,
-          ]}
-        />
+      <div className='flex flex-wrap items-center gap-x-6 gap-y-3 border-y border-line bg-surface-2 px-4 py-2.5'>
+        <div className='flex min-w-0 items-center gap-1'>
+          <UserCell user={item.user} fallbackId={ownerId} size='sm'/>
+          {(ownerId) ? (
+            <button type='button' className='btn btn-ghost btn-sm shrink-0' title='Show every tag by this user' onClick={() => onSearch(`user:${ownerId}`)}>
+              <Search className='size-3.5'/>
+              All their tags
+            </button>
+          ) : null}
+        </div>
+        <dl className='flex flex-wrap gap-x-5 gap-y-1 text-sm sm:ml-auto'>
+          <Stat label='Uses'>{(tag.uses ?? 0).toLocaleString()}</Stat>
+          <Stat label='Created'><ExactDate value={tag.created}/></Stat>
+          {(tag.edited) ? <Stat label='Edited'><ExactDate value={tag.edited}/></Stat> : null}
+          {(tag.last_used) ? <Stat label='Last used'><ExactDate value={tag.last_used}/></Stat> : null}
+        </dl>
       </div>
 
-      <div className='mt-3'>
-        <div className='mb-1.5 flex items-center justify-between gap-2'>
+      <div className='px-4 pt-3 pb-4'>
+        <div className='mb-1.5 flex min-h-8 items-center justify-between gap-2'>
           <h3 className='section-label'>
             {(reference) ? 'Source content' : 'Content'}{' '}
             <span className='normal-case tracking-normal text-subtle'>({content.length.toLocaleString()} chars)</span>
@@ -183,8 +203,42 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
         >
           {content || <span className='text-subtle italic'>(empty)</span>}
         </pre>
+        <TagStoragePanel tagId={tag.id} className='mt-3'/>
       </div>
     </li>
+  );
+}
+
+
+// staff wording for where a tag lives; directory tags live under their owner's id, so that id isn't shown
+const LOCATION_LABELS: Record<TagLocationKind, string> = {
+  server: 'Guild',
+  dm: 'DM',
+  group_dm: 'Group DM',
+  personal: 'Directory',
+  global: 'Global',
+};
+
+function LocationChip({ location, extra }: {location: TagLocation, extra?: ReactNode}) {
+  const Icon = (location.kind === 'personal') ? BookMarked : location.icon;
+  const id = (location.kind === 'personal') ? null : location.id;
+  return (
+    <span className='inline-flex max-w-full items-center gap-1.5 rounded-md border border-line-strong bg-surface-2 px-2 py-1 text-xs'>
+      <Icon aria-hidden className='size-3.5 shrink-0 text-muted'/>
+      <span className='shrink-0 font-medium text-fg'>{LOCATION_LABELS[location.kind]}</span>
+      {(id) ? <CopyableValue value={id} truncate={0} className='text-subtle'/> : null}
+      {extra}
+    </span>
+  );
+}
+
+
+function Stat({ label, children }: {label: string, children: ReactNode}) {
+  return (
+    <div className='flex items-baseline gap-1.5'>
+      <dt className='text-xs text-subtle'>{label}</dt>
+      <dd className='text-fg tabular-nums'>{children}</dd>
+    </div>
   );
 }
 

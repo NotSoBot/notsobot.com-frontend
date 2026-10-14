@@ -261,7 +261,11 @@ export const ApiErrorCodes = {
   UNKNOWN_TAG_ASSET: 10019,
   UNKNOWN_SERVER: 10012,
   UNKNOWN_REPORT: 10017,
+  UNKNOWN_REMINDER: 10007,
+  UNKNOWN_VOICE: 10003,
   MISSING_ACCESS: 20004,
+  TEXT_BLOCKED_GUIDELINES: 40030,
+  SAFETY_SCAN_FAILED: 60004,
   INVALID_FORM_BODY: 50001,
   TAG_LOCKED: 50011,
   TAG_NAME_TAKEN: 50015,
@@ -346,6 +350,57 @@ export interface TagPatch {
   name?: string,
   content?: string,
   nsfw?: boolean,
+}
+
+
+// `VoiceCloneTypes`: where the cloned voice lives
+export const VoiceCloneTypes = {
+  ELEVENLABS: 0,
+} as const;
+
+// a reminder made with the bot's `reminder` commands, read-only on the dashboard
+export interface Reminder {
+  // the channel it gets sent in, null when it goes to the user's dms
+  channel_id: string | null,
+  content: string,
+  guild_id: string | null,
+  id: string,
+  is_all_day: boolean,
+  // the message that created it (for the jump link), null when it wasn't made from a message
+  message_id: string | null,
+  // the number the bot's `reminder delete <position>` uses
+  position: number,
+  timestamp_end: string | null,
+  timestamp_start: string,
+}
+
+export interface RemindersPage {
+  count: number,
+  items: Array<Reminder>,
+}
+
+// `content` max 512; `move_to_dms` moves a server reminder to the owner's dms (it can't be moved back from here)
+export interface ReminderPatch {
+  content?: string,
+  move_to_dms?: boolean,
+}
+
+// a voice cloned with the bot's `voice clone` command
+export interface Voice {
+  created: ApiTimestamp,
+  id: string,
+  name: string,
+  platform_type: number,
+}
+
+export interface VoicesPage {
+  count: number,
+  items: Array<Voice>,
+}
+
+// only the name can be changed from the dashboard (max 128)
+export interface VoicePatch {
+  name: string,
 }
 
 
@@ -589,12 +644,38 @@ export interface AdminTagItem {
   // the tag's directory listing, if it has one
   directory: {title: string, verified: number} | null,
   tag: AdminDirectoryTag,
-  user: AdminUserRef | null,
+  // `channel_id` is the owner's DM channel with the bot, so a DM tag can be told apart from a group DM one
+  user: (AdminUserRef & {channel_id: string | null}) | null,
 }
 
 export interface AdminTagsPage {
   count: number,
   items: Array<AdminTagItem>,
+}
+
+// a tag's variables/blobs across every storage, read-only; `counts` is per storage type over the whole tag
+export interface AdminTagVariable {
+  name: string,
+  storage_id: string,
+  storage_type: TagStorageType,
+  value: string,
+}
+
+export interface AdminTagBlob {
+  // bytes, the whole blob
+  size: number,
+  storage_id: string,
+  storage_type: TagStorageType,
+  // only the first 16kb are sent
+  truncated: boolean,
+  // base64
+  value: string,
+}
+
+export interface AdminTagStoragePage<T> {
+  count: number,
+  counts: Partial<Record<`${TagStorageType}`, number>>,
+  items: Array<T>,
 }
 export type AdminTagDirectorySortBy = 'newest' | 'oldest' | 'uses' | 'servers' | 'name' | 'title';
 
@@ -655,7 +736,7 @@ export interface ContentFlagPatch {
   notes?: string | null,
 }
 
-// what users send with the bot's `report bug|user|server` command
+// what users send with the bot's `/report` command
 export const ReportTypes = {
   BUG: 0,
   USER: 1,
@@ -696,4 +777,16 @@ export interface ReportsPage {
 export interface ReportPatch {
   status?: ReportStatus,
   notes?: string | null,
+}
+
+
+// `/admin/voices`: every cloned voice, with the platform's own id and the owner
+export interface AdminVoice extends Voice {
+  platform_id: string,
+  user: AdminUserRef | null,
+}
+
+export interface AdminVoicesPage {
+  count: number,
+  items: Array<AdminVoice>,
 }

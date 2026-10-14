@@ -60,6 +60,15 @@ export function formatDateTime(value: string | number): string {
 }
 
 
+// down to the second, with the weekday and time zone; for hover titles
+export function formatExactDateTime(value: string | number): string {
+  return formatDate(value, {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short',
+  });
+}
+
+
 const compactFormatter = new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1});
 
 export function formatCompact(value: number): string {

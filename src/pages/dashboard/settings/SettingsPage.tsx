@@ -23,6 +23,7 @@ import {
   UPLOAD_TYPE_CHOICES,
 } from './settingsChoices';
 import { useDraft } from './useDraft';
+import { YourDataSection } from './YourDataSection';
 import { DEFAULT_VANITY, describeVanity, exampleVanityLink, vanityError } from './vanity';
 
 
@@ -73,6 +74,7 @@ export function SettingsPage() {
           <VoiceSection settings={settings} onDirtyChange={onDirtyChange}/>
         </div>
       )}
+      <YourDataSection/>
       <UnsavedChangesGuard when={0 < dirtySections.size}/>
     </>
   );
