@@ -173,6 +173,7 @@ export const TagDirectorySortByFilters = {
   VERIFIED: 2,
   USES: 3,
   NAME: 4,
+  SERVERS: 5,
 } as const;
 
 export type TagDirectorySortBy = typeof TagDirectorySortByFilters[keyof typeof TagDirectorySortByFilters];
@@ -207,6 +208,9 @@ export interface TagDirectoryAsset {
   urls: {cdn: string},
 }
 
+// `TagAssets.to_dict()`, same shape as a directory listing's assets
+export type TagAsset = TagDirectoryAsset;
+
 // `Tag.to_dict(directory_view=True)` — content/guild_id are always blanked out
 export interface DirectoryTag {
   assets: Array<unknown>,
@@ -230,6 +234,8 @@ export interface DirectoryTag {
 
 export interface TagDirectoryItem {
   assets: Array<TagDirectoryAsset>,
+  // the owner shows `tag.content` publicly, it's '' otherwise
+  content_public: boolean,
   created: string,
   description: string,
   edited: string | null,
@@ -252,6 +258,7 @@ export interface TagDirectoryPage {
 export const ApiErrorCodes = {
   UNKNOWN_TAG: 10009,
   UNKNOWN_TAG_DIRECTORY_ITEM: 10011,
+  UNKNOWN_TAG_ASSET: 10019,
   UNKNOWN_SERVER: 10012,
   UNKNOWN_REPORT: 10017,
   MISSING_ACCESS: 20004,
@@ -261,6 +268,10 @@ export const ApiErrorCodes = {
   TAG_DIRECTORY_CANNOT_PUBLISH_ALIAS: 50016,
   TAG_DIRECTORY_PENDING_VERIFICATION: 50017,
   TAG_DIRECTORY_NAME_TAKEN: 50018,
+  TAG_DIRECTORY_ALREADY_PENDING: 50019,
+  TAG_DIRECTORY_ALREADY_VERIFIED: 50020,
+  TAG_DIRECTORY_ALREADY_UNVERIFIED: 50021,
+  TAG_DIRECTORY_CANNOT_UNVERIFY_VERIFIED: 50022,
   MAX_TAG_DIRECTORY: 30013,
   // the session's Discord grant was revoked/expired (not the site session itself)
   DISCORD_OAUTH_ERROR: 60001,
@@ -471,6 +482,7 @@ export type GuildListKind = 'allowlist' | 'blocklist';
 export interface TagDirectoryListingInput {
   title?: string,
   description?: string,
+  content_public?: boolean,
 }
 
 export const TAG_DIRECTORY_TITLE_MAX = 128;
@@ -497,7 +509,8 @@ export interface AdminUserRef {
 
 // `Tag.to_dict()` with content, as the admin directory returns it
 export interface AdminDirectoryTag {
-  assets?: Array<unknown>,
+  // files staff archived for the tag (`TagAssets`), served from `cdn.nsb.gg/assets/tags/...`
+  assets?: Array<TagAsset>,
   content: string,
   created: ApiTimestamp,
   edited?: ApiTimestamp | null,
@@ -568,8 +581,22 @@ export interface AdminUsersPage {
   items: Array<AdminUserEntry>,
 }
 
-export type AdminUsersSortBy = 'flags' | 'newest' | 'username';
-export type AdminTagDirectorySortBy = 'newest' | 'oldest' | 'uses' | 'name' | 'title';
+export type AdminUsersSortBy = 'flags' | 'last_flagged' | 'newest' | 'username';
+export type AdminTagsSortBy = 'newest' | 'oldest' | 'uses' | 'name' | 'last_used';
+
+// `GET /admin/tags`, every tag (personal, server and aliases), not just directory listings
+export interface AdminTagItem {
+  // the tag's directory listing, if it has one
+  directory: {title: string, verified: number} | null,
+  tag: AdminDirectoryTag,
+  user: AdminUserRef | null,
+}
+
+export interface AdminTagsPage {
+  count: number,
+  items: Array<AdminTagItem>,
+}
+export type AdminTagDirectorySortBy = 'newest' | 'oldest' | 'uses' | 'servers' | 'name' | 'title';
 
 export const ContentFlagStatuses = {
   PENDING: 0,

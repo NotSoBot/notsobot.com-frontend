@@ -1,5 +1,5 @@
-import { ArrowUpRight, BookOpen, Info, Upload } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { ArrowUpRight, BookOpen, Info, ShieldCheck, Upload, X } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 
 import { useAuth } from '@/auth';
@@ -14,22 +14,30 @@ import {
 } from '@/lib/api';
 import {
   errorMessage,
+  useCancelMeTagDirectoryVerificationMutation,
   useMeGuildsQuery,
   useMeTagDirectoryQuery,
   usePatchMeTagDirectoryMutation,
   usePublishMeTagDirectoryMutation,
+  useRequestMeTagDirectoryVerificationMutation,
 } from '@/lib/api/dashboardQueries';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { tagDirectoryItemPath, VerificationBadge, verificationInfo } from '@/pages/tags/tagDirectory';
 
-import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar } from '../ui';
+import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar, Toggle } from '../ui';
 import { describeTagLocation, tagLocation } from './tagMeta';
 
 
 // The "Directory" tab of the tag editor: publish the tag, or edit its listing once it's published.
-// Only the title and description are editable here; images aren't supported yet.
+// The title, description and whether the content is shown publicly are editable here; images aren't supported yet.
 export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: boolean) => void}) {
   const { data: directory, isPending, isError, error, refetch, isRefetching } = useMeTagDirectoryQuery(tag.id);
+  // requesting verification would freeze unsaved listing edits, so the request waits until they're saved or discarded
+  const [ listingDirty, setListingDirty ] = useState(false);
+  const onListingDirtyChange = useCallback((dirty: boolean) => {
+    setListingDirty(dirty);
+    onDirtyChange(dirty);
+  }, [onDirtyChange]);
 
   if (isPending) {
     return <PanelSkeleton rows={3}/>;
@@ -40,15 +48,22 @@ export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChan
   if (!directory) {
     return <PublishForm tag={tag} onDirtyChange={onDirtyChange}/>;
   }
-  return <ListingForm key={directory.id} tag={tag} directory={directory} onDirtyChange={onDirtyChange}/>;
+  return (
+    <div className='space-y-4'>
+      <ListingForm key={directory.id} tag={tag} directory={directory} onDirtyChange={onListingDirtyChange}/>
+      <VerificationPanel tag={tag} directory={directory} listingDirty={listingDirty}/>
+    </div>
+  );
 }
 
 
-function ListingFields({ title, description, onTitle, onDescription, disabled = false }: {
+function ListingFields({ title, description, contentPublic, onTitle, onDescription, onContentPublic, disabled = false }: {
   title: string,
   description: string,
+  contentPublic: boolean,
   onTitle: (value: string) => void,
   onDescription: (value: string) => void,
+  onContentPublic: (value: boolean) => void,
   disabled?: boolean,
 }) {
   return (
@@ -85,6 +100,13 @@ function ListingFields({ title, description, onTitle, onDescription, disabled = 
           />
         )}
       </Field>
+      <Toggle
+        label='Show content publicly'
+        description='Anyone browsing the directory can read the tag’s content. Hidden by default.'
+        checked={contentPublic}
+        disabled={disabled}
+        onChange={onContentPublic}
+      />
     </div>
   );
 }
@@ -97,9 +119,10 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
   const publish = usePublishMeTagDirectoryMutation(tag.id);
   const [ title, setTitle ] = useState('');
   const [ description, setDescription ] = useState('');
+  const [ contentPublic, setContentPublic ] = useState(false);
   const [ confirming, setConfirming ] = useState(false);
 
-  const dirty = !!(title || description);
+  const dirty = !!(title || description || contentPublic);
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
@@ -115,7 +138,7 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
   const stopsBeing = (location.kind === 'server') ? 'a tag in that server' : (location.kind === 'dm') ? 'a tag in your DM' : 'a tag in that group DM';
 
   const doPublish = () => {
-    publish.mutate({title, description}, {
+    publish.mutate({title, description, content_public: contentPublic}, {
       onSuccess: () => {
         setConfirming(false);
         onDirtyChange(false);
@@ -146,8 +169,8 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
           description='List this tag publicly so anyone can find it and add it to their own servers.'
         >
           <ul className='mb-5 space-y-1.5 text-sm text-muted'>
-            <li className='flex gap-2'><BookOpen aria-hidden className='mt-0.5 size-4 shrink-0 text-subtle'/>The listing shows the tag’s name, the title and description below, its uses and you as the creator. The tag’s content itself isn’t shown.</li>
-            <li className='flex gap-2'><Info aria-hidden className='mt-0.5 size-4 shrink-0 text-subtle'/>Listings start unverified. NotSoBot’s team can verify safe tags, and a listing can’t be edited while it’s being reviewed.</li>
+            <li className='flex gap-2'><BookOpen aria-hidden className='mt-0.5 size-4 shrink-0 text-subtle'/>The listing shows the tag’s name, the title and description below, its uses and you as the creator. The tag’s content itself is only shown if you turn on “Show content publicly”.</li>
+            <li className='flex gap-2'><Info aria-hidden className='mt-0.5 size-4 shrink-0 text-subtle'/>Listings start unverified. Once it’s published you can request verification from NotSoBot’s team, which locks the tag while it’s reviewed and after it’s verified.</li>
           </ul>
 
           {(isAlias) ? (
@@ -161,7 +184,7 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
             </p>
           ) : null}
 
-          <ListingFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} disabled={isAlias}/>
+          <ListingFields title={title} description={description} contentPublic={contentPublic} onTitle={setTitle} onDescription={setDescription} onContentPublic={setContentPublic} disabled={isAlias}/>
 
           {(publish.isError && !confirming) ? <InlineError>{errorMessage(publish.error, 'Couldn’t publish this tag.')}</InlineError> : null}
 
@@ -203,9 +226,10 @@ function ListingForm({ tag, directory, onDirtyChange }: {
   const patch = usePatchMeTagDirectoryMutation(tag.id);
   const [ title, setTitle ] = useState(directory.title);
   const [ description, setDescription ] = useState(directory.description);
+  const [ contentPublic, setContentPublic ] = useState(directory.content_public);
 
   const pending = directory.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
-  const dirty = !pending && (title !== directory.title || description !== directory.description);
+  const dirty = !pending && (title !== directory.title || description !== directory.description || contentPublic !== directory.content_public);
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
@@ -214,6 +238,7 @@ function ListingForm({ tag, directory, onDirtyChange }: {
   const discard = () => {
     setTitle(directory.title);
     setDescription(directory.description);
+    setContentPublic(directory.content_public);
     patch.reset();
   };
 
@@ -222,10 +247,11 @@ function ListingForm({ tag, directory, onDirtyChange }: {
     if (!dirty || patch.isPending) {
       return;
     }
-    patch.mutate({title, description}, {
+    patch.mutate({title, description, content_public: contentPublic}, {
       onSuccess: (updated) => {
         setTitle(updated.title);
         setDescription(updated.description);
+        setContentPublic(updated.content_public);
         onDirtyChange(false);
         toast('Directory listing saved.');
       },
@@ -253,7 +279,7 @@ function ListingForm({ tag, directory, onDirtyChange }: {
           <span className='tabular-nums'>{directory.server_count.toLocaleString()} servers</span>
         </div>
 
-        <ListingFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} disabled={pending}/>
+        <ListingFields title={title} description={description} contentPublic={contentPublic} onTitle={setTitle} onDescription={setDescription} onContentPublic={setContentPublic} disabled={pending}/>
 
         {(patch.isError) ? <InlineError>{errorMessage(patch.error, 'Couldn’t save the listing.')}</InlineError> : null}
         {(!pending) ? (
@@ -267,5 +293,101 @@ function ListingForm({ tag, directory, onDirtyChange }: {
         ) : null}
       </Panel>
     </form>
+  );
+}
+
+
+// what requesting verification means, shown before confirming (the bot's `/tag directory verify` says the same)
+function VerificationWarning() {
+  return (
+    <ul className='list-disc space-y-1.5 pl-5'>
+      <li>Requesting verification locks the tag’s content, so it can’t be edited while the review is pending or after it’s verified.</li>
+      <li>If it’s verified, NotSoBot staff may change its content to make it more efficient, and may move its media onto NotSoBot’s own servers.</li>
+      <li>You can cancel the request while it’s still pending.</li>
+    </ul>
+  );
+}
+
+
+// request verification for an unverified listing, or cancel a pending request; nothing to do once it's verified
+function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, directory: TagDirectoryItem, listingDirty: boolean}) {
+  const toast = useToast();
+  const request = useRequestMeTagDirectoryVerificationMutation(tag.id);
+  const cancel = useCancelMeTagDirectoryVerificationMutation(tag.id);
+  const [ confirming, setConfirming ] = useState(false);
+
+  if (directory.verified === TagDirectoryVerificationStates.VERIFIED) {
+    return null;
+  }
+  const pending = directory.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
+
+  const doRequest = () => {
+    request.mutate(undefined, {
+      onSuccess: () => {
+        setConfirming(false);
+        toast(`Requested verification for “${tag.name}”.`);
+      },
+    });
+  };
+
+  const doCancel = () => {
+    cancel.mutate(undefined, {
+      onSuccess: () => toast(`Canceled the verification request for “${tag.name}”.`),
+    });
+  };
+
+  return (
+    <>
+      <Panel
+        title='Verification'
+        accent='#3ba55c'
+        description={(pending) ?
+          'Your verification request is waiting for NotSoBot’s team. The tag’s content stays locked until it’s reviewed or you cancel the request.' :
+          'Ask NotSoBot’s team to review this tag. Verified tags are marked as safe to run on the directory.'}
+        actions={(pending) ? (
+          <button type='button' className='btn btn-secondary btn-sm' disabled={cancel.isPending} onClick={doCancel}>
+            <X className='size-3.5'/>
+            {(cancel.isPending) ? 'Canceling…' : 'Cancel request'}
+          </button>
+        ) : (
+          <button
+            type='button'
+            className='btn btn-primary btn-sm'
+            disabled={listingDirty}
+            title={(listingDirty) ? 'Save or discard your listing changes first.' : undefined}
+            onClick={() => setConfirming(true)}
+          >
+            <ShieldCheck className='size-3.5'/>
+            Request verification
+          </button>
+        )}
+      >
+        <div className='text-sm text-muted'>
+          {(pending) ? (
+            <p>Once it’s verified, NotSoBot staff may change its content to make it more efficient and may move its media onto NotSoBot’s own servers.</p>
+          ) : (
+            <VerificationWarning/>
+          )}
+        </div>
+        {(listingDirty && !pending) ? <p className='mt-3 text-sm text-subtle'>Save or discard your listing changes before requesting verification.</p> : null}
+        {(cancel.isError) ? <InlineError>{errorMessage(cancel.error, 'Couldn’t cancel the request.')}</InlineError> : null}
+      </Panel>
+
+      {(confirming) ? (
+        <ConfirmDialog
+          tone='primary'
+          title={`Request verification for “${tag.name}”?`}
+          description={<VerificationWarning/>}
+          confirmLabel='Request verification'
+          pending={request.isPending}
+          error={(request.isError) ? errorMessage(request.error, 'Couldn’t request verification.') : undefined}
+          onConfirm={doRequest}
+          onClose={() => {
+            setConfirming(false);
+            request.reset();
+          }}
+        />
+      ) : null}
+    </>
   );
 }

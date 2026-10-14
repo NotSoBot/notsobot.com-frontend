@@ -24,6 +24,7 @@ import { AddTagButton, NsfwBadge, tagDirectoryItemPath, VerificationBadge } from
 // URL value -> API value; defaults are left out of the URL
 const SORT_OPTIONS: Array<{param: string, label: string, value: TagDirectorySortBy}> = [
   {param: 'uses', label: 'Most used', value: TagDirectorySortByFilters.USES},
+  {param: 'servers', label: 'Most servers', value: TagDirectorySortByFilters.SERVERS},
   {param: 'verified', label: 'Verified first', value: TagDirectorySortByFilters.VERIFIED},
   {param: 'newest', label: 'Newest', value: TagDirectorySortByFilters.NEWEST},
   {param: 'oldest', label: 'Oldest', value: TagDirectorySortByFilters.OLDEST},
@@ -133,7 +134,7 @@ export function TagDirectoryPage() {
           size='lg'
           value={query}
           onValueChange={(value) => updateParams({q: value})}
-          placeholder='Search by title, name or description...'
+          placeholder='Search by title, name, description or user id...'
           aria-label='Search tags'
         />
 

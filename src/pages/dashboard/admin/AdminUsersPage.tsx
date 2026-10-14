@@ -1,9 +1,10 @@
-import { Ban, Pencil, ShieldCheck, Users } from 'lucide-react';
+import { Ban, Pencil, ShieldCheck, Tags, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { isOwner, useAuth } from '@/auth';
 import { SearchInput } from '@/components/ui/SearchInput';
+import { Segmented } from '@/components/ui/Segmented';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { UserFlags, type AdminUserEntry, type AdminUsersSortBy } from '@/lib/api';
@@ -12,16 +13,25 @@ import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 import { premiumLabel } from '../premium';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { adminTagsPath, Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { BlockUserDialog } from './BlockUserDialog';
 import { EditUserDialog } from './EditUserDialog';
 
 
 const SORTS: Array<{value: AdminUsersSortBy, label: string}> = [
   {value: 'flags', label: 'Most flagged'},
+  {value: 'last_flagged', label: 'Last flagged'},
   {value: 'newest', label: 'Newest'},
   {value: 'username', label: 'Username'},
 ];
+
+// `flagged_within` in hours, by how long ago the user's last content flag was
+const FLAGGED_WITHIN = [
+  {value: 'any', label: 'Any time', hours: null},
+  {value: '1d', label: '24h', hours: 24},
+  {value: '7d', label: '7 days', hours: 24 * 7},
+  {value: '30d', label: '30 days', hours: 24 * 30},
+] as const;
 
 
 export function adminFlagsPath(params: Record<string, string>): string {
@@ -33,6 +43,7 @@ export function AdminUsersPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'flags';
   const onlyFlagged = searchParams.get('flagged') === '1';
+  const flaggedWithin = FLAGGED_WITHIN.find((item) => item.value === searchParams.get('within')) ?? FLAGGED_WITHIN[0];
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
 
@@ -40,6 +51,7 @@ export function AdminUsersPage() {
     query: debouncedQuery,
     sortBy,
     onlyFlagged,
+    flaggedWithin: flaggedWithin.hours,
     page,
   });
   const items = data?.items ?? [];
@@ -49,16 +61,26 @@ export function AdminUsersPage() {
     <>
       <DashboardHeader title='Users' description='Everyone NotSoBot knows about, with their content flag history.'/>
 
-      <div className='mb-4 flex flex-col gap-3 lg:flex-row lg:items-center'>
+      <div className='mb-4 space-y-3'>
         <SearchInput
-          className='min-w-0 flex-1'
           value={query}
           onValueChange={(value) => update({q: value})}
           placeholder='Search by username or id...'
           aria-label='Search users'
         />
         <div className='flex flex-wrap items-center gap-3'>
-          <label className='flex items-center gap-2 text-sm text-muted'>
+          <div className='flex max-w-full items-center gap-2 text-sm text-muted'>
+            <span aria-hidden>Last flagged</span>
+            <div className='overflow-x-auto'>
+              <Segmented
+                label='Last flagged within'
+                value={flaggedWithin.value}
+                options={FLAGGED_WITHIN.map(({ value, label }) => ({value, label}))}
+                onChange={(value) => update({within: (value === 'any') ? null : value})}
+              />
+            </div>
+          </div>
+          <label className='flex items-center gap-2 text-sm text-muted sm:ml-auto'>
             Sort
             <select className='input w-40' value={sortBy} onChange={(event) => update({sort: (event.target.value === 'flags') ? null : event.target.value})}>
               {SORTS.map((sort) => <option key={sort.value} value={sort.value}>{sort.label}</option>)}
@@ -76,7 +98,7 @@ export function AdminUsersPage() {
         <ErrorPanel title='Couldn’t load users' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
       ) : (!items.length) ? (
         <EmptyState icon={<Users className='size-10'/>} title='No users found'>
-          {(debouncedQuery || onlyFlagged) ? 'Try a different search or filter.' : null}
+          {(debouncedQuery || onlyFlagged || flaggedWithin.hours) ? 'Try a different search or filter.' : null}
         </EmptyState>
       ) : (
         <>
@@ -127,26 +149,28 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
           {(user.premium_type) ? <Chip>{premiumLabel(user.premium_type)}</Chip> : null}
         </div>
         {(user.blocked && user.blocked_reason) ? <p className='mt-1 max-w-56 text-xs break-words text-subtle'>{user.blocked_reason}</p> : null}
-        {(canBlock || viewerIsOwner) ? (
-          <div className='-ml-3 flex flex-wrap gap-1 [div:not(:empty)~&]:mt-2'>
-            {(canBlock) ? (
-              <button
-                type='button'
-                className={cn('btn btn-sm', (user.blocked) ? 'btn-secondary' : 'btn-ghost text-danger')}
-                onClick={() => setBlocking(true)}
-              >
-                {(user.blocked) ? <ShieldCheck className='size-4'/> : <Ban className='size-4'/>}
-                {(user.blocked) ? 'Unblock' : 'Block'}
-              </button>
-            ) : null}
-            {(viewerIsOwner) ? (
-              <button type='button' className='btn btn-sm btn-ghost' onClick={() => setEditing(true)}>
-                <Pencil className='size-4'/>
-                Edit
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        <div className='-ml-3 flex flex-wrap gap-1 [div:not(:empty)~&]:mt-2'>
+          {(canBlock) ? (
+            <button
+              type='button'
+              className={cn('btn btn-sm', (user.blocked) ? 'btn-secondary' : 'btn-ghost text-danger')}
+              onClick={() => setBlocking(true)}
+            >
+              {(user.blocked) ? <ShieldCheck className='size-4'/> : <Ban className='size-4'/>}
+              {(user.blocked) ? 'Unblock' : 'Block'}
+            </button>
+          ) : null}
+          {(viewerIsOwner) ? (
+            <button type='button' className='btn btn-sm btn-ghost' onClick={() => setEditing(true)}>
+              <Pencil className='size-4'/>
+              Edit
+            </button>
+          ) : null}
+          <Link to={adminTagsPath(`user:${user.id}`)} className='btn btn-sm btn-ghost' title='Show this user’s tags'>
+            <Tags className='size-4'/>
+            Tags
+          </Link>
+        </div>
         {(blocking) ? (
           <BlockUserDialog user={user} blocked={user.blocked} blockedReason={user.blocked_reason} onClose={() => setBlocking(false)}/>
         ) : null}

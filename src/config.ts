@@ -35,6 +35,7 @@ export const Routes = Object.freeze({
   DASHBOARD_SERVER: '/dashboard/servers/:guildId',
   DASHBOARD_SETTINGS: '/dashboard/settings',
   DASHBOARD_DATA: '/dashboard/data',
+  DASHBOARD_ADMIN_ALL_TAGS: '/dashboard/admin/all-tags',
   DASHBOARD_ADMIN_TAGS: '/dashboard/admin/tags',
   DASHBOARD_ADMIN_USERS: '/dashboard/admin/users',
   DASHBOARD_ADMIN_FLAGS: '/dashboard/admin/flags',

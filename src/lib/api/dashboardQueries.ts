@@ -15,6 +15,7 @@ import type {
   AdminUserPatch,
   AdminUsersPage,
   AdminTagDirectorySortBy,
+  AdminTagsSortBy,
   AdminUsersSortBy,
   ContentFlag,
   ContentFlagPatch,
@@ -94,6 +95,14 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
         return 'Aliases can’t be published. Publish the tag it points to instead.';
       case ApiErrorCodes.TAG_DIRECTORY_PENDING_VERIFICATION:
         return 'This listing is being reviewed for verification, so it can’t be edited right now.';
+      case ApiErrorCodes.TAG_DIRECTORY_ALREADY_PENDING:
+        return 'Verification has already been requested for this listing.';
+      case ApiErrorCodes.TAG_DIRECTORY_ALREADY_VERIFIED:
+        return 'This listing is already verified.';
+      case ApiErrorCodes.TAG_DIRECTORY_ALREADY_UNVERIFIED:
+        return 'This listing doesn’t have a pending verification request.';
+      case ApiErrorCodes.TAG_DIRECTORY_CANNOT_UNVERIFY_VERIFIED:
+        return 'This listing has already been verified, so the request can’t be canceled.';
       case ApiErrorCodes.MAX_TAG_DIRECTORY:
         return 'You’ve reached the limit of tags you can publish.';
     }
@@ -253,6 +262,30 @@ export function usePatchMeTagDirectoryMutation(tagId: string) {
       void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
     },
   });
+}
+
+
+// requesting (or cancelling) verification locks (or unlocks) the tag, so the tag and the lists change too
+function useMeTagDirectoryVerificationMutation(tagId: string, mutationFn: () => Promise<TagDirectoryItem>) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (directory: TagDirectoryItem) => {
+      queryClient.setQueryData(queryKeys.meTagDirectory(token, tagId), directory);
+      void queryClient.invalidateQueries({queryKey: queryKeys.meTag(token, tagId), exact: true});
+      void queryClient.invalidateQueries({queryKey: [...queryKeys.meTags(token), 'list']});
+      void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
+export function useRequestMeTagDirectoryVerificationMutation(tagId: string) {
+  return useMeTagDirectoryVerificationMutation(tagId, () => api.requestMeTagDirectoryVerification(tagId));
+}
+
+export function useCancelMeTagDirectoryVerificationMutation(tagId: string) {
+  return useMeTagDirectoryVerificationMutation(tagId, () => api.cancelMeTagDirectoryVerification(tagId));
 }
 
 
@@ -463,6 +496,31 @@ export function useDeleteMeMutation() {
 export const ADMIN_PAGE_SIZE = 25;
 export const ADMIN_CONTENT_FLAGS_PAGE_SIZE = 50;
 
+export interface AdminTagsFilters {
+  query: string,
+  searchContent: boolean,
+  sortBy: AdminTagsSortBy,
+  nsfw: boolean | null,
+  page: number,
+}
+
+export function useAdminTagsQuery(filters: AdminTagsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminTags(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminTags({
+      query: filters.query,
+      searchContent: filters.searchContent,
+      sortBy: filters.sortBy,
+      nsfw: filters.nsfw,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
 export interface AdminTagDirectoryFilters {
   query: string,
   sortBy: AdminTagDirectorySortBy,
@@ -489,12 +547,13 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
 
 
 // shows the new state in place right away, then refetches since the item may leave the current filter
+// (`content` edits go through here too, use a separate instance so their pending state doesn't mix with verifying)
 export function usePatchAdminTagDirectoryMutation() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const listKey = [...queryKeys.admin(token), 'tags'];
   return useMutation({
-    mutationFn: ({ tagId, verified }: {tagId: string, verified: number}) => api.patchAdminTagDirectory(tagId, {verified}),
+    mutationFn: ({ tagId, ...body }: {tagId: string, verified?: number, content?: string, title?: string, description?: string}) => api.patchAdminTagDirectory(tagId, body),
     onSuccess: (item: AdminTagDirectoryItem) => {
       queryClient.setQueriesData<AdminTagDirectoryPage>({queryKey: listKey}, (page) => {
         if (!page) {
@@ -508,6 +567,27 @@ export function usePatchAdminTagDirectoryMutation() {
       // the public directory shows the badge too
       void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
     },
+  });
+}
+
+
+// tag assets only show up on the admin listing, refetch it so the card picks up the change
+export function useUploadAdminTagAssetMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tagId, source }: {tagId: string, source: {file: File} | {url: string}}) => api.uploadAdminTagAsset(tagId, source),
+    onSettled: () => queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'tags']}),
+  });
+}
+
+
+export function useDeleteAdminTagAssetMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tagId, assetId }: {tagId: string, assetId: string}) => api.deleteAdminTagAsset(tagId, assetId),
+    onSettled: () => queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'tags']}),
   });
 }
 
@@ -531,6 +611,8 @@ export interface AdminUsersFilters {
   query: string,
   sortBy: AdminUsersSortBy,
   onlyFlagged: boolean,
+  // hours, null for any time
+  flaggedWithin: number | null,
   page: number,
 }
 
@@ -542,6 +624,7 @@ export function useAdminUsersQuery(filters: AdminUsersFilters) {
       query: filters.query,
       sortBy: filters.sortBy,
       onlyFlagged: filters.onlyFlagged,
+      flaggedWithin: filters.flaggedWithin,
       offset: filters.page * ADMIN_PAGE_SIZE,
       limit: ADMIN_PAGE_SIZE,
     }, signal),

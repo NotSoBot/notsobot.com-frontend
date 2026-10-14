@@ -8,6 +8,8 @@ import type {
   AdminUserPatch,
   AdminUsersPage,
   AdminTagDirectorySortBy,
+  AdminTagsPage,
+  AdminTagsSortBy,
   AdminUsersSortBy,
   Command,
   ContentFlag,
@@ -21,6 +23,7 @@ import type {
   GuildListKind,
   InfoDiscord,
   Tag,
+  TagAsset,
   TagBlobs,
   TagBlobsPut,
   TagDirectoryItem,
@@ -165,6 +168,16 @@ export const api = {
     return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
   },
 
+  // puts an unverified listing up for review, which locks the tag
+  requestMeTagDirectoryVerification: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_VERIFY(tagId), {method: 'POST'});
+  },
+
+  // only while it's still pending, unlocks the tag again
+  cancelMeTagDirectoryVerification: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_VERIFY(tagId), {method: 'DELETE'});
+  },
+
   deleteMeTag: (tagId: string) => {
     return apiRequest<void>(ApiEndpoints.USER_ME_TAG(tagId), {method: 'DELETE'});
   },
@@ -248,6 +261,27 @@ export const api = {
 
   // --- admin (owner only) ---
 
+  fetchAdminTags: (params: {
+    query?: string,
+    searchContent?: boolean,
+    sortBy?: AdminTagsSortBy,
+    nsfw?: boolean | null,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<AdminTagsPage>(ApiEndpoints.ADMIN_TAGS, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        search_content: (params.searchContent) ? true : undefined,
+        sort_by: params.sortBy,
+        nsfw: params.nsfw,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
   fetchAdminTagDirectory: (params: {
     query?: string,
     sortBy?: AdminTagDirectorySortBy,
@@ -269,8 +303,26 @@ export const api = {
     });
   },
 
-  patchAdminTagDirectory: (tagId: string, body: {verified: number}) => {
+  // `content` rewrites the tag even though it's locked (verified/pending)
+  patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, title?: string, description?: string}) => {
     return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
+  },
+
+  // archives a file, or whatever `url` points at, for the tag; the content isn't touched
+  uploadAdminTagAsset: (tagId: string, source: {file: File} | {url: string}) => {
+    let body: FormData | {url: string};
+    if ('file' in source) {
+      body = new FormData();
+      body.append('file', source.file);
+    } else {
+      body = {url: source.url};
+    }
+    // the api downloads/probes the media first, which can take a while for videos
+    return apiRequest<TagAsset>(ApiEndpoints.ADMIN_TAG_ASSETS(tagId), {method: 'POST', body, timeout: 120_000});
+  },
+
+  deleteAdminTagAsset: (tagId: string, assetId: string) => {
+    return apiRequest<void>(ApiEndpoints.ADMIN_TAG_ASSET(tagId, assetId), {method: 'DELETE'});
   },
 
   // `deleteTag` also deletes the tag itself (and its aliases), not just the listing
@@ -285,6 +337,8 @@ export const api = {
     query?: string,
     sortBy?: AdminUsersSortBy,
     onlyFlagged?: boolean,
+    // hours
+    flaggedWithin?: number | null,
     offset?: number,
     limit?: number,
   }, signal?: AbortSignal) => {
@@ -294,6 +348,7 @@ export const api = {
         query: params.query || undefined,
         sort_by: params.sortBy,
         only_flagged: (params.onlyFlagged) ? true : undefined,
+        flagged_within: params.flaggedWithin ?? undefined,
         offset: params.offset || undefined,
         limit: params.limit,
       },

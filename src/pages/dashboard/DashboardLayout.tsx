@@ -29,6 +29,7 @@ export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
 
 // only shown to NotSoBot staff, owners and moderators (the routes are guarded by <RequireStaff/> too)
 export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
+  {to: Routes.DASHBOARD_ADMIN_ALL_TAGS, label: 'Tags', icon: Tags, color: '#00b0f4'},
   {to: Routes.DASHBOARD_ADMIN_TAGS, label: 'Directory Tags', icon: ShieldCheck, color: '#3ba55c'},
   {to: Routes.DASHBOARD_ADMIN_USERS, label: 'Users', icon: Users, color: '#5865f2'},
   {to: Routes.DASHBOARD_ADMIN_FLAGS, label: 'Content Flags', icon: Flag, color: '#ed4245'},

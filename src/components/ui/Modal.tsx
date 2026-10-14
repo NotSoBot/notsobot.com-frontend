@@ -35,14 +35,16 @@ export function Modal({ labelledBy, onClose, className, children }: {
   }, []);
 
   return (
-    <div className='fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-6'>
+    // `my-auto` instead of `items-center`: centered when it fits, and when it's taller than the window it starts below
+    // the top padding instead of being cut off above it
+    <div className='fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-3 pt-12 pb-6 sm:px-6 sm:pt-20 sm:pb-10'>
       <div aria-hidden className='fixed inset-0 animate-fade-in bg-black/70 backdrop-blur-sm' onClick={onClose}/>
       <div
         role='dialog'
         aria-modal='true'
         aria-labelledby={labelledBy}
         className={cn(
-          'relative w-full max-w-4xl animate-modal-in rounded-xl border border-line-strong bg-bg shadow-2xl shadow-black/60',
+          'relative my-auto w-full max-w-4xl animate-modal-in rounded-xl border border-line-strong bg-bg shadow-2xl shadow-black/60',
           className,
         )}
       >

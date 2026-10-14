@@ -113,6 +113,14 @@ function TagDetail({ item }: {item: TagDirectoryItem}) {
             </section>
           ) : null}
 
+          {/* only filled in when the owner chose to show it */}
+          {(item.content_public && tag.content) ? (
+            <section>
+              <h3 className='section-label mb-2'>Content</h3>
+              <pre className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg'>{tag.content}</pre>
+            </section>
+          ) : null}
+
           <div className='grid grid-cols-2 gap-3'>
             <StatTile icon={BarChart3} label='Uses'><span className='text-2xl font-bold'>{tag.uses.toLocaleString()}</span></StatTile>
             <StatTile icon={Server} label='Servers'><span className='text-2xl font-bold'>{item.server_count.toLocaleString()}</span></StatTile>

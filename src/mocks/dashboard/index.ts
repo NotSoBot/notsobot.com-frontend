@@ -197,15 +197,19 @@ route('PATCH', '/users/@me/tags/(\\d+)', ([ , tagId ], { body }) => {
 
 // ---- directory listing (mirrors utilities/tools/tags.py publish/edit rules) ----
 
-function directoryItem(tag: Tag, fields: {title?: string, description?: string}, verified: number = TagDirectoryVerificationStates.NOT_VERIFIED): TagDirectoryItem {
+type DirectoryFields = {title?: string, description?: string, content_public?: boolean};
+
+function directoryItem(tag: Tag, fields: DirectoryFields, verified: number = TagDirectoryVerificationStates.NOT_VERIFIED): TagDirectoryItem {
+  const contentPublic = !!fields.content_public;
   return {
     assets: [],
+    content_public: contentPublic,
     created: new Date().toISOString(),
     description: fields.description ?? '',
     edited: null,
     id: tag.id,
     server_count: 0,
-    tag: {...tag, content: '', guild_id: null},
+    tag: {...tag, content: (contentPublic) ? tag.content : '', guild_id: null},
     title: fields.title ?? '',
     verified,
   };
@@ -220,7 +224,10 @@ state.tags.filter((tag) => tag.server_id === mockUser.id).slice(0, 2).forEach((t
 });
 
 function directoryFields(body: Record<string, unknown>) {
-  const fields: {title?: string, description?: string} = {};
+  const fields: DirectoryFields = {};
+  if (typeof body.content_public === 'boolean') {
+    fields.content_public = body.content_public;
+  }
   if (typeof body.title === 'string') {
     if (128 < body.title.length) {
       throw new MockError(400, 50001, 'Title must be 128 characters or fewer');
@@ -236,12 +243,19 @@ function directoryFields(body: Record<string, unknown>) {
   return fields;
 }
 
-function editDirectory(item: TagDirectoryItem, fields: {title?: string, description?: string}) {
-  if (item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) {
+function editDirectory(item: TagDirectoryItem, fields: DirectoryFields) {
+  if ((fields.title !== undefined || fields.description !== undefined) && item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) {
     throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_PENDING_VERIFICATION, 'Cannot edit a tag that is currently undergoing verification');
   }
+  // showing/hiding the content is allowed while under review, the listing's text isn't
+  if (fields.content_public !== undefined) {
+    item.content_public = fields.content_public;
+    const source = state.tags.find((tag) => tag.id === item.id);
+    item.tag.content = (item.content_public && source) ? source.content : '';
+  }
   const changed = (fields.title !== undefined && fields.title !== item.title) || (fields.description !== undefined && fields.description !== item.description);
-  Object.assign(item, fields);
+  const { title, description } = fields;
+  Object.assign(item, Object.fromEntries(Object.entries({title, description}).filter(([ , value ]) => value !== undefined)));
   if (changed) {
     item.edited = new Date().toISOString();
   }
@@ -286,6 +300,41 @@ route('PATCH', '/users/@me/tags/(\\d+)/directory', ([ , tagId ], { body }) => {
     throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
   }
   return editDirectory(item, directoryFields(body));
+});
+
+// mirrors `request_tag_directory_verification`/`cancel_tag_directory_verification`, the tag is locked while pending
+route('POST', '/users/@me/tags/(\\d+)/directory/verify', ([ , tagId ]) => {
+  const tag = findTag(tagId);
+  const item = state.directory.get(tagId);
+  if (!item) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
+  }
+  if (item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_ALREADY_PENDING, 'Already Pending Verification');
+  }
+  if (item.verified === TagDirectoryVerificationStates.VERIFIED) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_ALREADY_VERIFIED, 'Already Verified');
+  }
+  item.verified = TagDirectoryVerificationStates.PENDING_VERIFICATION;
+  tag.locked = true;
+  return item;
+});
+
+route('DELETE', '/users/@me/tags/(\\d+)/directory/verify', ([ , tagId ]) => {
+  const tag = findTag(tagId);
+  const item = state.directory.get(tagId);
+  if (!item) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
+  }
+  if (item.verified === TagDirectoryVerificationStates.VERIFIED) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_CANNOT_UNVERIFY_VERIFIED, 'Cannot unverify a verified tag directory item');
+  }
+  if (item.verified !== TagDirectoryVerificationStates.PENDING_VERIFICATION) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_ALREADY_UNVERIFIED, 'Already Unverified');
+  }
+  item.verified = TagDirectoryVerificationStates.NOT_VERIFIED;
+  tag.locked = false;
+  return item;
 });
 
 route('DELETE', '/users/@me/tags/(\\d+)', ([ , tagId ]) => {
@@ -604,6 +653,7 @@ route('GET', '/admin/tags/directory', (_match, { query }) => {
   const sorters: Record<string, (a: typeof matching[number], b: typeof matching[number]) => number> = {
     oldest: (a, b) => byCreated(b, a),
     uses: (a, b) => b.tag.uses - a.tag.uses,
+    servers: (a, b) => b.server_count - a.server_count,
     name: (a, b) => a.tag.name.localeCompare(b.tag.name),
     title: (a, b) => a.title.localeCompare(b.title),
   };
@@ -612,18 +662,106 @@ route('GET', '/admin/tags/directory', (_match, { query }) => {
   return pageOf(matching, query);
 });
 
+// mirrors `GET /admin/tags`: the mock user's tags plus every directory tag
+route('GET', '/admin/tags', (_match, { query }) => {
+  requireBotOwner();
+  const search = query.get('query') || '';
+  const searchContent = parseBool(query.get('search_content')) === true;
+  const nsfw = parseBool(query.get('nsfw'));
+  const ref = (user: {id: string, username: string, discriminator: string, avatar: string | null}) => ({avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username});
+  const items = [
+    ...state.tags.map((tag) => ({
+      directory: (state.directory.get(tag.id)) ? {title: state.directory.get(tag.id)!.title, verified: state.directory.get(tag.id)!.verified} : null,
+      tag: {...tag, user_id: mockUser.id},
+      user: ref(mockUser),
+    })),
+    ...state.adminDirectory.map((item) => ({directory: {title: item.title, verified: item.verified}, tag: item.tag, user: item.user})),
+  ]
+    .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
+    .filter((item) => {
+      // a bare id also matches the server id here
+      if (/^\d+$/.test(search.trim()) && item.tag.server_id === search.trim()) {
+        return true;
+      }
+      return matchesDirectorySearch(search, item.tag, [item.tag.name, ...(searchContent ? [item.tag.content ?? ''] : [])]);
+    });
+  const time = (value: unknown) => (value) ? toDate(value as string).getTime() : 0;
+  const byId = (a: typeof items[number], b: typeof items[number]) => (BigInt(b.tag.id) > BigInt(a.tag.id)) ? 1 : -1;
+  const sorters: Record<string, (a: typeof items[number], b: typeof items[number]) => number> = {
+    oldest: (a, b) => byId(b, a),
+    uses: (a, b) => (b.tag.uses - a.tag.uses) || byId(a, b),
+    name: (a, b) => a.tag.name.localeCompare(b.tag.name),
+    last_used: (a, b) => (time(b.tag.last_used) - time(a.tag.last_used)) || byId(a, b),
+  };
+  items.sort(sorters[query.get('sort_by') || ''] ?? byId);
+  return pageOf(items, query);
+});
+
 route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
   requireBotOwner();
   const item = state.adminDirectory.find((other) => other.id === tagId);
   if (!item) {
     throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
   }
-  const verified = Number(body.verified);
-  if (![0, 1, 2].includes(verified)) {
-    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'verified must be 0, 1 or 2', {field: 'verified'});
+  if (body.verified !== undefined) {
+    const verified = Number(body.verified);
+    if (![0, 1, 2].includes(verified)) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'verified must be 0, 1 or 2', {field: 'verified'});
+    }
+    item.verified = verified;
   }
-  item.verified = verified;
+  if (typeof body.content === 'string') {
+    if (!body.content || 2000 < body.content.length) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'content must be 1 to 2000 characters', {field: 'content'});
+    }
+    item.tag.content = body.content;
+  }
+  if (typeof body.title === 'string') {
+    if (128 < body.title.length) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'title must be at most 128 characters', {field: 'title'});
+    }
+    item.title = body.title;
+  }
+  if (typeof body.description === 'string') {
+    if (2000 < body.description.length) {
+      throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'description must be at most 2000 characters', {field: 'description'});
+    }
+    item.description = body.description;
+  }
   return item;
+});
+
+// mirrors `POST /admin/tags/directory/<tag_id>/assets`, nothing is stored so the cdn url won't load
+route('POST', '/admin/tags/directory/(\\d+)/assets', ([ , tagId ], { body }) => {
+  requireBotOwner();
+  const item = state.adminDirectory.find((other) => other.id === tagId);
+  if (!item) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
+  }
+  const file = (body.file instanceof File) ? body.file : null;
+  const name = file?.name ?? String(body.url || '').split(/[?#]/)[0].split('/').pop() ?? '';
+  const extension = (/\.([a-z0-9]{1,12})$/i.exec(name)?.[1] ?? 'png').toLowerCase();
+  const id = String(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+  const asset = {
+    filename: `${id}.${extension}`,
+    filename_base: id,
+    id,
+    metadata: {duration: 0, extension, framecount: 1, height: 0, mimetype: file?.type || `image/${extension}`, size: file?.size ?? 0, width: 0},
+    position: item.tag.assets?.length ?? 0,
+    urls: {cdn: `https://cdn.nsb.gg/assets/tags/${tagId}/${id}.${extension}`},
+  };
+  item.tag.assets = [...(item.tag.assets ?? []), asset];
+  return asset;
+});
+
+route('DELETE', '/admin/tags/directory/(\\d+)/assets/(\\d+)', ([ , tagId, assetId ]) => {
+  requireBotOwner();
+  const item = state.adminDirectory.find((other) => other.id === tagId);
+  if (!item?.tag.assets?.some((asset) => asset.id === assetId)) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_ASSET, 'Unknown Tag Asset');
+  }
+  item.tag.assets = item.tag.assets.filter((asset) => asset.id !== assetId);
+  return undefined;
 });
 
 route('DELETE', '/admin/tags/directory/(\\d+)', ([ , tagId ]) => {
@@ -666,12 +804,21 @@ route('GET', '/admin/users', (_match, { query }) => {
   if (parseBool(query.get('only_flagged'))) {
     entries = entries.filter((entry) => entry.content_flags.total);
   }
+  const flaggedWithin = Number(query.get('flagged_within')) || 0;
+  if (flaggedWithin) {
+    const since = Date.now() - flaggedWithin * 3600000;
+    entries = entries.filter((entry) => entry.content_flags.last_flagged_at && since <= toDate(entry.content_flags.last_flagged_at).getTime());
+  }
+  const lastFlagged = (entry: typeof entries[number]) => (entry.content_flags.last_flagged_at) ? toDate(entry.content_flags.last_flagged_at).getTime() : -Infinity;
   entries.sort((a, b) => {
     if (sortBy === 'username') {
       return a.user.username.localeCompare(b.user.username);
     }
     if (sortBy === 'newest') {
       return (BigInt(b.user.id) > BigInt(a.user.id)) ? 1 : -1;
+    }
+    if (sortBy === 'last_flagged') {
+      return (lastFlagged(b) - lastFlagged(a)) || ((BigInt(b.user.id) > BigInt(a.user.id)) ? 1 : -1);
     }
     return (b.content_flags.flagged - a.content_flags.flagged) || (b.content_flags.total - a.content_flags.total);
   });
@@ -869,6 +1016,8 @@ export function installDashboardMocks(): void {
       let body: Record<string, unknown> = {};
       if (typeof init?.body === 'string') {
         body = JSON.parse(init.body);
+      } else if (init?.body instanceof FormData) {
+        body = Object.fromEntries(init.body.entries());
       }
       try {
         const result = handler(match, {method, query: url.searchParams, body});

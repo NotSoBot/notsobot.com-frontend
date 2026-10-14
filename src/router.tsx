@@ -88,6 +88,7 @@ const routes: Array<RouteObject> = [
                 element: <RequireStaff/>,
                 children: [
                   {path: '/dashboard/admin', element: <Navigate to={Routes.DASHBOARD_ADMIN_TAGS} replace/>},
+                  {path: Routes.DASHBOARD_ADMIN_ALL_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminAllTagsPage')).AdminAllTagsPage}), handle: {title: 'Tags'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminTagsPage')).AdminTagsPage}), handle: {title: 'Directory Tags'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_USERS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminUsersPage')).AdminUsersPage}), handle: {title: 'Users'} satisfies RouteHandle},
                   {path: Routes.DASHBOARD_ADMIN_FLAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminContentFlagsPage')).AdminContentFlagsPage}), handle: {title: 'Content Flags'} satisfies RouteHandle},

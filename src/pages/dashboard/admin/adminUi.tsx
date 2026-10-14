@@ -2,9 +2,16 @@ import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { Routes } from '@/config';
 import type { AdminUserRef } from '@/lib/api';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { cn } from '@/lib/utils';
+
+
+// the Tags tab searching `query`, like `user:<id>`
+export function adminTagsPath(query: string): string {
+  return `${Routes.DASHBOARD_ADMIN_ALL_TAGS}?${new URLSearchParams({q: query}).toString()}`;
+}
 
 
 // Filters live in the URL so a filtered view can be linked/bookmarked; every change resets to page 1.

@@ -154,7 +154,8 @@
   .prose-legal {
     @apply leading-relaxed text-fg;
   }
-  .prose-legal p + p {
+  .prose-legal p + p,
+  .prose-legal ul + p {
     @apply mt-4;
   }
   .prose-legal ul {

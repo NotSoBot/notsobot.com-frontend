@@ -19,6 +19,7 @@ export const ApiEndpoints = Object.freeze({
   USER_ME_TAG_VARIABLE: (tagId: string, storageType: number, storageId: string) => `/users/@me/tags/${tagId}/variables/${storageType}/${storageId}`,
   USER_ME_TAG_BLOBS: (tagId: string) => `/users/@me/tags/${tagId}/blobs`,
   USER_ME_TAG_DIRECTORY: (tagId: string) => `/users/@me/tags/${tagId}/directory`,
+  USER_ME_TAG_DIRECTORY_VERIFY: (tagId: string) => `/users/@me/tags/${tagId}/directory/verify`,
   USER_ME_TAG_ADD: (tagId: string) => `/users/@me/tags/${tagId}/add`,
   USER_ME_GUILDS: '/users/@me/guilds',
   USER_ME_GUILD: (guildId: string) => `/users/@me/guilds/${guildId}`,
@@ -35,8 +36,11 @@ export const ApiEndpoints = Object.freeze({
   USER_ME_DATA_EXPORT: '/users/@me/data/export',
 
   // admin (owners and moderators)
+  ADMIN_TAGS: '/admin/tags',
   ADMIN_TAGS_DIRECTORY: '/admin/tags/directory',
   ADMIN_TAG_DIRECTORY: (tagId: string) => `/admin/tags/directory/${tagId}`,
+  ADMIN_TAG_ASSETS: (tagId: string) => `/admin/tags/directory/${tagId}/assets`,
+  ADMIN_TAG_ASSET: (tagId: string, assetId: string) => `/admin/tags/directory/${tagId}/assets/${assetId}`,
   ADMIN_USERS: '/admin/users',
   ADMIN_USER: (userId: string) => `/admin/users/${userId}`,
   ADMIN_CONTENT_FLAGS: '/admin/content-flags',
