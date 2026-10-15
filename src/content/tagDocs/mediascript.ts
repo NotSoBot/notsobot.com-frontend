@@ -1363,6 +1363,16 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
   },
   {
+    name: 'contrastmultiply',
+    category: 'color',
+    summary: 'Multiplies the brightness contrast, keeping the colors. 1 is unchanged, 0 is flat gray, negatives invert the brightness.',
+    syntax: 'contrastmultiply MEDIA_KEY MULTIPLIER=1.0',
+    args: [
+      media(),
+      {name: 'MULTIPLIER', default: '1.0', range: '-100..100'},
+    ],
+  },
+  {
     name: 'grayscale',
     aliases: ['gray', 'greyscale', 'grey'],
     category: 'color',
@@ -1918,12 +1928,14 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     name: 'wiggle',
     category: 'distort',
     summary: 'Adds a moving wiggle.',
-    syntax: 'wiggle MEDIA_KEY DIRECTION=right AMOUNT=10 WAVELENGTHS=0.5',
+    syntax: 'wiggle MEDIA_KEY DIRECTION=right AMOUNT=10 WAVELENGTHS=0.5 SPEED=1 LOOP=false',
     args: [
       media(),
       {name: 'DIRECTION', default: 'right', range: 'down, left, right, up'},
       {name: 'AMOUNT', default: '10', range: '1..100'},
       {name: 'WAVELENGTHS', default: '0.5', range: '0..100'},
+      {name: 'SPEED', default: '1', range: '0.25..10'},
+      {name: 'LOOP', default: 'false', description: 'wiggle continuously instead of restarting, for a smooth loop'},
     ],
   },
   {
