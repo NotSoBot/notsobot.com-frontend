@@ -1,4 +1,4 @@
-import { BookMarked, ChevronDown, ChevronUp, Search, ShieldCheck, Tags } from 'lucide-react';
+import { BookMarked, ChevronDown, ChevronUp, Search, Tags } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -58,12 +58,7 @@ export function AdminAllTagsPage() {
       <DashboardHeader
         title='Tags'
         description={<>Every tag, personal, server and aliases. A bare id matches the tag, owner or server; <code className='text-code'>user:&lt;id&gt;</code> or <code className='text-code'>id:&lt;tag id&gt;</code> match only that.</>}
-      >
-        <Link to={Routes.DASHBOARD_ADMIN_TAGS} className='btn btn-secondary'>
-          <ShieldCheck aria-hidden className='size-4'/>
-          Directory
-        </Link>
-      </DashboardHeader>
+      />
 
       <div className='mb-4 space-y-3'>
         <SearchInput

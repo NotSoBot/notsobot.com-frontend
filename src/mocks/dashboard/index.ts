@@ -13,7 +13,18 @@
 
 import { tokenStorage } from '@/auth/tokenStorage';
 import { config } from '@/config';
-import { ApiErrorCodes, CONTENT_FLAG_TEXT_MIMETYPE, TagDirectoryVerificationStates, type AdminTagDirectoryItem, type ContentFlag, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
+import {
+  ApiErrorCodes,
+  CONTENT_FLAG_TEXT_MIMETYPE,
+  TagDirectoryCategories,
+  TagDirectoryVerificationStates,
+  type AdminTagDirectoryItem,
+  type ContentFlag,
+  type Tag,
+  type TagDirectoryCategory,
+  type TagDirectoryItem,
+  type TagStorageType,
+} from '@/lib/api/types';
 import { toDate } from '@/lib/utils';
 
 import {
@@ -212,12 +223,27 @@ route('PATCH', '/users/@me/tags/(\\d+)', ([ , tagId ], { body }) => {
 
 // ---- directory listing (mirrors utilities/tools/tags.py publish/edit rules) ----
 
-type DirectoryFields = {title?: string, description?: string, content_public?: boolean};
+type DirectoryFields = {title?: string, description?: string, category?: TagDirectoryCategory, content_public?: boolean};
+
+const CATEGORY_VALUES: ReadonlyArray<number> = Object.values(TagDirectoryCategories);
+
+// `null`/missing is no filter, anything else has to be a known category like the api's enum validator
+function parseCategory(value: unknown): TagDirectoryCategory | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  const category = Number(value);
+  if (!CATEGORY_VALUES.includes(category)) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, `category must be one of ${CATEGORY_VALUES.join(', ')}`, {field: 'category'});
+  }
+  return category as TagDirectoryCategory;
+}
 
 function directoryItem(tag: Tag, fields: DirectoryFields, verified: number = TagDirectoryVerificationStates.NOT_VERIFIED): TagDirectoryItem {
   const contentPublic = !!fields.content_public;
   return {
     assets: [],
+    category: fields.category ?? TagDirectoryCategories.OTHER,
     content_public: contentPublic,
     created: new Date().toISOString(),
     description: fields.description ?? '',
@@ -235,6 +261,7 @@ state.tags.filter((tag) => tag.server_id === mockUser.id).slice(0, 2).forEach((t
   state.directory.set(tag.id, directoryItem(tag, {
     title: (i === 0) ? 'Says hello back' : 'Pong, but slower',
     description: (i === 0) ? 'Replies with a friendly hello. Pass text to add it after the greeting.' : '',
+    category: (i === 0) ? TagDirectoryCategories.FUN : TagDirectoryCategories.UTILITY,
   }, (i === 0) ? TagDirectoryVerificationStates.NOT_VERIFIED : TagDirectoryVerificationStates.PENDING_VERIFICATION));
 });
 
@@ -243,6 +270,7 @@ function directoryFields(body: Record<string, unknown>) {
   if (typeof body.content_public === 'boolean') {
     fields.content_public = body.content_public;
   }
+  fields.category = parseCategory(body.category);
   if (typeof body.title === 'string') {
     if (128 < body.title.length) {
       throw new MockError(400, 50001, 'Title must be 128 characters or fewer');
@@ -259,7 +287,7 @@ function directoryFields(body: Record<string, unknown>) {
 }
 
 function editDirectory(item: TagDirectoryItem, fields: DirectoryFields) {
-  if ((fields.title !== undefined || fields.description !== undefined) && item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) {
+  if ((fields.title !== undefined || fields.description !== undefined || fields.category !== undefined) && item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) {
     throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_PENDING_VERIFICATION, 'Cannot edit a tag that is currently undergoing verification');
   }
   // showing/hiding the content is allowed while under review, the listing's text isn't
@@ -268,9 +296,10 @@ function editDirectory(item: TagDirectoryItem, fields: DirectoryFields) {
     const source = state.tags.find((tag) => tag.id === item.id);
     item.tag.content = (item.content_public && source) ? source.content : '';
   }
-  const changed = (fields.title !== undefined && fields.title !== item.title) || (fields.description !== undefined && fields.description !== item.description);
-  const { title, description } = fields;
-  Object.assign(item, Object.fromEntries(Object.entries({title, description}).filter(([ , value ]) => value !== undefined)));
+  const changed = (fields.title !== undefined && fields.title !== item.title) || (fields.description !== undefined && fields.description !== item.description) ||
+    (fields.category !== undefined && fields.category !== item.category);
+  const { title, description, category } = fields;
+  Object.assign(item, Object.fromEntries(Object.entries({title, description, category}).filter(([ , value ]) => value !== undefined)));
   if (changed) {
     item.edited = new Date().toISOString();
   }
@@ -671,6 +700,7 @@ function adminListingAsPublic(item: AdminTagDirectoryItem): TagDirectoryItem {
   const timestamp = (value: unknown) => (value === undefined || value === null) ? null : toDate(value as string).toISOString();
   return {
     assets: item.assets,
+    category: item.category,
     // fixtures never show their content publicly
     content_public: false,
     created: timestamp(item.created) ?? new Date(0).toISOString(),
@@ -707,7 +737,9 @@ route('GET', '/admin/tags/directory', (_match, { query }) => {
   const search = query.get('query') || '';
   const verified = query.get('verified');
   const nsfw = parseBool(query.get('nsfw'));
+  const category = parseCategory(query.get('category'));
   const matching = [...state.adminDirectory, ...[...state.directory.values()].map(ownListingAsAdmin)]
+    .filter((item) => category === undefined || item.category === category)
     .filter((item) => verified === null || verified === '' || item.verified === Number(verified))
     .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
     .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.tag.content ?? '', item.description]));
@@ -785,8 +817,9 @@ route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
       source.name = body.name.trim().toLowerCase();
       own.tag.name = source.name;
     }
-    if (typeof body.title === 'string' || typeof body.description === 'string') {
-      Object.assign(own, directoryFields({title: body.title, description: body.description}));
+    if (typeof body.title === 'string' || typeof body.description === 'string' || body.category !== undefined) {
+      const fields = directoryFields({title: body.title, description: body.description, category: body.category});
+      Object.assign(own, Object.fromEntries(Object.entries(fields).filter(([ , value ]) => value !== undefined)));
       own.edited = new Date().toISOString();
     }
     return ownListingAsAdmin(own);
@@ -826,6 +859,10 @@ route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
       throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'description must be at most 2000 characters', {field: 'description'});
     }
     item.description = body.description;
+  }
+  const category = parseCategory(body.category);
+  if (category !== undefined) {
+    item.category = category;
   }
   return item;
 });
@@ -1029,6 +1066,7 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
   const status = query.get('status');
   const category = query.get('category');
   const needsReview = parseBool(query.get('needs_human_review'));
+  const autoConfirmed = parseBool(query.get('auto_confirmed'));
   const type = query.get('type');
   const guildId = query.get('guild_id');
   const channelId = query.get('channel_id');
@@ -1071,6 +1109,7 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
     .filter((flag) => status === null || status === '' || flag.status === Number(status))
     .filter((flag) => !category || flag.category === category)
     .filter((flag) => needsReview === null || flag.needs_human_review === needsReview)
+    .filter((flag) => autoConfirmed === null || !!flag.auto_confirmed_from === autoConfirmed)
     .filter((flag) => !type || (flag.mimetype === 'text/plain') === (type === 'text'))
     .filter(matchesSearch);
   return pageOf(matching, query);
@@ -1127,6 +1166,8 @@ route('PATCH', '/admin/content-flags/(\\d+)', ([ , flagId ], { body }) => {
       throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'status must be 0-3', {field: 'status'});
     }
     const others = contentFlagMatches(flag, !!body.match_sha256, !!body.match_pdq).filter((other) => other.status === 0);
+    // a reviewer set it, so it isn't an auto-confirm anymore
+    flag.auto_confirmed_from = null;
     for (const target of [flag, ...others]) {
       target.status = status;
       target.reviewed_at = (status) ? new Date().toISOString() : null;
@@ -1352,8 +1393,10 @@ route('GET', '/tags/directory', (_match, { query }) => {
   const search = query.get('query') || '';
   const before = query.get('before');
   const limit = Number(query.get('limit')) || 50;
+  const category = parseCategory(query.get('category'));
   const items = [...state.directory.values(), ...state.adminDirectory.map(adminListingAsPublic)]
     .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1)
+    .filter((item) => category === undefined || item.category === category)
     .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.description]))
     .filter((item) => !before || BigInt(item.id) < BigInt(before));
   return {count: items.length, items: items.slice(0, limit)};

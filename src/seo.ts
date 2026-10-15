@@ -44,7 +44,7 @@ export const PAGES: Readonly<Record<keyof typeof Routes, PageMeta>> = Object.fre
   DASHBOARD_REPORTS: {title: 'Your Reports', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_VOICES: {title: 'Your Voices', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_ADMIN_ALL_TAGS: {title: 'Tags', description: ADMIN_DESCRIPTION},
-  DASHBOARD_ADMIN_TAGS: {title: 'Directory Tags', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_TAGS: {title: 'Tag Directory', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_USERS: {title: 'Users', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_ENTITLEMENTS: {title: 'Entitlements', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_FLAGS: {title: 'Content Flags', description: ADMIN_DESCRIPTION},

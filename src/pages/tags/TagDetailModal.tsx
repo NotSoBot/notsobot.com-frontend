@@ -1,14 +1,14 @@
-import { AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight, Hash, Server, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight, Hash, Server, Tag as TagIcon, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
-import type { TagDirectoryItem } from '@/lib/api';
+import { TagDirectoryVerificationStates, type TagDirectoryItem } from '@/lib/api';
 import { useTagDirectoryItemQuery } from '@/lib/api/queries';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
-import { AddTagButton, NsfwBadge, verificationInfo, VerificationBadge } from './tagDirectory';
+import { AddTagButton, categoryLabel, NsfwBadge, verificationInfo } from './tagDirectory';
 import { HiddenContentSection, ListingEditForm, ManageListingCard, TagServersSection, useListingAccess } from './TagListingManager';
 
 
@@ -95,17 +95,38 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
 
   return (
     <>
-      <header className='rounded-t-xl border-b border-line bg-surface px-6 pt-6 pb-5 pr-14'>
-        <div className='flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center'>
+      <header className='rounded-t-xl border-b border-line bg-surface px-6 pt-6 pb-5 sm:pr-14'>
+        <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
           <div className='min-w-0 flex-1'>
-            <div className='mb-2 flex flex-wrap items-center gap-3'>
-              <h2 id={TITLE_ID} className='text-3xl font-bold break-words text-white'>{tag.name}</h2>
-              {(tag.nsfw) ? <NsfwBadge size='lg'/> : null}
+            {/* clear of the close button; on wider screens the whole header is */}
+            <div className='flex flex-wrap items-center gap-2 pr-8 sm:pr-0'>
+              <h2 id={TITLE_ID} className='text-2xl font-bold break-words text-white sm:text-3xl'>{tag.name}</h2>
+              {(tag.nsfw) ? <NsfwBadge/> : null}
             </div>
-            {(item.title) ? <p className='mb-3 text-lg text-muted'>{item.title}</p> : null}
-            <VerificationBadge verified={item.verified} size='lg'/>
+            {(item.title) ? <p className='mt-1 text-muted'>{item.title}</p> : null}
+            {/* one quiet line instead of a row of pills */}
+            <p className='mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
+              {/* verified stands out as a solid pill, the other states stay plain text */}
+              <span
+                title={verification.description}
+                className={cn(
+                  'inline-flex items-center gap-1.5 font-medium',
+                  (item.verified === TagDirectoryVerificationStates.VERIFIED) ?
+                    'rounded-full bg-success px-2.5 py-0.5 text-white shadow-sm' :
+                    verification.textClassName,
+                )}
+              >
+                <verification.icon aria-hidden className='size-4'/>
+                {verification.label}
+              </span>
+              <span aria-hidden className='text-subtle'>·</span>
+              <span className='inline-flex items-center gap-1.5 text-muted'>
+                <TagIcon aria-hidden className='size-4 text-subtle'/>
+                {categoryLabel(item.category)}
+              </span>
+            </p>
           </div>
-          <AddTagButton tag={tag} size='lg'/>
+          <AddTagButton tag={tag} verified={item.verified} size='lg' className='w-full justify-center sm:w-auto'/>
         </div>
       </header>
 

@@ -27,9 +27,11 @@ import { cn, formatDate } from '@/lib/utils';
 import { GuildIcon } from '@/pages/dashboard/servers/GuildIcon';
 import { CharCounter, Field, InlineError, Toggle } from '@/pages/dashboard/ui';
 
+import { CategorySelect } from './tagDirectory';
+
 
 // The listing's owner and NotSoBot staff can manage a directory tag right from the public directory. Owners go through
-// `/users/@me/tags/:id/directory` (same rules as the dashboard's Directory tab: title and description are frozen while
+// `/users/@me/tags/:id/directory` (same rules as the dashboard's Directory tab: title, description and category are frozen while
 // verification is pending), staff through `/admin/tags/directory/:id`, which also rewrites the content and verifies.
 
 // `Tag.content` is varchar(2000)
@@ -70,7 +72,7 @@ function useFullContent(item: TagDirectoryItem, access: ListingAccess) {
 // keeps the open modal in step with a save until its refetch lands, so it doesn't flash the old listing
 function useMergeIntoDirectoryItem(id: string) {
   const queryClient = useQueryClient();
-  return (changes: Partial<Pick<TagDirectoryItem, 'title' | 'description' | 'content_public' | 'verified'>>, content?: string) => {
+  return (changes: Partial<Pick<TagDirectoryItem, 'title' | 'description' | 'category' | 'content_public' | 'verified'>>, content?: string) => {
     queryClient.setQueryData<TagDirectoryItem>(queryKeys.tagDirectoryItem(id), (old) => {
       if (!old) {
         return old;
@@ -304,8 +306,8 @@ function VerifyButton({ label, icon, className, current, disabled, pending, onCl
 }
 
 
-// Replaces the listing's description/content in the modal while editing. Owners get the title, description and the
-// "show content publicly" switch; staff get the title, description and the content itself.
+// Replaces the listing's description/content in the modal while editing. Owners get the title, description, category
+// and the "show content publicly" switch; staff get the title, description, category and the content itself.
 export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryItem, access: ListingAccess, onDone: () => void}) {
   const full = useFullContent(item, access);
   const ownerPatch = usePatchMeTagDirectoryMutation(item.id);
@@ -313,6 +315,7 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
   const merge = useMergeIntoDirectoryItem(item.id);
   const [ title, setTitle ] = useState(item.title);
   const [ description, setDescription ] = useState(item.description);
+  const [ category, setCategory ] = useState(item.category);
   const [ contentPublic, setContentPublic ] = useState(item.content_public);
   // staff edit the content once it's loaded; null until then (or for owners)
   const [ content, setContent ] = useState<string | null>(null);
@@ -323,13 +326,14 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
     setContent(full.content);
   }
 
-  // the owner's API freezes the title and description while a review is pending (the switch still works); staff aren't blocked
+  // the owner's API freezes the title, description and category while a review is pending (the switch still works); staff aren't blocked
   const listingFrozen = !access.staff && item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
   const titleChanged = title !== item.title;
   const descriptionChanged = description !== item.description;
+  const categoryChanged = category !== item.category;
   const contentChanged = access.staff && content !== null && content !== full.content;
   const contentPublicChanged = access.owner && contentPublic !== item.content_public;
-  const dirty = titleChanged || descriptionChanged || contentChanged || contentPublicChanged;
+  const dirty = titleChanged || descriptionChanged || categoryChanged || contentChanged || contentPublicChanged;
   const invalid = TAG_DIRECTORY_TITLE_MAX < title.length || TAG_DIRECTORY_DESCRIPTION_MAX < description.length ||
     (contentChanged && (!content!.trim() || CONTENT_MAX < content!.length));
 
@@ -341,16 +345,17 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
     setSaving(true);
     setError(null);
     try {
-      let changes: Partial<Pick<TagDirectoryItem, 'title' | 'description' | 'content_public' | 'verified'>> = {};
+      let changes: Partial<Pick<TagDirectoryItem, 'title' | 'description' | 'category' | 'content_public' | 'verified'>> = {};
       // staff edits go through the admin route (it ignores the pending freeze); only the owner can flip content_public
-      if (access.staff && (titleChanged || descriptionChanged || contentChanged)) {
+      if (access.staff && (titleChanged || descriptionChanged || categoryChanged || contentChanged)) {
         const updated = await adminPatch.mutateAsync({
           tagId: item.id,
           title: (titleChanged) ? title : undefined,
           description: (descriptionChanged) ? description : undefined,
+          category: (categoryChanged) ? category : undefined,
           content: (contentChanged) ? content! : undefined,
         });
-        changes = {title: updated.title, description: updated.description, verified: updated.verified};
+        changes = {title: updated.title, description: updated.description, category: updated.category, verified: updated.verified};
       }
       const ownerBody: TagDirectoryListingInput = {};
       if (access.owner && !access.staff) {
@@ -360,13 +365,22 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
         if (descriptionChanged) {
           ownerBody.description = description;
         }
+        if (categoryChanged) {
+          ownerBody.category = category;
+        }
       }
       if (contentPublicChanged) {
         ownerBody.content_public = contentPublic;
       }
       if (Object.keys(ownerBody).length) {
         const updated = await ownerPatch.mutateAsync(ownerBody);
-        changes = {title: updated.title, description: updated.description, content_public: updated.content_public, verified: updated.verified};
+        changes = {
+          title: updated.title,
+          description: updated.description,
+          category: updated.category,
+          content_public: updated.content_public,
+          verified: updated.verified,
+        };
       }
       merge(changes, (access.staff) ? (content ?? undefined) : full.content);
       onDone();
@@ -385,7 +399,7 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
 
       {(listingFrozen) ? (
         <p className='rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-fg'>
-          This listing is being reviewed for verification, so its title and description can’t change until the review finishes.
+          This listing is being reviewed for verification, so its title, description and category can’t change until the review finishes.
         </p>
       ) : null}
 
@@ -420,6 +434,9 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
             onChange={(event) => setDescription(event.target.value)}
           />
         )}
+      </Field>
+      <Field label='Category' hint='Where the tag shows up when people browse the directory by category.'>
+        {(props) => <CategorySelect {...props} value={category} disabled={listingFrozen || saving} onChange={setCategory}/>}
       </Field>
 
       {(access.owner) ? (

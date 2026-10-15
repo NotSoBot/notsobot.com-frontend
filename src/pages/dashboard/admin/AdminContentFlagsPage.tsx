@@ -122,6 +122,7 @@ export function AdminContentFlagsPage() {
   const status = parseStatus(searchParams.get('status'));
   const category = searchParams.get('category') || '';
   const needsHumanReview = parseBool(searchParams.get('needs_human_review'));
+  const autoConfirmed = parseBool(searchParams.get('auto_confirmed'));
   const type = ContentFlagTypes.find((item) => item === searchParams.get('type')) ?? null;
   // flags of blocked users are hidden unless `blocked=1`
   const includeBlocked = searchParams.get('blocked') === '1';
@@ -137,6 +138,7 @@ export function AdminContentFlagsPage() {
     status,
     category,
     needsHumanReview,
+    autoConfirmed,
     type,
     includeBlocked,
     search: debouncedSearch,
@@ -144,7 +146,7 @@ export function AdminContentFlagsPage() {
   });
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_CONTENT_FLAGS_PAGE_SIZE});
-  const filtered = !!(userId || guildId || channelId || tagId || commandId || status !== null || category || needsHumanReview !== null || type || debouncedSearch);
+  const filtered = !!(userId || guildId || channelId || tagId || commandId || status !== null || category || needsHumanReview !== null || autoConfirmed !== null || type || debouncedSearch);
   const pagination = {
     page,
     count: data?.count ?? 0,
@@ -220,7 +222,19 @@ export function AdminContentFlagsPage() {
           pattern={COMMAND_ID_PATTERN}
           onChange={(value) => update({command_id: value})}
         />
-        <div className='flex items-end sm:col-span-2 lg:col-span-4'>
+        <label className='text-sm lg:col-span-4'>
+          <span className='mb-1 block text-subtle'>Auto-confirmed</span>
+          <select
+            className='input'
+            value={(autoConfirmed === null) ? '' : (autoConfirmed) ? '1' : '0'}
+            onChange={(event) => update({auto_confirmed: event.target.value})}
+          >
+            <option value=''>Any</option>
+            <option value='1'>Yes</option>
+            <option value='0'>No</option>
+          </select>
+        </label>
+        <div className='flex items-end lg:col-span-4'>
           <div className='w-full rounded-md border border-line bg-surface px-3 py-2'>
             <Toggle label='Show blocked users' checked={includeBlocked} onChange={(value) => update({blocked: (value) ? '1' : null})}/>
           </div>
@@ -414,6 +428,7 @@ function ContentFlagCard({ flag, onReport }: {flag: ContentFlag, onReport: () =>
           : <span aria-hidden className='w-36'/>}
         <UserCell user={flag.user} fallbackId={flag.user_id} size='sm'/>
         {(user?.blocked) ? <Chip tone='danger' title={user.blocked_reason || undefined}>Blocked</Chip> : null}
+        {(flag.auto_confirmed_from) ? <Chip title={`Same media as #${flag.auto_confirmed_from}, which was already confirmed`}>auto-confirmed</Chip> : null}
         <span className='ml-auto text-xs text-subtle'>{formatDateTime(flag.created)}</span>
       </CollapsedCard>
     );
@@ -448,6 +463,7 @@ function ContentFlagCard({ flag, onReport }: {flag: ContentFlag, onReport: () =>
               {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
               {(flag.action) ? <Chip>action: {flag.action}</Chip> : null}
               {(flag.needs_human_review) ? <Chip tone='warning'>needs human review</Chip> : null}
+              {(flag.auto_confirmed_from) ? <Chip title={`Same media as #${flag.auto_confirmed_from}, which was already confirmed`}>auto-confirmed</Chip> : null}
             </div>
           </div>
           <p className='mt-1.5 text-xs text-subtle sm:mt-1'><ExactDate value={flag.created} format={formatDateTime}/></p>

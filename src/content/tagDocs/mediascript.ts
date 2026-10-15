@@ -11,8 +11,8 @@ import type {
 
 
 const MIMETYPES = [
-  'audio/aac', 'audio/flac', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/x-matroska',
-  'image/avif', 'image/bmp', 'image/gif', 'image/heic', 'image/heif', 'image/jpeg', 'image/png', 'image/tiff', 'image/webp', 'image/x-apng',
+  'audio/aac', 'audio/flac', 'audio/mp3', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/x-matroska', 'audio/x-wav',
+  'image/bmp', 'image/gif', 'image/jpeg', 'image/png', 'image/tiff', 'image/webp', 'image/x-apng',
   'video/mp4', 'video/mpeg', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/x-matroska', 'video/x-msvideo', 'video/x-ms-wmv',
 ];
 
@@ -29,14 +29,36 @@ const TTS_VOICES: Array<[string, string]> = [
   ['TIKTOK_EN_UK_MALE_02', 'English (UK), male'],
   ['TIKTOK_EN_AU_FEMALE', 'English (Australia), female'],
   ['TIKTOK_EN_AU_MALE', 'English (Australia), male'],
+  ['TIKTOK_EN_UK_MALE_BUTLER', 'English (UK), male, butler'],
+  ['TIKTOK_EN_UK_MALE_NEIGHBOR', 'English (UK), male, neighbor'],
   ['TIKTOK_EN_FEMALE_EMOTIONAL', 'English, female, emotional'],
-  ['TIKTOK_EN_SING_FEMALE_WARMY_BREEZE', 'English, female, singing'],
+  ['TIKTOK_EN_FEMALE_MAKEUP', 'English, female, beauty guru'],
+  ['TIKTOK_EN_FEMALE_RICHGIRL', 'English, female, rich girl'],
+  ['TIKTOK_EN_FEMALE_SAMC', 'English, female, empathetic'],
+  ['TIKTOK_EN_MALE_CODY', 'English, male, serious'],
   ['TIKTOK_EN_MALE_FUNNY', 'English, male, funny'],
+  ['TIKTOK_EN_MALE_GRINCH', 'English, male, the Grinch'],
   ['TIKTOK_EN_MALE_NARRATION', 'English, male, story narrator'],
+  ['TIKTOK_EN_CELEBRITY_MALE_ASHMAGIC', 'English, male, creator: ashmagic'],
+  ['TIKTOK_EN_CELEBRITY_MALE_JOMBOY', 'English, male, creator: Jomboy'],
+  ['TIKTOK_EN_CELEBRITY_MALE_OLANTEKKERS', 'English, male, creator: olantekkers'],
+  ['TIKTOK_EN_SING_FEMALE_ALTO', 'English, female, singing (alto)'],
+  ['TIKTOK_EN_SING_FEMALE_GLORIOUS', 'English, female, singing (glorious)'],
+  ['TIKTOK_EN_SING_FEMALE_WARMY_BREEZE', 'English, female, singing'],
+  ['TIKTOK_EN_SING_FEMALE_WONDERFUL_WORLD', 'English, female, singing (wonderful world)'],
+  ['TIKTOK_EN_SING_MALE_CHIPMUNK', 'English, male, singing (chipmunk)'],
+  ['TIKTOK_EN_SING_MALE_IT_GOES_UP', 'English, male, singing (it goes up)'],
   ['TIKTOK_EN_SING_MALE_SUNSHINE_SOON', 'English, male, singing'],
+  ['TIKTOK_EN_SING_MALE_TENOR', 'English, male, singing (tenor)'],
+  ['TIKTOK_EN_SING_MALE_THANKSGIVING', 'English, male, singing (thanksgiving)'],
   ['TIKTOK_EN_US_DISNEY_C3PO', 'Character: C-3PO'],
   ['TIKTOK_EN_US_DISNEY_CHEWBACCA', 'Character: Chewbacca'],
+  ['TIKTOK_EN_US_DISNEY_DEADPOOL', 'Character: Deadpool'],
   ['TIKTOK_EN_US_DISNEY_GHOSTFACE', 'Character: Ghostface'],
+  ['TIKTOK_EN_US_DISNEY_GHOSTHOST', 'Character: Ghost Host (Haunted Mansion)'],
+  ['TIKTOK_EN_US_DISNEY_JARVIS', 'Character: Jarvis'],
+  ['TIKTOK_EN_US_DISNEY_MADAME_LEOTA', 'Character: Madame Leota (Haunted Mansion)'],
+  ['TIKTOK_EN_US_DISNEY_PIRATE', 'Character: Pirate'],
   ['TIKTOK_EN_US_DISNEY_ROCKET', 'Character: Rocket'],
   ['TIKTOK_EN_US_DISNEY_STITCH', 'Character: Stitch'],
   ['TIKTOK_EN_US_DISNEY_STORMTROOPER', 'Character: Stormtrooper'],
@@ -213,7 +235,7 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
         ['rand(a,b)', 'A random number between a and b (with one number, between 0 and it)', '`rand(0,360)`'],
         ['round(n,digits?)', 'n rounded, optionally to a number of decimal places', '`round(imgw/3)`'],
         ['if(condition,if_true,if_false)', 'if_true when the condition holds, otherwise if_false. Operators: `==`, `!=`, `<=`, `>=`, `<`, `>`', '`if(imgw>imgh,imgw,imgh)`'],
-        ['is(TYPE,KEY)', '1 if the media is of that type, 0 if not. TYPE is `audio`, `image` or `video`', '`is(video,clip)`'],
+        ['is(TYPE,KEY)', '1 if the media is of that type, 0 if not. TYPE is `audio`, `image`, `video`, or a combination: `av` (audio or video), `iv` (image or video), `aiv` (any of them)', '`is(video,clip)`'],
         ['color(mostused,KEY)', 'The most used color in the media, as a decimal RGB number', '`color(mostused,img)`'],
       ],
     },
@@ -392,15 +414,18 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     name: 'render',
     category: 'io',
     summary: 'Ends the script and sends the media as the result, optionally converted to another format.',
-    syntax: 'render MEDIA_KEY MIMETYPE?',
+    syntax: 'render MEDIA_KEY MIMETYPE? ...FILENAME?',
     args: [
       media('the media to send'),
       {name: 'MIMETYPE', range: MIMETYPES.join(', '), description: 'the format to save as; leave out (or `default`) to keep the current one'},
+      {name: 'FILENAME', rest: true, description: 'optional name for the output file; write `default` as the mimetype to keep the format and still name it'},
+    ],
+    examples: [
+      {code: '{mediascript:load {iv} img\nrender img default cake}', result: 'Sends the media in its own format, named "cake".'},
     ],
     notes: [
       'Anything after `render` is ignored.',
       'If a script has no `render`, the first media key created is rendered automatically.',
-      'You can add a file name after the mimetype to name the output file.',
     ],
   },
   {
@@ -558,7 +583,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
   {
     name: 'create',
     category: 'generate',
-    summary: 'Creates a blank image of a solid color.',
+    summary: 'Creates a blank image: fully transparent, or a solid color if you give one.',
     syntax: 'create MEDIA_KEY WIDTH HEIGHT RED=0 GREEN=0 BLUE=0 ALPHA?',
     args: [
       media('the name for the new image'),
@@ -567,10 +592,14 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'RED', default: '0', range: '0..255'},
       {name: 'GREEN', default: '0', range: '0..255'},
       {name: 'BLUE', default: '0', range: '0..255'},
-      {name: 'ALPHA', range: '0..255', description: 'transparency; leave out for fully opaque'},
+      {name: 'ALPHA', range: '0..255', description: 'opacity, 0 is invisible and 255 is solid; leave out for fully opaque when a color is given, or fully transparent when none is'},
     ],
     examples: [
       {code: '{mediascript:create canvas 500 500 135 206 235\nrender canvas image/png}', result: 'A 500x500 sky-blue square.'},
+      {code: '{mediascript:create canvas 500 500\nrender canvas image/png}', result: 'A fully transparent 500x500 image.'},
+    ],
+    notes: [
+      'With no RED, GREEN or BLUE the image is fully transparent (alpha 0). Giving any one of them makes a solid color, with the missing ones at 0 and ALPHA at 255 unless you set it.',
     ],
   },
   {
@@ -688,10 +717,26 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'TEXT', rest: true, description: 'what to say, wrapped in `{jsonify:}`'},
     ],
     examples: [
-      {code: '{mediascript:tts voice TIKTOK_EN_US_GHOSTFACE {jsonify:what\'s your favorite scary movie}\nrender voice audio/mp3}', result: 'An MP3 of Ghostface asking the question.'},
+      {code: '{mediascript:tts voice TIKTOK_EN_US_DISNEY_GHOSTFACE {jsonify:what\'s your favorite scary movie}\nrender voice audio/mp3}', result: 'An MP3 of Ghostface asking the question.'},
       {code: '{mediascript:load {video} clip\ntts voice {jsonify:{args}}\naudioputmix clip voice\nrender clip}', result: 'Mixes the default voice reading the arguments over the last video.'},
     ],
     notes: ['Text longer than 4096 characters is cut off. See the Klattsch section for the `KLATTSCH` phoneme voice.'],
+  },
+  {
+    name: 'createaudionoise',
+    category: 'generate',
+    summary: 'Creates an MP3 clip of pure noise, like static or rain.',
+    syntax: 'createaudionoise MEDIA_KEY DURATION COLOR=white AMPLITUDE=1.0 SAMPLE_RATE=44100',
+    args: [
+      media('the name for the new audio'),
+      {name: 'DURATION', range: '1..600', description: 'length in seconds'},
+      {name: 'COLOR', default: 'white', range: 'blue, brown, pink, velvet, violet, white', description: 'the kind of noise; `brown` and `pink` are deeper, `blue` and `violet` are hissier'},
+      {name: 'AMPLITUDE', default: '1.0', range: '0..1', description: 'loudness'},
+      {name: 'SAMPLE_RATE', default: '44100', range: '8000..48000', description: 'samples per second'},
+    ],
+    examples: [
+      {code: '{mediascript:createaudionoise rain 30 brown 0.5\nrender rain audio/mp3}', result: '30 seconds of soft brown noise.'},
+    ],
   },
 
   // text
@@ -905,6 +950,13 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     args: [media()],
   },
   {
+    name: 'croptriangle',
+    category: 'size',
+    summary: 'Crops the media into a triangle with a transparent outside.',
+    syntax: 'croptriangle MEDIA_KEY',
+    args: [media()],
+  },
+  {
     name: 'trim',
     category: 'size',
     summary: 'Trims away black borders around the media.',
@@ -1077,6 +1129,20 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
   },
   {
+    name: 'setloop',
+    category: 'time',
+    summary: 'Sets how many times an animated image loops.',
+    syntax: 'setloop MEDIA_KEY AMOUNT=0',
+    args: [
+      media(),
+      {name: 'AMOUNT', default: '0', range: '0..65535', description: 'number of loops; 0 loops forever'},
+    ],
+    examples: [
+      {code: '{mediascript:load {avatar} pfp\nspin pfp\nsetloop pfp 1\nrender pfp image/gif}', result: 'A spinning avatar GIF that only plays once.'},
+    ],
+    notes: ['Only does something for images (GIF, WebP, APNG); audio and video are left alone.'],
+  },
+  {
     name: 'fadein',
     category: 'time',
     summary: 'Fades the media in from a color at the start.',
@@ -1210,6 +1276,25 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
   },
   {
+    name: 'interpolate',
+    category: 'compose',
+    summary: 'Cuts between two videos every few moments, alternating slices of each.',
+    syntax: 'interpolate MEDIA_KEY MEDIA_KEY_2 SEGMENT=0.125 LOOP=true',
+    args: [
+      media('the first video (gets changed)'),
+      {name: 'MEDIA_KEY_2', description: 'the video to cut in'},
+      {name: 'SEGMENT', default: '0.125', range: '0.1..10', description: 'length of each slice in seconds'},
+      {name: 'LOOP', default: 'true', description: 'repeat the shorter one so both last the whole time'},
+    ],
+    examples: [
+      {code: '{mediascript:load {video} a\nclone a b\nreverse b\ninterpolate a b 0.5\nrender a video/mp4}', result: 'Cuts between the video and a reversed copy of it every half second.'},
+    ],
+    notes: [
+      'MEDIA_KEY_2 is resized to fit MEDIA_KEY.',
+      'Meant for two videos; images and audio-only clips aren\'t supported.',
+    ],
+  },
+  {
     name: 'croptransparency',
     category: 'compose',
     summary: 'Uses one media as a transparency mask for another.',
@@ -1241,7 +1326,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'backgroundremove MEDIA_KEY MODEL=ISNET_GENERAL_USE',
     args: [
       media(),
-      {name: 'MODEL', default: 'ISNET_GENERAL_USE', range: 'ALPHA_MATTING, ISNET_ANIME, ISNET_GENERAL_USE, SILUETA, U2NET, U2NETP, U2NET_CLOTH_SEG, U2NET_HUMAN_SEG', description: 'which model to use, e.g. `ISNET_ANIME` for drawings'},
+      {name: 'MODEL', default: 'ISNET_GENERAL_USE', range: 'ALPHA_MATTING, BIREFNET_COD, BIREFNET_DIS, BIREFNET_GENERAL, BIREFNET_GENERAL_LITE, BIREFNET_HRSOD, BIREFNET_MASSIVE, BIREFNET_PORTRAIT, BRIA_RMBG, ISNET_ANIME, ISNET_GENERAL_USE, SAM, SILUETA, U2NET, U2NETP, U2NET_CLOTH_SEG, U2NET_HUMAN_SEG', description: 'which model to use, e.g. `ISNET_ANIME` for drawings or `BIREFNET_PORTRAIT` for people'},
     ],
   },
 
@@ -1564,7 +1649,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     args: [
       media(),
       {name: 'STRENGTH', default: '5.0', range: '0.0..50.0'},
-      {name: 'METHOD', default: 'OVER', range: 'color_burn, color_dodge, colorize, darken, darkenintensity, difference, exclusion, hard_light, hue, lighten, lightenintensity, linear_burn, linear_dodge, linear_light, luminize, multiply, over, overlay, pegtop_light, pin_light, saturate, screen, soft_light, vivid_light', description: 'how the edges are composed onto the media'},
+      {name: 'METHOD', default: 'OVER', range: 'color_burn, color_dodge, colorize, darken, darken_intensity, difference, exclusion, hard_light, hue, lighten, lighten_intensity, linear_burn, linear_dodge, linear_light, luminize, multiply, over, overlay, pegtop_light, pin_light, saturate, screen, soft_light, vivid_light', description: 'how the edges are composed onto the media'},
       {name: 'MIX', default: '100', range: '0..100', description: 'how much of the effect to apply'},
       {name: 'INVERT', default: 'false'},
     ],
@@ -1583,7 +1668,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'DEPTH', default: '1', range: '0..100'},
       {name: 'INTENSITY', default: '0', range: '-50..50'},
       {name: 'COMPOSE', default: 'none', range: 'none, bumpmap, color_burn, color_dodge, hard_light, linear_burn, linear_dodge, linear_light, multiply, overlay, pegtop_light, pin_light, soft_light, vivid_light', description: 'blend the emboss back onto the original'},
-      {name: 'GRAY', default: 'none', description: '`none` or a color'},
+      {name: 'GRAY', default: 'none', range: 'none, 0..1', description: '`none`, or a number that sets the gray level of flat areas (GIMP method only)'},
     ],
   },
   {
@@ -1694,18 +1779,41 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
   },
   {
-    name: 'edit',
+    name: 'phosimp',
     category: 'filters',
-    summary: 'Edits an image with AI according to a prompt.',
-    syntax: 'edit MEDIA_KEY PROMPT?',
+    summary: 'Applies PhoSimp filters, one after another.',
+    syntax: 'phosimp MEDIA_KEY ...FILTERS',
     args: [
       media(),
+      {name: 'FILTERS', rest: true, range: '0..1256', description: 'filter numbers separated by spaces, applied in order'},
+    ],
+    examples: [
+      {code: '{mediascript:load {iv} img\nphosimp img 2 9 8\nrender img}', result: 'Brightens the colors, mirror-blends the image and rotates it clockwise.'},
+    ],
+    notes: [
+      'At most 300 filters. Works on images and video.',
+      'A few to start with: `1` negative (invert), `2` RGB multiply by 2, `3` RGB divide by 2, `7` / `8` rotate anticlockwise / clockwise, `9` mirror blend, `10` foursquare duplication. There are over a thousand, so try random numbers.',
+    ],
+  },
+  {
+    name: 'edit',
+    category: 'filters',
+    summary: 'Edits an image with AI according to a prompt, optionally using other media as reference images.',
+    syntax: 'edit MEDIA_KEY ...MEDIA_KEYS? PROMPT?',
+    args: [
+      media(),
+      {name: 'MEDIA_KEYS', description: 'up to 5 other image or video keys, written before the prompt, to use as reference images'},
       {name: 'PROMPT', rest: true, description: 'what to change; a random prompt is used if empty'},
     ],
     examples: [
       {code: '{mediascript:load {avatar} pfp\nedit pfp {jsonify:give them a wizard hat}\nrender pfp}'},
+      {code: '{mediascript:load {avatar} img\nload {image} hat\nedit img hat make them wear this hat\nrender img}', result: 'Puts the hat from the last image in chat on the avatar.'},
     ],
-    notes: ['Works best for simple edits.'],
+    notes: [
+      'Works best for simple edits.',
+      'Words at the start of the prompt that match a media key are used as reference images, so wrap the prompt in `{jsonify:}` if it might start with one of your key names.',
+      'Videos use their first frame, and the result is always a still PNG.',
+    ],
   },
 
   // distort & animate
@@ -1942,6 +2050,20 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     notes: ['Turns a still image into a 30-frame GIF.'],
   },
   {
+    name: 'globe',
+    category: 'distort',
+    summary: 'Wraps the media onto a sphere, like a fisheye globe.',
+    syntax: 'globe MEDIA_KEY TILED=false',
+    args: [
+      media(),
+      {name: 'TILED', default: 'false', description: 'shrink and tile the media across the sphere instead of stretching one copy'},
+    ],
+    examples: [
+      {code: '{mediascript:load {avatar} pfp\nglobe pfp\nrender pfp image/png}', result: 'The avatar as a round globe.'},
+    ],
+    notes: ['The result is cropped to a square with a transparent outside. Unlike `orb`, it doesn\'t spin.'],
+  },
+  {
     name: 'shake',
     category: 'distort',
     summary: 'Shakes the media around.',
@@ -2095,6 +2217,22 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'TREBLE', default: '0', range: '-50..50'},
       {name: 'AIR', default: '0', range: '-50..50'},
     ],
+  },
+  {
+    name: 'audionoise',
+    category: 'audio',
+    summary: 'Adds a noise track, mixed in with any existing audio.',
+    syntax: 'audionoise MEDIA_KEY COLOR=white AMPLITUDE=1.0 SAMPLE_RATE=44100',
+    args: [
+      media(),
+      {name: 'COLOR', default: 'white', range: 'blue, brown, pink, velvet, violet, white', description: 'the kind of noise; `brown` and `pink` are deeper, `blue` and `violet` are hissier'},
+      {name: 'AMPLITUDE', default: '1.0', range: '0..1', description: 'loudness of the noise'},
+      {name: 'SAMPLE_RATE', default: '44100', range: '8000..48000', description: 'samples per second'},
+    ],
+    examples: [
+      {code: '{mediascript:load {video} clip\naudionoise clip pink 0.2\nrender clip}', result: 'Adds quiet pink noise to the video.'},
+    ],
+    notes: ['Images become an MP4 video with the noise; a still image becomes 10 seconds long.'],
   },
   {
     name: 'volume',

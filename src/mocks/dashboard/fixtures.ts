@@ -11,6 +11,7 @@ import type {
   Report,
   Tag,
   TagBlobs,
+  TagDirectoryCategory,
   TagVariables,
   User,
   UserGuild,
@@ -251,8 +252,11 @@ export function createContentFlags(users: Array<AdminUser>): Array<ContentFlag> 
     const frames = (text) ? 0 : (video) ? 12 + (i % 30) : 1;
     const flagged = [LABELS[i % LABELS.length], ...((i % 3 === 0) ? [LABELS[(i + 2) % LABELS.length]] : [])];
     const created = new Date(Date.now() - i * 5 * 3600000).toISOString();
+    // some confirmed ones came in already matching an earlier confirmed flag (the hashes repeat every 16)
+    const autoConfirmed = status === 1 && i >= 16 && i % 2 === 0;
     flags.push({
       action: ACTIONS[i % ACTIONS.length],
+      auto_confirmed_from: (autoConfirmed) ? String(9000 + 64 - (i - 16)) : null,
       category,
       channel_id: (i % 5) ? (1200000000000000000n + BigInt(i)).toString() : null,
       command_id: ['imagine', 'mirror', 'deepfry', 'caption', 'tag'][i % 5],
@@ -334,6 +338,8 @@ export function createAdminDirectory(users: Array<AdminUser>): Array<AdminTagDir
     const id = (1280000000000000000n + BigInt(i) * 101n).toString();
     const created = new Date(Date.now() - (i + 1) * 86400000).toISOString();
     items.push({
+      // every category shows up, `Other` included
+      category: (i % 9) as TagDirectoryCategory,
       assets: (i % 5 === 2) ? [{
         filename: 'preview.png',
         filename_base: 'preview',

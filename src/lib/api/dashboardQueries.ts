@@ -665,6 +665,7 @@ export function useAdminTagsQuery(filters: AdminTagsFilters) {
 
 export interface AdminTagDirectoryFilters {
   query: string,
+  category: number | null,
   sortBy: AdminTagDirectorySortBy,
   verified: number | null,
   nsfw: boolean | null,
@@ -677,6 +678,7 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
     queryKey: queryKeys.adminTagDirectory(token, filters),
     queryFn: ({ signal }) => api.fetchAdminTagDirectory({
       query: filters.query,
+      category: filters.category,
       sortBy: filters.sortBy,
       verified: filters.verified,
       nsfw: filters.nsfw,
@@ -719,7 +721,7 @@ export function usePatchAdminTagDirectoryMutation() {
   const queryClient = useQueryClient();
   const listKey = [...queryKeys.admin(token), 'tags'];
   return useMutation({
-    mutationFn: ({ tagId, ...body }: {tagId: string, verified?: number, content?: string, name?: string, title?: string, description?: string}) => api.patchAdminTagDirectory(tagId, body),
+    mutationFn: ({ tagId, ...body }: {tagId: string, verified?: number, content?: string, name?: string, title?: string, description?: string, category?: number}) => api.patchAdminTagDirectory(tagId, body),
     onSuccess: (item: AdminTagDirectoryItem) => {
       queryClient.setQueriesData<AdminTagDirectoryPage>({queryKey: listKey}, (page) => {
         if (!page) {
@@ -854,6 +856,7 @@ export interface AdminContentFlagsFilters {
   status: number | null,
   category: string,
   needsHumanReview: boolean | null,
+  autoConfirmed: boolean | null,
   type: ContentFlagType | null,
   includeBlocked: boolean,
   search: string,
@@ -873,6 +876,7 @@ export function useAdminContentFlagsQuery(filters: AdminContentFlagsFilters) {
       status: filters.status,
       category: filters.category,
       needsHumanReview: filters.needsHumanReview,
+      autoConfirmed: filters.autoConfirmed,
       type: filters.type,
       includeBlocked: filters.includeBlocked,
       search: filters.search,

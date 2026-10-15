@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
+  TagDirectoryCategories,
   TagDirectorySortByFilters,
   TagDirectoryVerificationStates,
   type TagDirectoryItem,
@@ -18,7 +19,7 @@ import { userAvatarUrl } from '@/lib/discord';
 import { cn, formatDate } from '@/lib/utils';
 
 import { TagDetailModal } from './TagDetailModal';
-import { AddTagButton, NsfwBadge, tagDirectoryItemPath, VerificationBadge } from './tagDirectory';
+import { AddTagButton, CategoryBadge, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, tagDirectoryItemPath, VerificationBadge } from './tagDirectory';
 
 
 // URL value -> API value; defaults are left out of the URL
@@ -42,7 +43,7 @@ const STATUS_OPTIONS: Array<{param: string, label: string, value: number | null}
 const DEFAULT_SORT = 'uses';
 const DEFAULT_STATUS = 'verified';
 
-const FILTER_PARAMS = ['q', 'sort', 'status', 'nsfw'];
+const FILTER_PARAMS = ['q', 'category', 'sort', 'status', 'nsfw'];
 
 function findOption<T extends {param: string}>(options: Array<T>, param: string | null, defaultParam: string): T {
   return options.find((option) => option.param === param) ?? options.find((option) => option.param === defaultParam)!;
@@ -56,13 +57,16 @@ export function TagDirectoryPage() {
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
   const sort = findOption(SORT_OPTIONS, searchParams.get('sort'), DEFAULT_SORT);
   const status = findOption(STATUS_OPTIONS, searchParams.get('status'), DEFAULT_STATUS);
+  // no `category` param (or an unknown one) is every category
+  const category = TAG_DIRECTORY_CATEGORY_OPTIONS.find((option) => option.param === searchParams.get('category')) ?? null;
   // NSFW tags are hidden unless asked for
   const showNsfw = searchParams.get('nsfw') === 'show';
   const [ nsfwNoticeOpen, setNsfwNoticeOpen ] = useState(false);
-  const isFiltered = !!debouncedQuery || status.param !== DEFAULT_STATUS || showNsfw;
+  const isFiltered = !!debouncedQuery || !!category || status.param !== DEFAULT_STATUS || showNsfw;
 
   const { data, isPending, isError, isPlaceholderData, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useTagDirectoryQuery({
     query: debouncedQuery,
+    category: category?.value ?? null,
     sortBy: sort.value,
     verified: status.value,
     nsfw: (showNsfw) ? null : false,
@@ -139,6 +143,8 @@ export function TagDirectoryPage() {
           placeholder='Search by title, name, description or user id...'
           aria-label='Search tags'
         />
+
+        <CategoryFilter value={category?.param ?? null} onChange={(param) => updateParams({category: param})}/>
 
         <div className='mt-4 flex flex-wrap items-center gap-x-4 gap-y-2'>
           <label className='flex items-center gap-2 text-sm text-muted'>
@@ -267,7 +273,10 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
           </div>
           {(item.title) ? <p className='mb-2 text-sm text-muted'>{item.title}</p> : null}
         </div>
-        <VerificationBadge verified={item.verified} hideUnverified/>
+        <div className='flex shrink-0 flex-col items-end gap-1.5'>
+          <VerificationBadge verified={item.verified} hideUnverified/>
+          {(item.category !== TagDirectoryCategories.OTHER) ? <CategoryBadge category={item.category}/> : null}
+        </div>
       </div>
 
       {(item.description) ? <p className='mb-3 line-clamp-2 text-sm text-muted'>{item.description}</p> : null}
@@ -285,9 +294,36 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
           <img src={userAvatarUrl(tag.user, 32)} alt='' loading='lazy' className='size-6 rounded-full bg-surface-3'/>
           <span className='truncate text-sm text-muted'>{tag.user.username}</span>
         </div>
-        <AddTagButton tag={tag}/>
+        <AddTagButton tag={tag} verified={item.verified}/>
       </div>
     </li>
+  );
+}
+
+
+// "All" plus one pill per category; scrolls sideways on small screens instead of wrapping into a tall block
+function CategoryFilter({ value, onChange }: {value: string | null, onChange: (param: string | null) => void}) {
+  const options = [{param: null, label: 'All'}, ...TAG_DIRECTORY_CATEGORY_OPTIONS];
+  return (
+    <div role='group' aria-label='Category' className='-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0'>
+      {options.map((option) => {
+        const selected = option.param === value;
+        return (
+          <button
+            key={option.param ?? 'all'}
+            type='button'
+            aria-pressed={selected}
+            onClick={() => onChange(option.param)}
+            className={cn(
+              'shrink-0 cursor-pointer rounded-full border px-3 py-1 text-sm transition-colors',
+              (selected) ? 'border-brand bg-brand text-white' : 'border-line bg-surface text-muted hover:border-brand hover:text-white',
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -69,10 +69,16 @@ export function formatExactDateTime(value: string | number): string {
 }
 
 
-const compactFormatter = new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1});
+// floors instead of rounding so 1,289,999 shows as `1.2M+`, never more than the real count
+// (roundingMode is ES2023 Intl, newer than the app's lib target)
+const compactFormatter = new Intl.NumberFormat(undefined, {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+  roundingMode: 'floor',
+} as Intl.NumberFormatOptions);
 
 export function formatCompact(value: number): string {
-  return (value < 10000) ? value.toLocaleString() : compactFormatter.format(value);
+  return (value < 10000) ? value.toLocaleString() : `${compactFormatter.format(value)}+`;
 }
 
 

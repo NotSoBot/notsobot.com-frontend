@@ -180,10 +180,26 @@ export type TagDirectorySortBy = typeof TagDirectorySortByFilters[keyof typeof T
 
 export interface TagDirectoryFilters {
   query: string,
+  category: TagDirectoryCategory | null,
   sortBy: TagDirectorySortBy,
   verified: number | null,
   nsfw: boolean | null,
 }
+
+// `TagDirectoryCategories`, a listing has exactly one (`OTHER` by default)
+export const TagDirectoryCategories = {
+  OTHER: 0,
+  FUN: 1,
+  GAMES: 2,
+  IMAGES: 3,
+  MEMES: 4,
+  UTILITY: 5,
+  AI: 6,
+  TEXT: 7,
+  AUDIO: 8,
+} as const;
+
+export type TagDirectoryCategory = typeof TagDirectoryCategories[keyof typeof TagDirectoryCategories];
 
 export const TagDirectoryVerificationStates = {
   NOT_VERIFIED: 0,
@@ -234,6 +250,7 @@ export interface DirectoryTag {
 
 export interface TagDirectoryItem {
   assets: Array<TagDirectoryAsset>,
+  category: TagDirectoryCategory,
   // the owner shows `tag.content` publicly, it's '' otherwise
   content_public: boolean,
   created: string,
@@ -555,10 +572,11 @@ export interface UserGuildPatch {
 export type GuildListKind = 'allowlist' | 'blocklist';
 
 
-// title/description of a tag's directory listing (images aren't editable from the dashboard yet)
+// title/description/category of a tag's directory listing (images aren't editable from the dashboard yet)
 export interface TagDirectoryListingInput {
   title?: string,
   description?: string,
+  category?: TagDirectoryCategory,
   content_public?: boolean,
 }
 
@@ -607,6 +625,7 @@ export interface AdminDirectoryTag {
 
 export interface AdminTagDirectoryItem {
   assets: Array<TagDirectoryAsset>,
+  category: TagDirectoryCategory,
   created?: ApiTimestamp,
   description: string,
   edited?: ApiTimestamp | null,
@@ -718,6 +737,8 @@ export const ContentFlagActions = ['blocked', 'replaced', 'logged', 'not_hosted'
 
 export interface ContentFlag {
   action: string | null,
+  // the confirmed flag this one was auto-confirmed from (same sha256 or a close pdq), cleared once a reviewer sets a status
+  auto_confirmed_from?: string | null,
   category: string | null,
   channel_id: string | null,
   command_id: string | null,

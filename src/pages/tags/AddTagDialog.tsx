@@ -1,9 +1,9 @@
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, TriangleAlert } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
-import { ApiErrorCodes, ApiRequestError, type Tag } from '@/lib/api';
+import { ApiErrorCodes, ApiRequestError, TagDirectoryVerificationStates, type Tag } from '@/lib/api';
 import { errorMessage, isDiscordGrantError, isScopeMismatch, useAddMeTagMutation, useMeGuildsQuery } from '@/lib/api/dashboardQueries';
 import { CharCounter } from '@/pages/dashboard/ui';
 
@@ -24,7 +24,8 @@ function addErrorMessage(error: unknown): string {
 
 
 // Adds a directory tag to one of your servers or your DMs with NotSoBot, as an alias (same as the bot's `tag get`).
-export function AddTagDialog({ tag, onClose }: {tag: Pick<Tag, 'id' | 'name'>, onClose: () => void}) {
+// `verified` is the listing's `TagDirectoryVerificationStates`, anything short of verified gets a warning first.
+export function AddTagDialog({ tag, verified, onClose }: {tag: Pick<Tag, 'id' | 'name'>, verified: number, onClose: () => void}) {
   const titleId = useId();
   const destinationId = useId();
   const nameId = useId();
@@ -80,6 +81,19 @@ export function AddTagDialog({ tag, onClose }: {tag: Pick<Tag, 'id' | 'name'>, o
         >
           <h2 id={titleId} className='pr-10 text-lg font-semibold text-white'>Add “{tag.name}”</h2>
           <p className='mt-2 text-sm text-muted'>Adds the tag as an alias, so it stays up to date when its owner edits it.</p>
+
+          {(verified !== TagDirectoryVerificationStates.VERIFIED) ? (
+            <p role='alert' className='mt-4 flex gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-fg'>
+              <TriangleAlert aria-hidden className='mt-0.5 size-4 shrink-0 text-warning'/>
+              <span>
+                <span className='font-medium text-white'>
+                  {(verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) ? 'This tag is still waiting for review.' : 'This tag is unverified.'}
+                </span>{' '}
+                NotSoBot staff haven’t checked it, so it might be harmful or spam, and its owner can change what it does at any
+                time. Only add it if you trust it.
+              </span>
+            </p>
+          ) : null}
 
           <div className='mt-5 space-y-4'>
             <div>

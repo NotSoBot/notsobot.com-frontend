@@ -87,10 +87,10 @@ const TAG_DIRECTORY_PAGE_SIZE = 48;
 type TagDirectoryPageParam = {before?: string, offset?: number};
 
 export function useTagDirectoryQuery(filters: TagDirectoryFilters) {
-  const { query, sortBy, verified, nsfw } = filters;
+  const { query, category, sortBy, verified, nsfw } = filters;
   return useInfiniteQuery({
     queryKey: queryKeys.tagDirectory(filters),
-    queryFn: ({ pageParam, signal }) => api.fetchTagDirectory({query, sortBy, verified, nsfw, ...pageParam, limit: TAG_DIRECTORY_PAGE_SIZE}, signal),
+    queryFn: ({ pageParam, signal }) => api.fetchTagDirectory({query, category, sortBy, verified, nsfw, ...pageParam, limit: TAG_DIRECTORY_PAGE_SIZE}, signal),
     initialPageParam: {} as TagDirectoryPageParam,
     getNextPageParam: (lastPage, pages): TagDirectoryPageParam | undefined => {
       if (lastPage.items.length < TAG_DIRECTORY_PAGE_SIZE) {

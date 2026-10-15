@@ -8,8 +8,10 @@ import { useToast } from '@/components/ui/Toast';
 import {
   TAG_DIRECTORY_DESCRIPTION_MAX,
   TAG_DIRECTORY_TITLE_MAX,
+  TagDirectoryCategories,
   TagDirectoryVerificationStates,
   type Tag,
+  type TagDirectoryCategory,
   type TagDirectoryItem,
 } from '@/lib/api';
 import {
@@ -22,14 +24,14 @@ import {
   useRequestMeTagDirectoryVerificationMutation,
 } from '@/lib/api/dashboardQueries';
 import { formatDate, formatDateTime } from '@/lib/utils';
-import { tagDirectoryItemPath, VerificationBadge, verificationInfo } from '@/pages/tags/tagDirectory';
+import { CategorySelect, tagDirectoryItemPath, VerificationBadge, verificationInfo } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar, Toggle } from '../ui';
 import { describeTagLocation, tagLocation } from './tagMeta';
 
 
 // The "Directory" tab of the tag editor: publish the tag, or edit its listing once it's published.
-// The title, description and whether the content is shown publicly are editable here; images aren't supported yet.
+// The title, description, category and whether the content is shown publicly are editable here; images aren't supported yet.
 export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: boolean) => void}) {
   const { data: directory, isPending, isError, error, refetch, isRefetching } = useMeTagDirectoryQuery(tag.id);
   // requesting verification would freeze unsaved listing edits, so the request waits until they're saved or discarded
@@ -57,12 +59,14 @@ export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChan
 }
 
 
-function ListingFields({ title, description, contentPublic, onTitle, onDescription, onContentPublic, disabled = false }: {
+function ListingFields({ title, description, category, contentPublic, onTitle, onDescription, onCategory, onContentPublic, disabled = false }: {
   title: string,
   description: string,
+  category: TagDirectoryCategory,
   contentPublic: boolean,
   onTitle: (value: string) => void,
   onDescription: (value: string) => void,
+  onCategory: (value: TagDirectoryCategory) => void,
   onContentPublic: (value: boolean) => void,
   disabled?: boolean,
 }) {
@@ -100,6 +104,9 @@ function ListingFields({ title, description, contentPublic, onTitle, onDescripti
           />
         )}
       </Field>
+      <Field label='Category' hint='Where the tag shows up when people browse the directory by category.'>
+        {(props) => <CategorySelect {...props} value={category} disabled={disabled} onChange={onCategory}/>}
+      </Field>
       <Toggle
         label='Show content publicly'
         description='Anyone browsing the directory can read the tag’s content. Hidden by default.'
@@ -119,10 +126,11 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
   const publish = usePublishMeTagDirectoryMutation(tag.id);
   const [ title, setTitle ] = useState('');
   const [ description, setDescription ] = useState('');
+  const [ category, setCategory ] = useState<TagDirectoryCategory>(TagDirectoryCategories.OTHER);
   const [ contentPublic, setContentPublic ] = useState(false);
   const [ confirming, setConfirming ] = useState(false);
 
-  const dirty = !!(title || description || contentPublic);
+  const dirty = !!(title || description || contentPublic) || category !== TagDirectoryCategories.OTHER;
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
@@ -138,7 +146,7 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
   const stopsBeing = (location.kind === 'server') ? 'a tag in that server' : (location.kind === 'dm') ? 'a tag in your DM' : 'a tag in that group DM';
 
   const doPublish = () => {
-    publish.mutate({title, description, content_public: contentPublic}, {
+    publish.mutate({title, description, category, content_public: contentPublic}, {
       onSuccess: () => {
         setConfirming(false);
         onDirtyChange(false);
@@ -184,7 +192,17 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
             </p>
           ) : null}
 
-          <ListingFields title={title} description={description} contentPublic={contentPublic} onTitle={setTitle} onDescription={setDescription} onContentPublic={setContentPublic} disabled={isAlias}/>
+          <ListingFields
+            title={title}
+            description={description}
+            category={category}
+            contentPublic={contentPublic}
+            onTitle={setTitle}
+            onDescription={setDescription}
+            onCategory={setCategory}
+            onContentPublic={setContentPublic}
+            disabled={isAlias}
+          />
 
           {(publish.isError && !confirming) ? <InlineError>{errorMessage(publish.error, 'Couldn’t publish this tag.')}</InlineError> : null}
 
@@ -226,10 +244,13 @@ function ListingForm({ tag, directory, onDirtyChange }: {
   const patch = usePatchMeTagDirectoryMutation(tag.id);
   const [ title, setTitle ] = useState(directory.title);
   const [ description, setDescription ] = useState(directory.description);
+  const [ category, setCategory ] = useState(directory.category);
   const [ contentPublic, setContentPublic ] = useState(directory.content_public);
 
   const pending = directory.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
-  const dirty = !pending && (title !== directory.title || description !== directory.description || contentPublic !== directory.content_public);
+  const dirty = !pending && (
+    title !== directory.title || description !== directory.description || category !== directory.category || contentPublic !== directory.content_public
+  );
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
@@ -238,6 +259,7 @@ function ListingForm({ tag, directory, onDirtyChange }: {
   const discard = () => {
     setTitle(directory.title);
     setDescription(directory.description);
+    setCategory(directory.category);
     setContentPublic(directory.content_public);
     patch.reset();
   };
@@ -247,10 +269,11 @@ function ListingForm({ tag, directory, onDirtyChange }: {
     if (!dirty || patch.isPending) {
       return;
     }
-    patch.mutate({title, description, content_public: contentPublic}, {
+    patch.mutate({title, description, category, content_public: contentPublic}, {
       onSuccess: (updated) => {
         setTitle(updated.title);
         setDescription(updated.description);
+        setCategory(updated.category);
         setContentPublic(updated.content_public);
         onDirtyChange(false);
         toast('Directory listing saved.');
@@ -279,7 +302,17 @@ function ListingForm({ tag, directory, onDirtyChange }: {
           <span className='tabular-nums'>{directory.server_count.toLocaleString()} servers</span>
         </div>
 
-        <ListingFields title={title} description={description} contentPublic={contentPublic} onTitle={setTitle} onDescription={setDescription} onContentPublic={setContentPublic} disabled={pending}/>
+        <ListingFields
+          title={title}
+          description={description}
+          category={category}
+          contentPublic={contentPublic}
+          onTitle={setTitle}
+          onDescription={setDescription}
+          onCategory={setCategory}
+          onContentPublic={setContentPublic}
+          disabled={pending}
+        />
 
         {(patch.isError) ? <InlineError>{errorMessage(patch.error, 'Couldn’t save the listing.')}</InlineError> : null}
         {(!pending) ? (

@@ -89,6 +89,7 @@ export const api = {
 
   fetchTagDirectory: (params: {
     query?: string,
+    category?: number | null,
     sortBy?: number,
     verified?: number | null,
     nsfw?: boolean | null,
@@ -101,6 +102,7 @@ export const api = {
       signal,
       query: {
         query: params.query || undefined,
+        category: params.category,
         sort_by: params.sortBy,
         verified: params.verified,
         nsfw: params.nsfw,
@@ -367,6 +369,7 @@ export const api = {
 
   fetchAdminTagDirectory: (params: {
     query?: string,
+    category?: number | null,
     sortBy?: AdminTagDirectorySortBy,
     verified?: number | null,
     nsfw?: boolean | null,
@@ -377,6 +380,7 @@ export const api = {
       signal,
       query: {
         query: params.query || undefined,
+        category: params.category,
         sort_by: params.sortBy,
         verified: params.verified,
         nsfw: params.nsfw,
@@ -387,7 +391,7 @@ export const api = {
   },
 
   // `content` rewrites the tag even though it's locked (verified/pending)
-  patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, name?: string, title?: string, description?: string}) => {
+  patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, name?: string, title?: string, description?: string, category?: number}) => {
     return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
   },
 
@@ -456,6 +460,7 @@ export const api = {
     status?: number | null,
     category?: string,
     needsHumanReview?: boolean | null,
+    autoConfirmed?: boolean | null,
     type?: ContentFlagType | null,
     includeBlocked?: boolean,
     search?: string,
@@ -473,6 +478,7 @@ export const api = {
         status: params.status,
         category: params.category || undefined,
         needs_human_review: params.needsHumanReview,
+        auto_confirmed: params.autoConfirmed,
         type: params.type || undefined,
         include_blocked: params.includeBlocked || undefined,
         search: params.search || undefined,

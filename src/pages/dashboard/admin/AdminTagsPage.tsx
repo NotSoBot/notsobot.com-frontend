@@ -1,18 +1,25 @@
-import { ArrowLeft, ChevronDown, ChevronUp, Clock, Pencil, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, Pencil, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
-import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { ApiErrorCodes, ApiRequestError, TagDirectoryVerificationStates, type AdminTagDirectoryItem, type AdminTagDirectorySortBy, type TagAsset, type TagDirectoryAsset } from '@/lib/api';
+import {
+  ApiErrorCodes,
+  ApiRequestError,
+  TagDirectoryVerificationStates,
+  type AdminTagDirectoryItem,
+  type AdminTagDirectorySortBy,
+  type TagAsset,
+  type TagDirectoryAsset,
+  type TagDirectoryCategory,
+} from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagDirectoryQuery, usePatchAdminTagDirectoryMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatMemory } from '@/lib/utils';
 import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
-import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
+import { CategoryBadge, CategorySelect, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
 import { Chip, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
@@ -50,11 +57,14 @@ export function AdminTagsPage() {
   // admins see NSFW tags unless they hide them
   const hideNsfw = searchParams.get('nsfw') === 'hide';
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'newest';
+  // same `category` param as the public directory
+  const category = TAG_DIRECTORY_CATEGORY_OPTIONS.find((option) => option.param === searchParams.get('category')) ?? null;
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
 
   const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useAdminTagDirectoryQuery({
     query: debouncedQuery,
+    category: category?.value ?? null,
     sortBy,
     verified: filter.verified,
     nsfw: (hideNsfw) ? false : null,
@@ -72,12 +82,8 @@ export function AdminTagsPage() {
 
   return (
     <>
-      <Link to={Routes.DASHBOARD_ADMIN_ALL_TAGS} className='mb-4 inline-flex items-center gap-1.5 rounded text-sm text-muted transition-colors hover:text-white'>
-        <ArrowLeft aria-hidden className='size-4'/>
-        All tags
-      </Link>
       <DashboardHeader
-        title='Directory tags'
+        title='Tag Directory'
         description='Review tags published to the tag directory. Verified tags are marked safe and can’t be edited by their owner.'
       />
 
@@ -98,6 +104,13 @@ export function AdminTagsPage() {
             />
           </div>
           <div className='flex flex-wrap items-center gap-3 sm:ml-auto'>
+            <label className='flex items-center gap-2 text-sm text-muted'>
+              Category
+              <select className='input w-36' value={category?.param ?? ''} onChange={(event) => update({category: event.target.value || null})}>
+                <option value=''>All</option>
+                {TAG_DIRECTORY_CATEGORY_OPTIONS.map((option) => <option key={option.param} value={option.param}>{option.label}</option>)}
+              </select>
+            </label>
             <label className='flex items-center gap-2 text-sm text-muted'>
               Sort
               <select className='input w-36' value={sortBy} onChange={(event) => update({sort: (event.target.value === 'newest') ? null : event.target.value})}>
@@ -159,7 +172,7 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
   const listingMutation = usePatchAdminTagDirectoryMutation();
   // null when not editing
   const [ draft, setDraft ] = useState<string | null>(null);
-  const [ listingDraft, setListingDraft ] = useState<{name: string, title: string, description: string} | null>(null);
+  const [ listingDraft, setListingDraft ] = useState<{name: string, title: string, description: string, category: TagDirectoryCategory} | null>(null);
 
   const content = tag.content ?? '';
   const long = CONTENT_COLLAPSE_LINES < content.split('\n').length || CONTENT_COLLAPSE_CHARS < content.length;
@@ -180,7 +193,9 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
   // names are saved lowercased, without newlines
   const draftName = listingDraft?.name.trim().toLowerCase() ?? '';
   const nameChanged = listingDraft !== null && draftName !== tag.name;
-  const listingChanged = listingDraft !== null && (nameChanged || listingDraft.title !== item.title || listingDraft.description !== item.description);
+  const listingChanged = listingDraft !== null && (
+    nameChanged || listingDraft.title !== item.title || listingDraft.description !== item.description || listingDraft.category !== item.category
+  );
   const listingInvalid = listingDraft !== null && (
     !draftName || TAG_NAME_MAX < draftName.length || TITLE_MAX < listingDraft.title.length || DESCRIPTION_MAX < listingDraft.description.length
   );
@@ -196,6 +211,7 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
       name: (nameChanged) ? draftName : undefined,
       title: (listingDraft.title !== item.title) ? listingDraft.title : undefined,
       description: (listingDraft.description !== item.description) ? listingDraft.description : undefined,
+      category: (listingDraft.category !== item.category) ? listingDraft.category : undefined,
     }, {
       onSuccess: (updated) => {
         setListingDraft(null);
@@ -235,6 +251,7 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
           <div className='flex flex-wrap items-center gap-2'>
             <h2 className='truncate text-lg font-semibold text-white'>{item.title || <span className='text-subtle italic'>Untitled</span>}</h2>
             <VerificationBadge verified={item.verified}/>
+            <CategoryBadge category={item.category}/>
             {(tag.nsfw) ? <NsfwBadge/> : null}
             {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
           </div>
@@ -325,6 +342,16 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
               />
             )}
           </Field>
+          <Field label='Category'>
+            {(props) => (
+              <CategorySelect
+                {...props}
+                value={listingDraft.category}
+                disabled={listingMutation.isPending}
+                onChange={(value) => setListingDraft({...listingDraft, category: value})}
+              />
+            )}
+          </Field>
           <div className='flex flex-wrap items-center gap-2'>
             <ActionButton
               label='Save listing'
@@ -351,10 +378,10 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
           <button
             type='button'
             className='btn btn-ghost btn-sm shrink-0'
-            onClick={() => setListingDraft({name: tag.name, title: item.title ?? '', description: item.description ?? ''})}
+            onClick={() => setListingDraft({name: tag.name, title: item.title ?? '', description: item.description ?? '', category: item.category ?? 0})}
           >
             <Pencil className='size-4'/>
-            Edit name, title &amp; description
+            Edit listing
           </button>
         </div>
       )}

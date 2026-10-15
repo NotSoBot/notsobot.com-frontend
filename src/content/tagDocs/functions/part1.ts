@@ -225,7 +225,7 @@ export const TAG_DOC_FUNCTIONS_PART1: Array<TagDocFunction> = [
     names: ['api.utilities.weather'],
     category: 'search',
     summary: 'Gets the weather for a location and outputs the raw data as JSON.',
-    description: 'Outputs an object with `location` (same shape as a {api.utilities.locations} result), `timezone`, `thumbnail` and `weather`. `weather.current` includes `temperature`, `feels_like`, `humidity`, `wind`, `conditions` and more, and `weather.daily` holds the forecast.',
+    description: 'Outputs an object with `location` (same shape as a {api.utilities.locations} result), `timezone`, `thumbnail` and `weather`. `weather.current` includes `temperature`, `feels_like`, `humidity`, `wind`, `conditions` and more, and `weather.daily` holds the forecast, one entry per day. Each day\'s `rain` is the expected rain amount in millimeters (0 when none). All times, such as `timestamp`, `sunrise` and `sunset`, are Unix timestamps in seconds.',
     syntax: '{api.utilities.weather:query[|units]}',
     args: [
       {name: 'query', description: 'The location (only the first 1024 characters are used).'},
