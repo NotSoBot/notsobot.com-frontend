@@ -15,7 +15,7 @@ import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
-import { Chip, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 import { TagAssetsPanel } from './TagAssetsPanel';
 import { TagStoragePanel } from './TagStoragePanel';
@@ -384,6 +384,7 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
                 {(expanded) ? 'Collapse' : 'Expand'}
               </button>
             ) : null}
+            {(draft === null && content) ? <CopyButton value={content} label='Copy'/> : null}
             {(draft === null) ? (
               <button type='button' className='btn btn-ghost btn-sm' onClick={() => setDraft(content)}>
                 <Pencil className='size-4'/>

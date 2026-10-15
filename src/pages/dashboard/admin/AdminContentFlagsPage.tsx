@@ -24,7 +24,7 @@ import { ADMIN_CONTENT_FLAGS_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery,
 import { cn, formatDateTime, formatMemory } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
-import { Chip, CopyableValue, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyableValue, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { BLOCK_REASON_MAX } from './BlockUserDialog';
 
 
@@ -345,14 +345,20 @@ function ContentFlagCard({ flag, onReport }: {flag: ContentFlag, onReport: () =>
 
       {(flag.query) ? (
         <div className='mt-4'>
-          <h3 className='section-label mb-1'>{(isText) ? 'Flagged text' : 'Query'}</h3>
+          <div className='mb-1 flex min-h-8 items-center justify-between gap-2'>
+            <h3 className='section-label'>{(isText) ? 'Flagged text' : 'Query'}</h3>
+            <CopyButton value={flag.query} label='Copy'/>
+          </div>
           <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none' {...selectAllScope}>{flag.query}</p>
         </div>
       ) : null}
 
       {(flag.source_url) ? (
         <div className='mt-4'>
-          <h3 className='section-label mb-1'>Source URL <span className='normal-case tracking-normal text-subtle'>(not loaded)</span></h3>
+          <div className='mb-1 flex min-h-8 items-center justify-between gap-2'>
+            <h3 className='section-label'>Source URL <span className='normal-case tracking-normal text-subtle'>(not loaded)</span></h3>
+            <CopyButton value={flag.source_url} label='Copy'/>
+          </div>
           {/* plain text on purpose: no link, no preview */}
           <p className='rounded-md border border-line bg-deep px-3 py-2 font-mono text-xs break-all text-muted select-all focus:border-line-strong focus:outline-none' {...selectAllScope}>{flag.source_url}</p>
         </div>

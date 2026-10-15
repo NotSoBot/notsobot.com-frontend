@@ -1,5 +1,5 @@
 import { ChevronDown, Crosshair, HardDrive, Layers, RefreshCw, Server } from 'lucide-react';
-import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -187,6 +187,9 @@ function ShardGrid({ data, now, highlightShardId, highlightClusterId }: {
   highlightClusterId: number | null,
 }) {
   const [ hovered, setHovered ] = useState<HoveredShard | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  // touch has no real hover, so taps toggle the card instead
+  const lastPointerType = useRef('mouse');
 
   // the anchor rect goes stale once the page moves
   useEffect(() => {
@@ -194,21 +197,51 @@ function ShardGrid({ data, now, highlightShardId, highlightClusterId }: {
       return;
     }
     const clear = () => setHovered(null);
+    // a tap outside the grid closes a tapped-open card
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      if (!gridRef.current?.contains(event.target as Node)) {
+        clear();
+      }
+    };
     window.addEventListener('scroll', clear, {passive: true});
     window.addEventListener('resize', clear);
+    document.addEventListener('pointerdown', onDocumentPointerDown);
     return () => {
       window.removeEventListener('scroll', clear);
       window.removeEventListener('resize', clear);
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
     };
   }, [hovered]);
 
   const onPointerOver = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse') {
+      return;
+    }
     const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-shard-id]');
     if (cell) {
       const shardId = Number(cell.dataset.shardId);
       if (hovered?.shardId !== shardId) {
         setHovered({shardId, rect: cell.getBoundingClientRect()});
       }
+    }
+  };
+
+  const onPointerLeave = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse') {
+      setHovered(null);
+    }
+  };
+
+  const onClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (lastPointerType.current === 'mouse') {
+      return;
+    }
+    const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-shard-id]');
+    const shardId = (cell) ? Number(cell.dataset.shardId) : null;
+    if (cell && shardId !== null && hovered?.shardId !== shardId) {
+      setHovered({shardId, rect: cell.getBoundingClientRect()});
+    } else {
+      setHovered(null);
     }
   };
 
@@ -227,9 +260,12 @@ function ShardGrid({ data, now, highlightShardId, highlightClusterId }: {
   return (
     <>
       <div
+        ref={gridRef}
         className='flex flex-wrap justify-center gap-2'
+        onPointerDown={(event) => { lastPointerType.current = event.pointerType; }}
         onPointerOver={onPointerOver}
-        onPointerLeave={() => setHovered(null)}
+        onPointerLeave={onPointerLeave}
+        onClick={onClick}
       >
         {data.clusters.map((cluster) => (
           <ClusterBlock

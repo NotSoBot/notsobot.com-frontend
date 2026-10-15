@@ -389,6 +389,8 @@ export function createReports(users: Array<AdminUser>): Array<Report> {
       reviewed_at: (status) ? new Date(Date.parse(created) + 2 * 3600000).toISOString() : null,
       reviewed_by: (status) ? mockUser.id : null,
       status,
+      // some message reports are of a tag's output
+      tag_id: (type === 3 && i % 12 === 2) ? ['1400000000000000007', '1400000000000000013'][Math.floor(i / 12) % 2] : null,
       // a couple of targets get reported more than once
       target_id: (type === 1 || type === 3) ? users[[4, 12, 4, 21][Math.floor(i / 6) % 4]].id
         : (type === 2) ? ['1100000000000000099', '1100000000000000042'][i % 2]

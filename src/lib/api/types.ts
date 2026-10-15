@@ -786,6 +786,8 @@ export interface Report {
   reviewed_at: ApiTimestamp | null,
   reviewed_by: string | null,
   status: number,
+  // message reports of a tag's output have the tag here (the tag the alias points to for an alias)
+  tag_id: string | null,
   // the reported user (USER), guild (SERVER), whoever used the command for a bot response (MESSAGE) or tag (TAG); null for bugs
   // message reports have the reported message in channel_id/message_id instead of where the report was sent from
   target_id: string | null,

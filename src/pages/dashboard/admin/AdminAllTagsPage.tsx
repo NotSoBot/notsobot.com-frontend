@@ -12,7 +12,7 @@ import { tagLocation, type TagLocation, type TagLocationKind } from '@/pages/das
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, CopyableValue, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyableValue, CopyButton, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { TagStoragePanel } from './TagStoragePanel';
 
 
@@ -186,12 +186,15 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
             {(reference) ? 'Source content' : 'Content'}{' '}
             <span className='normal-case tracking-normal text-subtle'>({content.length.toLocaleString()} chars)</span>
           </h3>
-          {(long) ? (
-            <button type='button' className='btn btn-ghost btn-sm' onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-              {(expanded) ? <ChevronUp className='size-4'/> : <ChevronDown className='size-4'/>}
-              {(expanded) ? 'Collapse' : 'Expand'}
-            </button>
-          ) : null}
+          <div className='flex items-center gap-1'>
+            {(content) ? <CopyButton value={content} label='Copy'/> : null}
+            {(long) ? (
+              <button type='button' className='btn btn-ghost btn-sm' onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
+                {(expanded) ? <ChevronUp className='size-4'/> : <ChevronDown className='size-4'/>}
+                {(expanded) ? 'Collapse' : 'Expand'}
+              </button>
+            ) : null}
+          </div>
         </div>
         <pre
           className={cn(

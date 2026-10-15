@@ -300,6 +300,17 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
             )}
           </div>
         ) : null}
+        {(isMessageReport && report.tag_id) ? (
+          <div>
+            <h3 className='section-label mb-1'>Reported tag</h3>
+            <div className='flex flex-wrap items-center gap-2'>
+              <CopyableValue value={report.tag_id} truncate={0}/>
+              <Link to={`${Routes.DASHBOARD_ADMIN_ALL_TAGS}?q=${report.tag_id}`} className='text-xs text-code hover:underline'>
+                Find in tags
+              </Link>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className='mt-4'>

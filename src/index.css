@@ -88,8 +88,11 @@
 
 
 @layer components {
+  /* fills the screen minus the gutter, which scales with the viewport so scaled windows displays (~1260-1530px wide,
+     plus a classic scrollbar) don't end up with content pressed against the edges; capped at 2560px for ultrawides */
   .container-page {
-    @apply mx-auto w-full max-w-7xl px-4 sm:px-6;
+    @apply mx-auto w-full max-w-[160rem];
+    padding-inline: clamp(1rem, 4vw, 3rem);
   }
 
   .btn {

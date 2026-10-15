@@ -213,7 +213,7 @@ export function TagDirectoryPage() {
         </div>
       ) : (
         <>
-          <ul className={cn('grid gap-4 transition-opacity md:grid-cols-2 lg:grid-cols-3', isPlaceholderData && 'opacity-60')}>
+          <ul className={cn('grid gap-4 transition-opacity md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4', isPlaceholderData && 'opacity-60')}>
             {items.map((item) => <TagCard key={item.id} item={item} search={location.search}/>)}
           </ul>
 
@@ -314,7 +314,7 @@ function NsfwNoticeDialog({ onClose }: {onClose: () => void}) {
 
 function TagGridSkeleton() {
   return (
-    <ul className='grid gap-4 md:grid-cols-2 lg:grid-cols-3' aria-hidden>
+    <ul className='grid gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4' aria-hidden>
       {Array.from({length: 9}, (_, i) => (
         <li key={i} className='card h-44 animate-pulse p-4'>
           <div className='h-5 w-32 rounded bg-surface-3'/>

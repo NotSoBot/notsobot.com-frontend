@@ -174,6 +174,8 @@ function ExactDateTooltip({ rect, text }: {rect: DOMRect, text: string}) {
 
 // Spread onto a read-only text block (url, hash, tag content) so it can take focus from a click and Ctrl/Cmd+A
 // selects just its text instead of the whole page.
+// The range runs from the first to the last text node rather than `selectNodeContents`: a selection that ends at
+// the block's boundary makes Safari paint the gaps right of and below the text, filling the box unevenly.
 export const selectAllScope = {
   tabIndex: 0,
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
@@ -182,7 +184,18 @@ export const selectAllScope = {
       const selection = window.getSelection();
       if (selection) {
         const range = document.createRange();
-        range.selectNodeContents(event.currentTarget);
+        const walker = document.createTreeWalker(event.currentTarget, NodeFilter.SHOW_TEXT);
+        const first = walker.nextNode() as Text | null;
+        let last = first;
+        while (walker.nextNode()) {
+          last = walker.currentNode as Text;
+        }
+        if (first && last) {
+          range.setStart(first, 0);
+          range.setEnd(last, last.length);
+        } else {
+          range.selectNodeContents(event.currentTarget);
+        }
         selection.removeAllRanges();
         selection.addRange(range);
       }
@@ -219,26 +232,44 @@ export function UserCell({ user, fallbackId, size = 'md' }: {user: AdminUserRef 
 
 // Long values (hashes, ids) shown shortened with a copy button; the full value is in the title.
 export function CopyableValue({ value, truncate = 16, className }: {value: string, truncate?: number, className?: string}) {
-  const [ copied, setCopied ] = useState(false);
   const shown = (truncate && truncate < value.length) ? `${value.slice(0, truncate)}…` : value;
   return (
     <span className={cn('inline-flex min-w-0 items-center gap-1', className)}>
       <code title={value} className='truncate font-mono text-xs text-fg select-all focus:outline-none' {...selectAllScope}>{shown}</code>
-      <button
-        type='button'
-        aria-label='Copy'
-        title='Copy'
-        className='shrink-0 cursor-pointer rounded p-0.5 text-subtle hover:bg-surface-3 hover:text-fg'
-        onClick={() => {
-          void navigator.clipboard?.writeText(value).then(() => {
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
-          });
-        }}
-      >
-        {(copied) ? <Check className='size-3.5 text-success'/> : <Copy className='size-3.5'/>}
-      </button>
+      <CopyButton value={value}/>
     </span>
+  );
+}
+
+
+// Copies `value` and shows a check for a moment. Icon only by default; with `label` it's a small ghost button
+// sized for section headers (tag content, flagged urls).
+export function CopyButton({ value, label }: {value: string, label?: string}) {
+  const [ copied, setCopied ] = useState(false);
+  const copy = () => {
+    void navigator.clipboard?.writeText(value).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  if (label) {
+    return (
+      <button type='button' className='btn btn-ghost btn-sm' onClick={copy}>
+        {(copied) ? <Check className='size-4 text-success'/> : <Copy className='size-4'/>}
+        {(copied) ? 'Copied' : label}
+      </button>
+    );
+  }
+  return (
+    <button
+      type='button'
+      aria-label='Copy'
+      title='Copy'
+      className='shrink-0 cursor-pointer rounded p-0.5 text-subtle hover:bg-surface-3 hover:text-fg'
+      onClick={copy}
+    >
+      {(copied) ? <Check className='size-3.5 text-success'/> : <Copy className='size-3.5'/>}
+    </button>
   );
 }
 
