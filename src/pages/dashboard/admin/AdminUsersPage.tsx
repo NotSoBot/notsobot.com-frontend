@@ -21,6 +21,7 @@ import { EditUserDialog } from './EditUserDialog';
 
 const SORTS: Array<{value: AdminUsersSortBy, label: string}> = [
   {value: 'flags', label: 'Most flagged'},
+  {value: 'confirmed', label: 'Most confirmed'},
   {value: 'last_flagged', label: 'Last flagged'},
   {value: 'newest', label: 'Newest'},
   {value: 'username', label: 'Username'},
@@ -112,12 +113,13 @@ export function AdminUsersPage() {
         <>
           <Pagination {...pagination} className='mt-0 mb-4'/>
           <div className={cn('card overflow-x-auto transition-opacity', isPlaceholderData && 'opacity-60')}>
-            <table className='w-full min-w-[760px] text-left text-sm'>
+            <table className='w-full min-w-[860px] text-left text-sm'>
               <thead className='border-b border-line text-xs text-subtle uppercase'>
                 <tr>
                   <th scope='col' className='px-4 py-2.5 font-medium'>User</th>
                   <th scope='col' className='px-4 py-2.5 font-medium'>Flags</th>
                   <th scope='col' className='px-4 py-2.5 text-right font-medium'>Flagged</th>
+                  <th scope='col' className='px-4 py-2.5 text-right font-medium'>Confirmed</th>
                   <th scope='col' className='px-4 py-2.5 font-medium'>Review status</th>
                   <th scope='col' className='px-4 py-2.5 font-medium'>Last flagged</th>
                 </tr>
@@ -146,46 +148,48 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
   const [ blocking, setBlocking ] = useState(false);
   const [ deletingTags, setDeletingTags ] = useState(false);
   const [ editing, setEditing ] = useState(false);
+  const hasChips = owner || moderator || !!user.premium_type;
   return (
-    <tr className='align-middle hover:bg-surface-2'>
-      <td className='px-4 py-3'>
+    <tr className={cn('align-middle hover:bg-surface-2', user.blocked && 'bg-danger/[0.04]')}>
+      <td className={cn('px-4 py-3', user.blocked && 'shadow-[inset_3px_0_0_var(--color-danger)]')}>
         <UserCell user={user}/>
       </td>
       <td className='px-4 py-3'>
-        <div className='flex flex-wrap gap-1 empty:hidden'>
-          {(owner) ? <Chip tone='brand'>Owner</Chip> : null}
-          {(moderator) ? <Chip tone='brand'>Moderator</Chip> : null}
-          {(user.blocked) ? <Chip tone='danger' title={user.blocked_reason || undefined}>Blocked</Chip> : null}
-          {(user.premium_type) ? <Chip>{premiumLabel(user.premium_type)}</Chip> : null}
-        </div>
-        {(user.blocked && user.blocked_reason) ? <p className='mt-1 max-w-56 text-xs break-words text-subtle'>{user.blocked_reason}</p> : null}
-        <div className='-ml-3 flex flex-wrap gap-1 [div:not(:empty)~&]:mt-2'>
-          {(canBlock) ? (
-            <button
-              type='button'
-              className={cn('btn btn-sm', (user.blocked) ? 'btn-secondary' : 'btn-ghost text-danger')}
-              onClick={() => setBlocking(true)}
-            >
-              {(user.blocked) ? <ShieldCheck className='size-4'/> : <Ban className='size-4'/>}
-              {(user.blocked) ? 'Unblock' : 'Block'}
-            </button>
+        <div className='flex flex-col items-start gap-2'>
+          {(hasChips) ? (
+            <div className='flex flex-wrap gap-1'>
+              {(owner) ? <Chip tone='brand'>Owner</Chip> : null}
+              {(moderator) ? <Chip tone='brand'>Moderator</Chip> : null}
+              {(user.premium_type) ? <Chip>{premiumLabel(user.premium_type)}</Chip> : null}
+            </div>
           ) : null}
-          {(viewerIsOwner) ? (
-            <button type='button' className='btn btn-sm btn-ghost' onClick={() => setEditing(true)}>
-              <Pencil className='size-4'/>
-              Edit
-            </button>
+          {(user.blocked) ? (
+            <BlockedNotice reason={user.blocked_reason} onUnblock={(canBlock) ? () => setBlocking(true) : undefined}/>
           ) : null}
-          <Link to={adminTagsPath(`user:${user.id}`)} className='btn btn-sm btn-ghost' title='Show this user’s tags'>
-            <Tags className='size-4'/>
-            Tags
-          </Link>
-          {(canBlock) ? (
-            <button type='button' className='btn btn-sm btn-ghost text-danger' onClick={() => setDeletingTags(true)}>
-              <Trash2 className='size-4'/>
-              Delete tags
-            </button>
-          ) : null}
+          <div className='-ml-3 flex flex-wrap gap-1'>
+            {(canBlock && !user.blocked) ? (
+              <button type='button' className='btn btn-sm btn-ghost text-danger' onClick={() => setBlocking(true)}>
+                <Ban className='size-4'/>
+                Block
+              </button>
+            ) : null}
+            {(viewerIsOwner) ? (
+              <button type='button' className='btn btn-sm btn-ghost' onClick={() => setEditing(true)}>
+                <Pencil className='size-4'/>
+                Edit
+              </button>
+            ) : null}
+            <Link to={adminTagsPath(`user:${user.id}`)} className='btn btn-sm btn-ghost' title='Show this user’s tags'>
+              <Tags className='size-4'/>
+              Tags
+            </Link>
+            {(canBlock) ? (
+              <button type='button' className='btn btn-sm btn-ghost text-danger' onClick={() => setDeletingTags(true)}>
+                <Trash2 className='size-4'/>
+                Delete tags
+              </button>
+            ) : null}
+          </div>
         </div>
         {(blocking) ? (
           <BlockUserDialog user={user} blocked={user.blocked} blockedReason={user.blocked_reason} onClose={() => setBlocking(false)}/>
@@ -196,7 +200,7 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
       <td className='px-4 py-3 text-right tabular-nums'>
         {(flags.total) ? (
           <Link
-            to={adminFlagsPath({user_id: user.id})}
+            to={adminFlagsPath({user_id: user.id, status: 'all'})}
             className='font-semibold text-white hover:text-brand hover:underline'
             title='Show this user’s content flags'
           >
@@ -207,11 +211,23 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
           <span className='text-subtle'>0</span>
         )}
       </td>
+      <td className='px-4 py-3 text-right tabular-nums'>
+        {(flags.confirmed) ? (
+          <Link
+            to={adminFlagsPath({user_id: user.id, status: '1'})}
+            className='font-semibold text-danger hover:underline'
+            title='Show this user’s confirmed content flags'
+          >
+            {flags.confirmed.toLocaleString()}
+          </Link>
+        ) : (
+          <span className='text-subtle'>0</span>
+        )}
+      </td>
       <td className='px-4 py-3'>
-        {(flags.total) ? (
+        {(flags.pending || flags.dismissed || flags.reported) ? (
           <div className='flex flex-wrap gap-1'>
             <StatusCount userId={user.id} status='0' label='pending' count={flags.pending} tone='warning'/>
-            <StatusCount userId={user.id} status='1' label='confirmed' count={flags.confirmed} tone='danger'/>
             <StatusCount userId={user.id} status='2' label='dismissed' count={flags.dismissed} tone='neutral'/>
             <StatusCount userId={user.id} status='3' label='reported' count={flags.reported} tone='brand'/>
           </div>
@@ -221,6 +237,31 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
         {(flags.last_flagged_at) ? <ExactDate value={flags.last_flagged_at}/> : '—'}
       </td>
     </tr>
+  );
+}
+
+
+// the block, its reason and the way to undo it in one place, so a blocked row reads as blocked before anything else
+// `onUnblock` is left out when the viewer isn't allowed to unblock this user
+function BlockedNotice({ reason, onUnblock }: {reason: string | null, onUnblock?: () => void}) {
+  return (
+    <div className='w-full max-w-80 rounded-md border border-danger/30 bg-danger/10 px-3 py-2'>
+      <div className='flex items-center gap-1.5'>
+        <Ban className='size-3.5 shrink-0 text-[#ff8a8c]'/>
+        <span className='text-xs font-semibold text-[#ff8a8c]'>Blocked</span>
+        {(onUnblock) ? (
+          <button type='button' className='btn btn-sm btn-ghost -my-1 -mr-2 ml-auto px-2 py-1' onClick={onUnblock}>
+            <ShieldCheck className='size-3.5'/>
+            Unblock
+          </button>
+        ) : null}
+      </div>
+      {(reason) ? (
+        <p className='mt-1 line-clamp-2 text-xs break-words text-muted' title={reason}>{reason}</p>
+      ) : (
+        <p className='mt-1 text-xs text-subtle italic'>No reason given</p>
+      )}
+    </div>
   );
 }
 

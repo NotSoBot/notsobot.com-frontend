@@ -19,6 +19,7 @@ import type {
   AdminVoicesPage,
   Command,
   ContentFlag,
+  ContentFlagMatches,
   ContentFlagPatch,
   ContentFlagType,
   ContentFlagsPage,
@@ -456,6 +457,7 @@ export const api = {
     category?: string,
     needsHumanReview?: boolean | null,
     type?: ContentFlagType | null,
+    includeBlocked?: boolean,
     search?: string,
     offset?: number,
     limit?: number,
@@ -472,6 +474,7 @@ export const api = {
         category: params.category || undefined,
         needs_human_review: params.needsHumanReview,
         type: params.type || undefined,
+        include_blocked: params.includeBlocked || undefined,
         search: params.search || undefined,
         offset: params.offset || undefined,
         limit: params.limit,
@@ -479,8 +482,21 @@ export const api = {
     });
   },
 
+  fetchAdminContentFlagMatches: (flagId: string, signal?: AbortSignal) => {
+    return apiRequest<ContentFlagMatches>(ApiEndpoints.ADMIN_CONTENT_FLAG_MATCHES(flagId), {signal});
+  },
+
   patchAdminContentFlag: (flagId: string, body: ContentFlagPatch) => {
     return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG(flagId), {method: 'PATCH', body});
+  },
+
+  // turns a media flag into a text flag on its prompt, dropping the media's hashes (can't be undone)
+  flagAdminContentFlagPrompt: (flagId: string) => {
+    return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG_PROMPT(flagId), {method: 'POST'});
+  },
+
+  translateAdminContentFlag: (flagId: string) => {
+    return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG_TRANSLATE(flagId), {method: 'POST'});
   },
 
   fetchAdminReports: (params: {

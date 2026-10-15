@@ -23,7 +23,7 @@ function addErrorMessage(error: unknown): string {
 }
 
 
-// Adds a directory tag to one of your servers or your DMs with NotSoBot, as an alias (same as the bot's `tag add`).
+// Adds a directory tag to one of your servers or your DMs with NotSoBot, as an alias (same as the bot's `tag get`).
 export function AddTagDialog({ tag, onClose }: {tag: Pick<Tag, 'id' | 'name'>, onClose: () => void}) {
   const titleId = useId();
   const destinationId = useId();

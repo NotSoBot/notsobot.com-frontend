@@ -15,7 +15,7 @@ import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { REPORT_TYPES, type ReportTone, reportJumpUrl, reportTypeInfo } from '../reports/reportLabels';
-import { Chip, CopyableValue, DetailList, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CollapseButton, CollapsedCard, CopyableValue, DetailList, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
 type Tone = ReportTone;
@@ -213,7 +213,11 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
   const [ notes, setNotes ] = useState(report.notes ?? '');
   useEffect(() => setNotes(report.notes ?? ''), [report.notes]);
   const notesDirty = notes !== (report.notes ?? '');
+  // resolved and dismissed reports fold down to one line, and fold again whenever their status changes
+  const [ expanded, setExpanded ] = useState(false);
+  useEffect(() => setExpanded(false), [report.status]);
 
+  const reviewed = report.status !== ReportStatuses.OPEN;
   const status = statusInfo(report.status);
   const type = typeInfo(report.type);
   const pendingStatus = (mutation.isPending) ? mutation.variables?.patch.status : undefined;
@@ -241,11 +245,26 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
   const isMessageReport = report.type === ReportTypes.MESSAGE;
   const jumpUrl = reportJumpUrl(report);
 
+  if (reviewed && !expanded) {
+    return (
+      <CollapsedCard onExpand={() => setExpanded(true)}>
+        {/* fixed widths so every collapsed row lines up in columns */}
+        <span className='w-44 font-mono text-sm text-white'>#{report.id}</span>
+        <Chip tone={type.tone} className='w-16 justify-center'>{type.label}</Chip>
+        <Chip tone={status.tone} className='w-20 justify-center'>{status.label}</Chip>
+        <span className='w-52 min-w-0'><UserCell user={report.user} size='sm'/></span>
+        <span className='min-w-0 flex-1 basis-40 truncate text-sm text-muted'>{report.content}</span>
+        <span className='ml-auto text-xs text-subtle'>{formatDateTime(report.created)}</span>
+      </CollapsedCard>
+    );
+  }
+
   return (
     <li className='card p-4 sm:p-5'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='min-w-0'>
           <div className='flex flex-wrap items-center gap-2'>
+            {(reviewed) ? <CollapseButton onClick={() => setExpanded(false)}/> : null}
             <span className='font-mono text-sm text-white'>#{report.id}</span>
             <Chip tone={type.tone}>{type.label}</Chip>
             <Chip tone={status.tone}>{status.label}</Chip>

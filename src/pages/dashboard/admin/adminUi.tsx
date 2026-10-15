@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router';
@@ -274,7 +274,7 @@ export function CopyButton({ value, label }: {value: string, label?: string}) {
 }
 
 
-export function Chip({ children, tone = 'neutral', title }: {children: ReactNode, tone?: 'neutral' | 'danger' | 'warning' | 'success' | 'brand', title?: string}) {
+export function Chip({ children, className, tone = 'neutral', title }: {children: ReactNode, className?: string, tone?: 'neutral' | 'danger' | 'warning' | 'success' | 'brand', title?: string}) {
   return (
     <span
       title={title}
@@ -285,10 +285,47 @@ export function Chip({ children, tone = 'neutral', title }: {children: ReactNode
           : (tone === 'success') ? 'bg-success/20 text-[#6fd391]'
           : (tone === 'brand') ? 'bg-brand/25 text-[#aab2ff]'
           : 'bg-line-strong text-muted',
+        className,
       )}
     >
       {children}
     </span>
+  );
+}
+
+
+// A reviewed report or flag folded down to one line; clicking anywhere on it opens the full card again.
+// Plain content only inside (no buttons, links or focusable dates), since the whole row is a button.
+export function CollapsedCard({ children, onExpand }: {children: ReactNode, onExpand: () => void}) {
+  return (
+    <li className='card'>
+      <button
+        type='button'
+        aria-expanded={false}
+        className='flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[inherit] px-4 py-2.5 text-left hover:bg-surface-2 sm:px-5'
+        onClick={onExpand}
+      >
+        <ChevronRight aria-hidden className='size-4 shrink-0 text-subtle'/>
+        {children}
+      </button>
+    </li>
+  );
+}
+
+
+// folds an expanded reviewed card back into its CollapsedCard
+export function CollapseButton({ onClick }: {onClick: () => void}) {
+  return (
+    <button
+      type='button'
+      aria-expanded
+      aria-label='Collapse'
+      title='Collapse'
+      className='shrink-0 cursor-pointer rounded p-1 text-subtle hover:bg-surface-3 hover:text-fg'
+      onClick={onClick}
+    >
+      <ChevronDown className='size-4'/>
+    </button>
   );
 }
 

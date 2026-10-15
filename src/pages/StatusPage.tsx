@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useSearchParams } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { ShardStatuses, type InfoDiscord, type InfoDiscordCluster, type InfoDiscordShard, type ShardStatus } from '@/lib/api';
 import { useInfoDiscordQuery } from '@/lib/api/queries';
@@ -76,6 +77,8 @@ export function StatusPage() {
   // ticks on its own: react-query doesn't re-render for failed polls or identical data, so going by renders
   // would never mark a cluster dead during an outage
   const now = useNow(NOW_TICK);
+  // tailwind's `sm` breakpoint
+  const wide = useMediaQuery('(min-width: 40rem)');
 
   const lookup = useMemo(() => (data) ? parseLookup(lookupInput, data) : null, [lookupInput, data]);
   const target = (data && lookup) ? resolveLookup(lookup, data) : null;
@@ -101,7 +104,8 @@ export function StatusPage() {
           size='lg'
           value={lookupInput}
           onValueChange={setLookupInput}
-          placeholder='Find a shard: server ID, "shard 12" or "cluster 5"'
+          // the full one doesn't fit at phone width
+          placeholder={(wide) ? 'Find a shard: server ID, "shard 12" or "cluster 5"' : 'Server ID, "shard 12" or "cluster 5"'}
           aria-label='Find a shard by server ID, shard or cluster'
           aria-describedby='lookup-hint'
         />

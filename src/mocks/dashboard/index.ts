@@ -13,7 +13,7 @@
 
 import { tokenStorage } from '@/auth/tokenStorage';
 import { config } from '@/config';
-import { ApiErrorCodes, TagDirectoryVerificationStates, type AdminTagDirectoryItem, type ContentFlag, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
+import { ApiErrorCodes, CONTENT_FLAG_TEXT_MIMETYPE, TagDirectoryVerificationStates, type AdminTagDirectoryItem, type ContentFlag, type Tag, type TagDirectoryItem, type TagStorageType } from '@/lib/api/types';
 import { toDate } from '@/lib/utils';
 
 import {
@@ -1006,6 +1006,9 @@ route('GET', '/admin/users', (_match, { query }) => {
     if (sortBy === 'newest') {
       return (BigInt(b.user.id) > BigInt(a.user.id)) ? 1 : -1;
     }
+    if (sortBy === 'confirmed') {
+      return (b.content_flags.confirmed - a.content_flags.confirmed) || (b.content_flags.flagged - a.content_flags.flagged);
+    }
     if (sortBy === 'last_flagged') {
       return (lastFlagged(b) - lastFlagged(a)) || ((BigInt(b.user.id) > BigInt(a.user.id)) ? 1 : -1);
     }
@@ -1013,6 +1016,12 @@ route('GET', '/admin/users', (_match, { query }) => {
   });
   return pageOf(entries, query);
 });
+
+// the flag with its user as they are now, like the api's join (blocking happens after the fixtures are made)
+function withUser(flag: ContentFlag): ContentFlag {
+  const user = state.adminUsers.find((other) => other.id === flag.user_id);
+  return (user && flag.user) ? {...flag, user: {...flag.user, blocked: user.blocked, blocked_reason: user.blocked_reason, flags: user.flags}} : flag;
+}
 
 route('GET', '/admin/content-flags', (_match, { query }) => {
   requireBotOwner();
@@ -1024,6 +1033,7 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
   const guildId = query.get('guild_id');
   const channelId = query.get('channel_id');
   const tagId = query.get('tag_id');
+  const includeBlocked = parseBool(query.get('include_blocked')) ?? false;
   // mirrors `_content_flag_command_condition`
   const commandId = (query.get('command_id') || '').trim().toLowerCase().split(/\s+/).join('.');
   const search = (query.get('search') || '').trim().toLowerCase();
@@ -1048,6 +1058,8 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
     return false;
   };
   const matching = state.contentFlags
+    .map(withUser)
+    .filter((flag) => includeBlocked || !flag.user?.blocked)
     .filter((flag) => !userId || flag.user_id === userId)
     .filter((flag) => !guildId || flag.guild_id === guildId)
     .filter((flag) => !channelId || flag.channel_id === channelId)
@@ -1064,6 +1076,45 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
   return pageOf(matching, query);
 });
 
+// mirrors `_content_flag_match_condition`
+const PDQ_MATCH_DISTANCE = 31;
+
+function hexDistance(a: string, b: string): number {
+  let bits = 0;
+  for (let i = 0; i < a.length; i++) {
+    let xor = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    for (; xor; xor &= xor - 1) {
+      bits++;
+    }
+  }
+  return bits;
+}
+
+function contentFlagMatches(flag: ContentFlag, sha256: boolean, pdq: boolean): Array<ContentFlag> {
+  return state.contentFlags.filter((other) => other.id !== flag.id && (
+    (sha256 && other.sha256 === flag.sha256) ||
+    (pdq && !!flag.pdq && !!other.pdq && other.sha256 !== flag.sha256 && hexDistance(other.pdq, flag.pdq) <= PDQ_MATCH_DISTANCE)
+  ));
+}
+
+function statusCounts(flags: Array<ContentFlag>) {
+  const count = (status: number) => flags.filter((flag) => flag.status === status).length;
+  return {pending: count(0), confirmed: count(1), dismissed: count(2), reported: count(3)};
+}
+
+route('GET', '/admin/content-flags/(\\d+)/matches', ([ , flagId ]) => {
+  requireBotOwner();
+  const flag = state.contentFlags.find((other) => other.id === flagId);
+  if (!flag) {
+    throw new MockError(404, 10000, 'Unknown Content Flag');
+  }
+  return {
+    sha256: (flag.sha256) ? statusCounts(contentFlagMatches(flag, true, false)) : null,
+    pdq: (flag.pdq) ? statusCounts(contentFlagMatches(flag, false, true)) : null,
+    pdq_distance: PDQ_MATCH_DISTANCE,
+  };
+});
+
 route('PATCH', '/admin/content-flags/(\\d+)', ([ , flagId ], { body }) => {
   requireBotOwner();
   const flag = state.contentFlags.find((other) => other.id === flagId);
@@ -1075,14 +1126,57 @@ route('PATCH', '/admin/content-flags/(\\d+)', ([ , flagId ], { body }) => {
     if (![0, 1, 2, 3].includes(status)) {
       throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'status must be 0-3', {field: 'status'});
     }
-    flag.status = status;
-    flag.reviewed_at = (status) ? new Date().toISOString() : null;
-    flag.reviewed_by = (status) ? mockUser.id : null;
+    const others = contentFlagMatches(flag, !!body.match_sha256, !!body.match_pdq).filter((other) => other.status === 0);
+    for (const target of [flag, ...others]) {
+      target.status = status;
+      target.reviewed_at = (status) ? new Date().toISOString() : null;
+      target.reviewed_by = (status) ? mockUser.id : null;
+    }
   }
   if (body.notes !== undefined) {
     flag.notes = (typeof body.notes === 'string' && body.notes) ? body.notes : null;
   }
-  return flag;
+  return withUser(flag);
+});
+
+// mirrors `admin_post_content_flag_prompt`
+route('POST', '/admin/content-flags/(\\d+)/prompt', ([ , flagId ]) => {
+  requireBotOwner();
+  const flag = state.contentFlags.find((other) => other.id === flagId);
+  if (!flag) {
+    throw new MockError(404, 10000, 'Unknown Content Flag');
+  }
+  if (flag.mimetype === CONTENT_FLAG_TEXT_MIMETYPE) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Content flag is already a text flag');
+  }
+  if (!flag.query) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Content flag has no prompt to flag');
+  }
+  // not a real sha256, the mock only needs it to differ from the media's
+  flag.sha256 = Array.from(flag.query).reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 7).toString(16).padStart(64, '0');
+  flag.pdq = null;
+  flag.mimetype = CONTENT_FLAG_TEXT_MIMETYPE;
+  flag.size = new TextEncoder().encode(flag.query).length;
+  flag.frames = 0;
+  flag.frames_flagged = [];
+  flag.source_url = null;
+  return withUser(flag);
+});
+
+route('POST', '/admin/content-flags/(\\d+)/translate', ([ , flagId ]) => {
+  requireBotOwner();
+  const flag = state.contentFlags.find((other) => other.id === flagId);
+  if (!flag) {
+    throw new MockError(404, 10000, 'Unknown Content Flag');
+  }
+  if (!flag.query) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Content flag has no text to translate');
+  }
+  // anything ascii counts as english already
+  const english = !/[^\x00-\x7f]/.test(flag.query);
+  flag.translation = (english) ? null : `[mock english] ${flag.query}`;
+  flag.translation_language = (english) ? 'en' : 'ja';
+  return withUser(flag);
 });
 
 route('GET', '/admin/reports', (_match, { query }) => {

@@ -23,9 +23,12 @@ export function SearchInput({ className, value, onValueChange, size = 'md', ...p
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
         className={cn(
-          'w-full rounded-lg border border-line bg-surface-3 pr-11 pl-12 text-fg placeholder:text-muted',
+          'w-full rounded-lg border border-line bg-surface-3 pl-12 text-fg placeholder:text-muted',
           'transition-colors outline-none focus:border-brand [&::-webkit-search-cancel-button]:hidden',
-          size === 'lg' ? 'h-14 text-lg' : 'h-12 text-base',
+          // room for the clear button only while it's shown, so placeholders get the full width
+          (value) ? 'pr-11' : 'pr-4',
+          // 16px on phones: fits more of the placeholder, and anything smaller makes iOS zoom in on focus
+          size === 'lg' ? 'h-14 text-base sm:text-lg' : 'h-12 text-base',
         )}
       />
       {(value) ? (

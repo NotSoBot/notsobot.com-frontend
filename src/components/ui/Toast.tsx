@@ -6,13 +6,20 @@ import { cn } from '@/lib/utils';
 
 export type ToastTone = 'success' | 'error';
 
+// a button on the toast, e.g. undo; clicking it also dismisses the toast
+export interface ToastAction {
+  label: string,
+  onClick: () => void,
+}
+
 interface ToastItem {
   id: number,
   tone: ToastTone,
   message: string,
+  action?: ToastAction,
 }
 
-type ShowToast = (message: string, tone?: ToastTone) => void;
+type ShowToast = (message: string, tone?: ToastTone, action?: ToastAction) => void;
 
 const ToastContext = createContext<ShowToast | null>(null);
 
@@ -27,7 +34,8 @@ export function useToast(): ShowToast {
 
 
 // Small stack of transient messages in the bottom corner. Announced politely to screen readers
-// (errors assertively); each one dismisses itself after a few seconds or on click.
+// (errors assertively); each one dismisses itself after a few seconds (longer with an action, so there's time to
+// reach it) or on click.
 export function ToastProvider({ children }: {children: ReactNode}) {
   const [ toasts, setToasts ] = useState<Array<ToastItem>>([]);
   const nextId = useRef(1);
@@ -36,9 +44,9 @@ export function ToastProvider({ children }: {children: ReactNode}) {
     setToasts((items) => items.filter((item) => item.id !== id));
   }, []);
 
-  const show = useCallback<ShowToast>((message, tone = 'success') => {
+  const show = useCallback<ShowToast>((message, tone = 'success', action) => {
     const id = nextId.current++;
-    setToasts((items) => [...items.slice(-3), {id, tone, message}]);
+    setToasts((items) => [...items.slice(-3), {id, tone, message, action}]);
   }, []);
 
   const value = useMemo(() => show, [show]);
@@ -56,7 +64,7 @@ export function ToastProvider({ children }: {children: ReactNode}) {
 
 function Toast({ toast, onDismiss }: {toast: ToastItem, onDismiss: (id: number) => void}) {
   useEffect(() => {
-    const timer = window.setTimeout(() => onDismiss(toast.id), (toast.tone === 'error') ? 7000 : 3500);
+    const timer = window.setTimeout(() => onDismiss(toast.id), (toast.tone === 'error' || toast.action) ? 7000 : 3500);
     return () => window.clearTimeout(timer);
   }, [toast, onDismiss]);
 
@@ -71,6 +79,18 @@ function Toast({ toast, onDismiss }: {toast: ToastItem, onDismiss: (id: number) 
     >
       <Icon className={cn('mt-0.5 size-4 shrink-0', (toast.tone === 'error') ? 'text-danger' : 'text-success')}/>
       <span className='min-w-0 flex-1 break-words text-fg'>{toast.message}</span>
+      {(toast.action) ? (
+        <button
+          type='button'
+          onClick={() => {
+            toast.action?.onClick();
+            onDismiss(toast.id);
+          }}
+          className='-my-1 shrink-0 cursor-pointer rounded px-1.5 py-1 font-semibold text-brand hover:bg-surface-3 hover:text-fg'
+        >
+          {toast.action.label}
+        </button>
+      ) : null}
       <button
         type='button'
         aria-label='Dismiss'

@@ -269,17 +269,27 @@ export function createContentFlags(users: Array<AdminUser>): Array<ContentFlag> 
       needs_human_review: category.startsWith('review') || i % 9 === 0,
       notes: (i % 6 === 0) ? 'Checked hash against known list, no match.' : null,
       pdq: (text) ? null : Array.from({length: 64}, (_, j) => ((i * 31 + j * 7) % 16).toString(16)).join(''),
-      query: (text) ? `{tag output that tripped the filter #${i}}` : (i % 3 === 0) ? `a picture of something weird #${i}` : null,
+      query: (text) ? ((i % 16 === 5) ? `フィルターに引っかかったタグの出力 #${i}` : `{tag output that tripped the filter #${i}}`) : (i % 3 === 0) ? `a picture of something weird #${i}` : null,
       reviewed_at: (status) ? new Date(Date.parse(created) + 3600000).toISOString() : null,
       reviewed_by: (status) ? mockUser.id : null,
       scores_worst: {nudity: (i % 10) / 10 + 0.05, violence: ((i * 3) % 10) / 10, minor: (i % 4) / 7},
-      sha256: Array.from({length: 64}, (_, j) => ((i * 13 + j * 5) % 16).toString(16)).join(''),
+      // the hashes repeat every 16 flags (the same media flagged again), and the sha256 shifts halfway through so those
+      // halves only match by pdq (visually similar), for the "confirm the matches too?" dialog
+      sha256: Array.from({length: 64}, (_, j) => ((i * 13 + j * 5 + Math.floor(i / 32)) % 16).toString(16)).join(''),
       size: 40000 + i * 12345,
       // never rendered as media; it's only here so the page has something to (not) show
       source_url: (text) ? null : `https://media.invalid/attachments/${1300000000000000000n + BigInt(i)}/upload_${i}.${(video) ? 'mp4' : 'png'}`,
       status,
       tag_id: (i % 5 === 4) ? '1290000000000000140' : null,
-      user: {avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username},
+      user: {
+        avatar: user.avatar,
+        blocked: user.blocked,
+        blocked_reason: user.blocked_reason,
+        discriminator: user.discriminator,
+        flags: user.flags,
+        id: user.id,
+        username: user.username,
+      },
       user_id: user.id,
     });
   }

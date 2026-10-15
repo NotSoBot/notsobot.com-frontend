@@ -23,6 +23,7 @@ import type {
   AdminVoice,
   AdminVoicesPage,
   ContentFlag,
+  ContentFlagMatches,
   ContentFlagPatch,
   ContentFlagType,
   ContentFlagsPage,
@@ -802,6 +803,7 @@ export function usePatchAdminUserMutation() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const listKey = [...queryKeys.admin(token), 'users'];
+  const flagsKey = [...queryKeys.admin(token), 'content-flags'];
   return useMutation({
     mutationFn: ({ userId, patch }: {userId: string, patch: AdminUserPatch}) => api.patchAdminUser(userId, patch),
     onSuccess: (user: AdminUser) => {
@@ -811,8 +813,19 @@ export function usePatchAdminUserMutation() {
         }
         return {...page, items: page.items.map((entry) => (entry.user.id === user.id) ? {...entry, user} : entry)};
       });
+      queryClient.setQueriesData<ContentFlagsPage>({queryKey: flagsKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        const blocked = {blocked: user.blocked, blocked_reason: user.blocked_reason, flags: user.flags};
+        return {...page, items: page.items.map((flag) => (flag.user?.id === user.id) ? {...flag, user: {...flag.user, ...blocked}} : flag)};
+      });
     },
-    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+    // the flags list hides blocked users by default
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: listKey}),
+      queryClient.invalidateQueries({queryKey: flagsKey}),
+    ]),
   });
 }
 
@@ -842,6 +855,7 @@ export interface AdminContentFlagsFilters {
   category: string,
   needsHumanReview: boolean | null,
   type: ContentFlagType | null,
+  includeBlocked: boolean,
   search: string,
   page: number,
 }
@@ -860,11 +874,24 @@ export function useAdminContentFlagsQuery(filters: AdminContentFlagsFilters) {
       category: filters.category,
       needsHumanReview: filters.needsHumanReview,
       type: filters.type,
+      includeBlocked: filters.includeBlocked,
       search: filters.search,
       offset: filters.page * ADMIN_CONTENT_FLAGS_PAGE_SIZE,
       limit: ADMIN_CONTENT_FLAGS_PAGE_SIZE,
     }, signal),
     placeholderData: keepPreviousData,
+  });
+}
+
+
+// the other flags of the same media, fetched fresh each time it's called (right before confirming one)
+export function useFetchContentFlagMatches() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return (flagId: string): Promise<ContentFlagMatches> => queryClient.fetchQuery({
+    queryKey: [...queryKeys.admin(token), 'content-flag-matches', flagId],
+    queryFn: ({ signal }) => api.fetchAdminContentFlagMatches(flagId, signal),
+    staleTime: 0,
   });
 }
 
@@ -888,6 +915,44 @@ export function usePatchAdminContentFlagMutation() {
       // the per-user counts change with the status
       queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'users']}),
     ]),
+  });
+}
+
+
+export function useFlagAdminContentFlagPromptMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'content-flags'];
+  return useMutation({
+    mutationFn: ({ flagId }: {flagId: string}) => api.flagAdminContentFlagPrompt(flagId),
+    onSuccess: (flag: ContentFlag) => {
+      queryClient.setQueriesData<ContentFlagsPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === flag.id) ? flag : other)};
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+  });
+}
+
+
+export function useTranslateAdminContentFlagMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'content-flags'];
+  return useMutation({
+    mutationFn: ({ flagId }: {flagId: string}) => api.translateAdminContentFlag(flagId),
+    onSuccess: (flag: ContentFlag) => {
+      queryClient.setQueriesData<ContentFlagsPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === flag.id) ? flag : other)};
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
   });
 }
 

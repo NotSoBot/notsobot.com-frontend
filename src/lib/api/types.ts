@@ -658,7 +658,7 @@ export interface AdminUsersPage {
   items: Array<AdminUserEntry>,
 }
 
-export type AdminUsersSortBy = 'flags' | 'last_flagged' | 'newest' | 'username';
+export type AdminUsersSortBy = 'confirmed' | 'flags' | 'last_flagged' | 'newest' | 'username';
 export type AdminTagsSortBy = 'newest' | 'oldest' | 'uses' | 'name' | 'last_used';
 
 // `GET /admin/tags`, every tag (personal, server and aliases), not just directory listings
@@ -744,8 +744,20 @@ export interface ContentFlag {
   source_url: string | null,
   status: number,
   tag_id: string | null,
-  user: AdminUserRef | null,
+  // english translation of `query` from `POST /admin/content-flags/<id>/translate`, `translation_language` is the detected
+  // source language (`en` with no `translation` means it was already english)
+  translation?: string | null,
+  translation_language?: string | null,
+  user: ContentFlagUser | null,
   user_id: string | null,
+}
+
+// the flag's user, with what the page needs to block them: `flags` (`UserFlags`) since owners can't be blocked and
+// moderators can only be blocked by owners
+export interface ContentFlagUser extends AdminUserRef {
+  blocked: boolean,
+  blocked_reason: string | null,
+  flags: number,
 }
 
 export interface ContentFlagsPage {
@@ -756,6 +768,25 @@ export interface ContentFlagsPage {
 export interface ContentFlagPatch {
   status?: ContentFlagStatus,
   notes?: string | null,
+  // also set `status` on the other pending flags `ContentFlagMatches` counted
+  match_sha256?: boolean,
+  match_pdq?: boolean,
+}
+
+export interface ContentFlagMatchCounts {
+  pending: number,
+  confirmed: number,
+  dismissed: number,
+  reported: number,
+}
+
+// `GET /admin/content-flags/<id>/matches`: the other flags of the same media, per status. `sha256` is the exact same
+// file, `pdq` is visually similar media (within `pdq_distance` bits) that isn't a sha256 match too; null when the flag
+// has no hash of that kind (text has no pdq)
+export interface ContentFlagMatches {
+  sha256: ContentFlagMatchCounts | null,
+  pdq: ContentFlagMatchCounts | null,
+  pdq_distance: number,
 }
 
 // what users send with the bot's `/report` command

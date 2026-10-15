@@ -8,10 +8,18 @@ import { RouterProvider } from 'react-router/dom';
 import { AuthProvider } from '@/auth';
 import { ApiRequestError } from '@/lib/api';
 import { initAnalytics } from '@/lib/analytics';
+import { reloadForNewBuild } from '@/lib/chunkReload';
 import { router } from '@/router';
 
 
 initAnalytics();
+
+// a lazy chunk from an older deploy failed to load (see chunkReload.ts)
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadForNewBuild()) {
+    event.preventDefault();
+  }
+});
 
 
 const queryClient = new QueryClient({
