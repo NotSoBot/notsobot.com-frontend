@@ -1,4 +1,4 @@
-import { AlarmClock, AudioLines, Flag, Inbox, LayoutDashboard, Server, Settings, Tags, Users, type LucideIcon } from 'lucide-react';
+import { AlarmClock, AudioLines, Crown, Flag, Inbox, LayoutDashboard, MessageSquareWarning, Server, Settings, Tags, type LucideIcon, Users } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { matchPath, NavLink, Outlet, useLocation } from 'react-router';
 
@@ -24,6 +24,7 @@ interface Section {
 // the account: Overview first, the rest alphabetical (export/delete your data is at the bottom of Settings)
 export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD, label: 'Overview', icon: LayoutDashboard, color: '#5865f2', end: true},
+  {to: Routes.DASHBOARD_PREMIUM, label: 'Premium', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_SERVERS, label: 'Servers', icon: Server, color: '#faa81a'},
   {to: Routes.DASHBOARD_SETTINGS, label: 'Settings', icon: Settings, color: '#00b0f4'},
 ];
@@ -31,6 +32,7 @@ export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
 // things the user made with the bot, alphabetical
 export const CONTENT_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_REMINDERS, label: 'Reminders', icon: AlarmClock, color: '#faa81a'},
+  {to: Routes.DASHBOARD_REPORTS, label: 'Reports', icon: MessageSquareWarning, color: '#ed4245'},
   {to: Routes.DASHBOARD_TAGS, label: 'Tags', icon: Tags, color: '#3ba55c'},
   {to: Routes.DASHBOARD_VOICES, label: 'Voices', icon: AudioLines, color: '#eb459e'},
 ];
@@ -38,6 +40,7 @@ export const CONTENT_SECTIONS: ReadonlyArray<Section> = [
 // only shown to NotSoBot staff, owners and moderators (the routes are guarded by <RequireStaff/> too); alphabetical
 export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_ADMIN_FLAGS, label: 'Content Flags', icon: Flag, color: '#ed4245'},
+  {to: Routes.DASHBOARD_ADMIN_ENTITLEMENTS, label: 'Entitlements', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_ADMIN_REPORTS, label: 'Reports', icon: Inbox, color: '#faa81a'},
   // the directory review queue is a button on the tags page
   {to: Routes.DASHBOARD_ADMIN_ALL_TAGS, label: 'Tags', icon: Tags, color: '#00b0f4', also: [Routes.DASHBOARD_ADMIN_TAGS]},
@@ -63,17 +66,17 @@ export function DashboardLayout() {
                 </div>
               </div>
             ) : null}
-            <h2 className='section-label mb-2 hidden px-1 lg:block'>Dashboard</h2>
+            <h2 className='section-label mb-1.5 px-1 lg:mb-2'>Dashboard</h2>
             <nav aria-label='Dashboard sections'>
               <SectionList sections={DASHBOARD_SECTIONS}/>
             </nav>
-            <nav aria-label='Content sections' className='mt-3 lg:mt-6'>
-              <h2 className='section-label mb-2 hidden px-1 lg:block'>Content</h2>
+            <nav aria-label='Content sections' className='mt-4 lg:mt-6'>
+              <h2 className='section-label mb-1.5 px-1 lg:mb-2'>Content</h2>
               <SectionList sections={CONTENT_SECTIONS}/>
             </nav>
             {(isStaff(user)) ? (
-              <nav aria-label='Admin sections' className='mt-3 lg:mt-6'>
-                <h2 className='section-label mb-2 hidden px-1 lg:block'>Admin</h2>
+              <nav aria-label='Admin sections' className='mt-4 lg:mt-6'>
+                <h2 className='section-label mb-1.5 px-1 lg:mb-2'>Admin</h2>
                 <SectionList sections={ADMIN_SECTIONS}/>
               </nav>
             ) : null}

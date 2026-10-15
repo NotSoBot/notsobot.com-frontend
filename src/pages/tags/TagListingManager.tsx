@@ -4,6 +4,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { isStaff, useAuth } from '@/auth';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { Spinner } from '@/components/ui/Spinner';
 import { Routes } from '@/config';
 import {
@@ -19,9 +20,11 @@ import {
   useMeTagQuery,
   usePatchAdminTagDirectoryMutation,
   usePatchMeTagDirectoryMutation,
+  useTagServersQuery,
 } from '@/lib/api/dashboardQueries';
 import { queryKeys } from '@/lib/api/queries';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
+import { GuildIcon } from '@/pages/dashboard/servers/GuildIcon';
 import { CharCounter, Field, InlineError, Toggle } from '@/pages/dashboard/ui';
 
 
@@ -111,6 +114,89 @@ export function HiddenContentSection({ item, access }: {item: TagDirectoryItem, 
           {content || <span className='text-subtle italic'>(empty)</span>}
         </pre>
       )}
+    </section>
+  );
+}
+
+
+// past this many servers the list gets a filter box
+const SERVERS_FILTER_MIN = 8;
+
+// The servers that added the tag (as an alias), to the owner and staff only. Everyone else just sees the count.
+export function TagServersSection({ item, access }: {item: TagDirectoryItem, access: ListingAccess}) {
+  const { data, isPending, isError, error, refetch } = useTagServersQuery(item.id, access);
+  const [ filter, setFilter ] = useState('');
+  if (!access.owner && !access.staff) {
+    return null;
+  }
+
+  const search = filter.trim().toLowerCase();
+  const servers = (data && search) ? data.servers.filter((server) => {
+    return server.name.toLowerCase().includes(search) || server.id === search || server.names.some((name) => name.includes(search));
+  }) : data?.servers;
+
+  return (
+    <section>
+      <div className='mb-2 flex items-baseline justify-between gap-3'>
+        <h3 className='section-label'>Servers</h3>
+        <span className='flex items-center gap-1.5 text-xs text-subtle'>
+          <EyeOff aria-hidden className='size-3.5'/>
+          {(access.owner) ? 'Only you and NotSoBot staff can see this' : 'Only the owner and staff can see this'}
+        </span>
+      </div>
+      {(isPending) ? (
+        <div className='flex h-24 items-center justify-center rounded-md border border-line bg-deep'><Spinner className='size-5'/></div>
+      ) : (isError) ? (
+        <div className='rounded-md border border-line bg-deep p-3 text-sm text-muted'>
+          {errorMessage(error, 'Couldn’t load the servers.')}{' '}
+          <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => refetch()}>Retry</button>
+        </div>
+      ) : (!data.servers.length) ? (
+        <p className='rounded-md border border-line bg-deep p-3 text-sm text-muted'>
+          {(data.other_count) ? 'No servers NotSoBot knows about have added this tag yet.' : 'No servers have added this tag yet.'}
+        </p>
+      ) : (
+        <>
+          {(SERVERS_FILTER_MIN < data.servers.length) ? (
+            <SearchInput
+              className='mb-2'
+              value={filter}
+              onValueChange={setFilter}
+              placeholder='Filter by server, id or tag name'
+              aria-label='Filter servers'
+            />
+          ) : null}
+          {(servers?.length) ? (
+            <ul className='max-h-72 divide-y divide-line overflow-auto rounded-md border border-line bg-deep'>
+              {servers.map((server) => {
+                // only worth showing when it was added under another name
+                const renamed = server.names.filter((name) => name !== item.tag.name);
+                return (
+                  <li key={server.id} className='flex items-center gap-3 px-3 py-2'>
+                    <GuildIcon guild={server} size={32} className='size-8 rounded-lg text-xs'/>
+                    <div className='min-w-0 flex-1'>
+                      <p className='truncate text-sm text-white' title={server.name}>{server.name}</p>
+                      <p className='truncate text-xs text-subtle'>
+                        {(renamed.length) ? <>as <span className='font-mono'>{renamed.join(', ')}</span> · </> : null}
+                        Added {formatDate(server.added)}
+                      </p>
+                    </div>
+                    <span className='hidden shrink-0 font-mono text-xs text-subtle sm:block'>{server.id}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className='rounded-md border border-line bg-deep p-3 text-sm text-muted'>No servers match “{filter.trim()}”.</p>
+          )}
+        </>
+      )}
+      {(data && (data.truncated || data.other_count)) ? (
+        <p className='mt-2 text-xs text-subtle'>
+          {(data.truncated) ? `Showing the ${data.servers.length.toLocaleString()} servers that added it most recently. ` : null}
+          {(data.other_count) ? `Also in ${data.other_count.toLocaleString()} DM${(data.other_count === 1) ? '' : 's'} or server${(data.other_count === 1) ? '' : 's'} NotSoBot has no details for.` : null}
+        </p>
+      ) : null}
     </section>
   );
 }

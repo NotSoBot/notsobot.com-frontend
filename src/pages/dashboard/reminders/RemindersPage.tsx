@@ -1,5 +1,6 @@
 import { AlarmClock, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
@@ -18,12 +19,46 @@ import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { EditReminderDialog } from './EditReminderDialog';
 
 
+type ReminderSortBy = 'next' | 'last' | 'newest' | 'oldest';
+
+const SORTS: Array<{value: ReminderSortBy, label: string}> = [
+  {value: 'next', label: 'Next to run'},
+  {value: 'last', label: 'Last to run'},
+  {value: 'newest', label: 'Newest'},
+  {value: 'oldest', label: 'Oldest'},
+];
+
+// ids are snowflakes, so they order by when the reminder was made
+const compareIds = (a: Reminder, b: Reminder) => a.id.length - b.id.length || a.id.localeCompare(b.id);
+const compareStarts = (a: Reminder, b: Reminder) => Date.parse(a.timestamp_start) - Date.parse(b.timestamp_start) || compareIds(a, b);
+
+const SORTERS: Record<ReminderSortBy, (a: Reminder, b: Reminder) => number> = {
+  next: compareStarts,
+  last: (a, b) => compareStarts(b, a),
+  newest: (a, b) => compareIds(b, a),
+  oldest: compareIds,
+};
+
+
 export function RemindersPage() {
   const { data, isPending, isError, error, isRefetching, refetch } = useMeRemindersQuery();
   // only for server names, reminders still show (as "a server") when the guild list can't load
   const guilds = useMeGuildsQuery();
   const guildNames = useMemo(() => new Map((guilds.data ?? []).map((guild) => [guild.id, guild.name])), [guilds.data]);
-  const items = data?.items ?? [];
+  const [ searchParams, setSearchParams ] = useSearchParams();
+  const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'next';
+  const items = useMemo(() => [...(data?.items ?? [])].sort(SORTERS[sortBy]), [data?.items, sortBy]);
+  const setSortBy = (value: string) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (value === 'next') {
+        next.delete('sort');
+      } else {
+        next.set('sort', value);
+      }
+      return next;
+    }, {replace: true, preventScrollReset: true});
+  };
 
   const toast = useToast();
   const patch = usePatchMeReminderMutation();
@@ -48,7 +83,7 @@ export function RemindersPage() {
     <>
       <DashboardHeader
         title='Your Reminders'
-        description={<>Reminders you set with the bot’s <code className='text-fg'>reminder</code> commands, soonest first. You can change their text, move them to your DMs or delete them here.</>}
+        description={<>Reminders you set with the bot’s <code className='text-fg'>reminder</code> commands. You can change their text, move them to your DMs or delete them here.</>}
       />
 
       {(isPending) ? (
@@ -60,17 +95,27 @@ export function RemindersPage() {
           Set one in Discord with <code className='text-fg'>/reminder create</code>.
         </EmptyState>
       ) : (
-        <ul className='card divide-y divide-line'>
-          {items.map((reminder) => (
-            <ReminderRow
-              key={reminder.id}
-              reminder={reminder}
-              where={whereOf(reminder)}
-              onEdit={() => setEditing(reminder)}
-              onDelete={() => setDeleting(reminder)}
-            />
-          ))}
-        </ul>
+        <>
+          <div className='mb-4 flex flex-wrap items-center gap-3 sm:justify-end'>
+            <label className='flex items-center gap-2 text-sm text-muted'>
+              Sort
+              <select className='input w-40' value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                {SORTS.map((sort) => <option key={sort.value} value={sort.value}>{sort.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <ul className='card divide-y divide-line'>
+            {items.map((reminder) => (
+              <ReminderRow
+                key={reminder.id}
+                reminder={reminder}
+                where={whereOf(reminder)}
+                onEdit={() => setEditing(reminder)}
+                onDelete={() => setDeleting(reminder)}
+              />
+            ))}
+          </ul>
+        </>
       )}
 
       {(editing) ? (

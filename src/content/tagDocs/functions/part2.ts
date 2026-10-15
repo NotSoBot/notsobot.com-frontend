@@ -727,12 +727,12 @@ export const TAG_DOC_FUNCTIONS_PART2: Array<TagDocFunction> = [
     names: ['if'],
     category: 'logic',
     summary: 'Compares two values and runs `then:` or `else:` depending on the result.',
-    description: 'Comparisons: `=` equal, `!=` not equal, `>` `>=` `<` `<=` numeric comparisons (decimals work), and `~` which compares numbers by value or text case-insensitively.\n\n'
+    description: 'Comparisons: `=` equal, `!=` not equal, `>` `>=` `<` `<=` numeric comparisons (decimals work), `~` which compares numbers by value or text case-insensitively, and `?` which checks if the first value matches the regex in the second value (case-insensitive).\n\n'
       + 'After the two values, give up to three branches starting with `then:`, `else:` or `finally:`, in any order. Only the branch that matches is evaluated, then `finally:` (if given) is evaluated and added after it.',
     syntax: '{if:value1|comparison|value2|then:code|else:code}',
     args: [
       {name: 'value1', description: 'The first value to compare.'},
-      {name: 'comparison', description: 'One of `=`, `!=`, `>`, `>=`, `<`, `<=`, `~`. Write it with no spaces around it.'},
+      {name: 'comparison', description: 'One of `=`, `!=`, `>`, `>=`, `<`, `<=`, `~`, `?`. Write it with no spaces around it.'},
       {name: 'value2', description: 'The second value to compare.'},
       {name: 'then:code', description: 'Output when the comparison is true.', optional: true},
       {name: 'else:code', description: 'Output when the comparison is false.', optional: true},
@@ -742,10 +742,12 @@ export const TAG_DOC_FUNCTIONS_PART2: Array<TagDocFunction> = [
       {code: '{if:{args}|=|hello|then:Hi there!|else:You did not say hello.}', result: 'Hi there! (when the argument is "hello")'},
       {code: '{if:{range:1|10}|>|5|then:High|else:Low}', result: 'High or Low'},
       {code: '{if:YES|~|yes|then:match}', result: 'match'},
+      {code: '{if:{args}|?|^(hi\\|hello)$|then:Hey!|else:...}', result: 'Hey! (when the argument is "hi" or "Hello")'},
       {code: '{if:1|=|2|then:same|else:different|finally:!}', result: 'different!'},
     ],
     notes: [
       '`>`, `>=`, `<` and `<=` are false if either value is not a number.',
+      '`?` matches anywhere in the text unless the regex uses `^` and `$`. Escape `|` as `\\|` inside the regex. An invalid regex, or one that takes too long, causes an error.',
       'At least one branch is required, and each branch can only appear once (a duplicate causes an error).',
       'Branches must start exactly with `then:`, `else:` or `finally:` (no leading spaces), and the comparison must be a valid operator, otherwise the function is left as plain text.',
     ],
@@ -755,17 +757,19 @@ export const TAG_DOC_FUNCTIONS_PART2: Array<TagDocFunction> = [
     names: ['iferror'],
     category: 'logic',
     summary: 'Outputs the first value that does not throw an error.',
-    description: 'Tries each value in order. If evaluating one errors, its output is dropped and the next one is tried. If they all error, nothing is output.',
+    description: 'Tries each value in order. If evaluating one errors, its output is dropped and the next one is tried, with `{get:error}` set to that error\'s message. If they all error, nothing is output.',
     syntax: '{iferror:code1|code2|...}',
     args: [
       {name: 'code1|code2|...', description: 'Values to try, split by `|`.'},
     ],
     examples: [
       {code: '{iferror:{getfilename:3}|No third file!}', result: 'No third file! (when there are fewer than 3 files)'},
+      {code: '{iferror:{attach:{arg}}|Couldn\'t attach it: {get:error}}', result: 'The download error, when the link doesn\'t work'},
     ],
     notes: [
       'With a single value (no `|`), it is evaluated and output, or nothing is output if it errors.',
       'An `{exit}` or `{exitsilent}` inside is not caught, it still stops the whole tag.',
+      '`error` only exists inside the `{iferror}`, afterwards it goes back to what it was before.',
     ],
   },
   {

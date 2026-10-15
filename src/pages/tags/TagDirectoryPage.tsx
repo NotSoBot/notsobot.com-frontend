@@ -1,9 +1,9 @@
-import { Search } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { Search, TriangleAlert } from 'lucide-react';
+import { useCallback, useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
+import { Modal } from '@/components/ui/Modal';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -31,11 +31,12 @@ const SORT_OPTIONS: Array<{param: string, label: string, value: TagDirectorySort
   {param: 'name', label: 'Name (A–Z)', value: TagDirectorySortByFilters.NAME},
 ];
 
+// verified comes first; the rest are deliberately tucked away so people have to go looking for them
 const STATUS_OPTIONS: Array<{param: string, label: string, value: number | null}> = [
-  {param: 'all', label: 'All', value: null},
-  {param: 'verified', label: 'Verified', value: TagDirectoryVerificationStates.VERIFIED},
-  {param: 'pending', label: 'Pending', value: TagDirectoryVerificationStates.PENDING_VERIFICATION},
-  {param: 'unverified', label: 'Unverified', value: TagDirectoryVerificationStates.NOT_VERIFIED},
+  {param: 'verified', label: 'Verified tags', value: TagDirectoryVerificationStates.VERIFIED},
+  {param: 'all', label: 'All tags', value: null},
+  {param: 'pending', label: 'Pending tags', value: TagDirectoryVerificationStates.PENDING_VERIFICATION},
+  {param: 'unverified', label: 'Unverified tags', value: TagDirectoryVerificationStates.NOT_VERIFIED},
 ];
 
 const DEFAULT_SORT = 'uses';
@@ -57,6 +58,7 @@ export function TagDirectoryPage() {
   const status = findOption(STATUS_OPTIONS, searchParams.get('status'), DEFAULT_STATUS);
   // NSFW tags are hidden unless asked for
   const showNsfw = searchParams.get('nsfw') === 'show';
+  const [ nsfwNoticeOpen, setNsfwNoticeOpen ] = useState(false);
   const isFiltered = !!debouncedQuery || status.param !== DEFAULT_STATUS || showNsfw;
 
   const { data, isPending, isError, isPlaceholderData, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useTagDirectoryQuery({
@@ -138,22 +140,7 @@ export function TagDirectoryPage() {
           aria-label='Search tags'
         />
 
-        <div className='mt-4 flex flex-wrap items-center gap-2'>
-          <Segmented
-            label='Verification'
-            value={status.param}
-            options={STATUS_OPTIONS.map(({ param, label }) => ({value: param, label}))}
-            onChange={(value) => setOption('status', DEFAULT_STATUS, value)}
-          />
-          <label className='flex cursor-pointer items-center gap-1.5 text-xs text-subtle hover:text-muted sm:ml-auto'>
-            <input
-              type='checkbox'
-              className='size-3.5 cursor-pointer accent-brand'
-              checked={showNsfw}
-              onChange={(event) => updateParams({nsfw: (event.target.checked) ? 'show' : null})}
-            />
-            Show NSFW
-          </label>
+        <div className='mt-4 flex flex-wrap items-center gap-x-4 gap-y-2'>
           <label className='flex items-center gap-2 text-sm text-muted'>
             Sort by
             <select
@@ -164,7 +151,42 @@ export function TagDirectoryPage() {
               {SORT_OPTIONS.map((option) => <option key={option.param} value={option.param}>{option.label}</option>)}
             </select>
           </label>
+          {/* kept low-key on purpose, unreviewed tags shouldn't be one click away */}
+          <label className='flex items-center gap-1 text-xs text-subtle sm:ml-auto'>
+            Showing
+            <select
+              className='input w-auto py-1 pl-2 pr-8 text-xs text-muted'
+              value={status.param}
+              onChange={(event) => setOption('status', DEFAULT_STATUS, event.target.value)}
+            >
+              {STATUS_OPTIONS.map((option) => <option key={option.param} value={option.param}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className='flex cursor-pointer items-center gap-1.5 text-xs text-subtle hover:text-muted'>
+            <input
+              type='checkbox'
+              className='size-3.5 cursor-pointer accent-brand'
+              checked={showNsfw}
+              onChange={(event) => {
+                updateParams({nsfw: (event.target.checked) ? 'show' : null});
+                if (event.target.checked) {
+                  setNsfwNoticeOpen(true);
+                }
+              }}
+            />
+            Show NSFW
+          </label>
         </div>
+
+        {(status.value !== TagDirectoryVerificationStates.VERIFIED) ? (
+          <p role='alert' className='mt-4 flex gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-fg'>
+            <TriangleAlert aria-hidden className='mt-0.5 size-4 shrink-0 text-warning'/>
+            <span>
+              These tags haven’t been verified by NotSoBot staff. They might be harmful or spam, so adding or running
+              them is at your own discretion.
+            </span>
+          </p>
+        ) : null}
 
         {(isFiltered && data) ? (
           <div className='mt-3 flex items-center gap-3 text-sm text-muted'>
@@ -216,6 +238,8 @@ export function TagDirectoryPage() {
           onClose={closeTag}
         />
       ) : null}
+
+      {(nsfwNoticeOpen) ? <NsfwNoticeDialog onClose={() => setNsfwNoticeOpen(false)}/> : null}
     </div>
   );
 }
@@ -264,6 +288,26 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
         <AddTagButton tag={tag}/>
       </div>
     </li>
+  );
+}
+
+
+// Discord doesn't allow NSFW tags anymore, so showing them is only for browsing until that changes
+function NsfwNoticeDialog({ onClose }: {onClose: () => void}) {
+  const titleId = useId();
+  return (
+    <Modal labelledBy={titleId} onClose={onClose} className='max-w-md'>
+      <div className='p-5 sm:p-6'>
+        <h2 id={titleId} className='pr-10 text-lg font-semibold text-white'>NSFW tags aren’t allowed on Discord</h2>
+        <p className='mt-2 text-sm text-muted'>
+          Discord no longer allows NSFW tags, so you can’t add or run them right now. You can still browse them here,
+          but this is more of a feature for the future.
+        </p>
+        <div className='mt-6 flex justify-end'>
+          <button type='button' className='btn btn-primary' onClick={onClose}>Got it</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { api } from './index';
-import { TagDirectorySortByFilters, type TagDirectoryFilters, type TagDirectoryItem } from './types';
+import { TagDirectorySortByFilters, type MeTagsSortBy, type TagDirectoryFilters, type TagDirectoryItem } from './types';
 
 
 export const queryKeys = {
@@ -16,12 +16,15 @@ export const queryKeys = {
   // dashboard; everything per-user lives under ['users', '@me'] so logging out drops it
   meSettings: (token: string | null) => ['users', '@me', token, 'settings'] as const,
   meTags: (token: string | null) => ['users', '@me', token, 'tags'] as const,
-  meTagsList: (token: string | null, query: string) => ['users', '@me', token, 'tags', 'list', {query}] as const,
+  meTagsList: (token: string | null, query: string, sortBy: MeTagsSortBy) => ['users', '@me', token, 'tags', 'list', {query, sortBy}] as const,
   meTag: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId] as const,
   meTagVariables: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'variables', scope] as const,
   meTagBlobs: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'blobs', scope] as const,
   meTagDirectory: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'directory'] as const,
+  meTagServers: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'servers'] as const,
+  meEntitlements: (token: string | null) => ['users', '@me', token, 'entitlements'] as const,
   meReminders: (token: string | null) => ['users', '@me', token, 'reminders'] as const,
+  meReports: (token: string | null, filters: object) => ['users', '@me', token, 'reports', filters] as const,
   meVoices: (token: string | null) => ['users', '@me', token, 'voices'] as const,
   meGuilds: (token: string | null) => ['users', '@me', token, 'guilds'] as const,
   meGuild: (token: string | null, guildId: string) => ['users', '@me', token, 'guilds', guildId] as const,
@@ -30,8 +33,10 @@ export const queryKeys = {
   adminTags: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'all-tags', filters] as const,
   adminTagDirectory: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'tags', filters] as const,
   adminTagStorage: (token: string | null, tagId: string, kind: 'variables' | 'blobs', filters: object) => ['users', '@me', token, 'admin', 'tag-storage', tagId, kind, filters] as const,
+  adminTagServers: (token: string | null, tagId: string) => ['users', '@me', token, 'admin', 'tag-servers', tagId] as const,
   adminUsers: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'users', filters] as const,
   adminContentFlags: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'content-flags', filters] as const,
+  adminEntitlements: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'entitlements', filters] as const,
   adminReports: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'reports', filters] as const,
   adminVoices: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'voices', filters] as const,
 };

@@ -7,7 +7,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAuth } from '@/auth';
 import { errorMessage, useMeGuildsQuery, useMeTagsQuery } from '@/lib/api/dashboardQueries';
-import type { Tag, UserMe } from '@/lib/api';
+import type { MeTagsSortBy, Tag, UserMe } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
@@ -15,12 +15,24 @@ import { readTagListState, writeTagListState } from './tagListState';
 import { dashboardTagPath, TagBadges, tagLocation, TagLocationLabel } from './tagMeta';
 
 
+const SORTS: Array<{value: MeTagsSortBy, label: string}> = [
+  {value: 'newest', label: 'Newest'},
+  {value: 'oldest', label: 'Oldest'},
+  {value: 'uses', label: 'Most used'},
+  {value: 'last_used', label: 'Recently used'},
+  {value: 'name', label: 'Name'},
+];
+
+const findSort = (value: string | null | undefined) => SORTS.find((sort) => sort.value === value)?.value;
+
+
 export function TagsPage() {
   const [ searchParams, setSearchParams ] = useSearchParams();
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
+  const sortBy = findSort(searchParams.get('sort')) ?? 'newest';
 
-  const { data, isPending, isError, error, isPlaceholderData, fetchNextPage, hasNextPage, isFetchingNextPage, isRefetching, refetch } = useMeTagsQuery(debouncedQuery);
+  const { data, isPending, isError, error, isPlaceholderData, fetchNextPage, hasNextPage, isFetchingNextPage, isRefetching, refetch } = useMeTagsQuery(debouncedQuery, sortBy);
   const items = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
   const count = data?.pages[0]?.count ?? 0;
 
@@ -30,33 +42,42 @@ export function TagsPage() {
   const guildNames = useMemo(() => new Map((guilds ?? []).map((guild) => [guild.id, guild.name])), [guilds]);
 
   // ---- leave off where you were ----
-  // arriving without a search (sidebar, "All tags", after a delete): bring back the last one
+  // arriving without a search or sort (sidebar, "All tags", after a delete): bring back the last ones
   useLayoutEffect(() => {
     const saved = readTagListState();
-    if (!searchParams.has('q') && saved?.search) {
-      setSearchParams({q: saved.search}, {replace: true, preventScrollReset: true});
+    const restore = {
+      q: (!searchParams.has('q') && saved?.search) || null,
+      sort: (!searchParams.has('sort') && findSort(saved?.sort) !== 'newest' && findSort(saved?.sort)) || null,
+    };
+    if (restore.q || restore.sort) {
+      updateParams(restore);
     }
     // only on arrival
   }, []);
 
-  // remember the search on the way out (the scroll position is remembered by the router, see SiteLayout)
-  const queryRef = useRef(query);
-  queryRef.current = query;
+  // remember the search and sort on the way out (the scroll position is remembered by the router, see SiteLayout)
+  const listStateRef = useRef({search: query, sort: sortBy});
+  listStateRef.current = {search: query, sort: sortBy};
   useLayoutEffect(() => {
-    return () => writeTagListState({search: queryRef.current});
+    return () => writeTagListState(listStateRef.current);
   }, []);
 
-  const setQuery = (value: string) => {
+  function updateParams(changes: Record<string, string | null>) {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (value) {
-        next.set('q', value);
-      } else {
-        next.delete('q');
+      for (const [ key, value ] of Object.entries(changes)) {
+        if (value) {
+          next.set(key, value);
+        } else {
+          next.delete(key);
+        }
       }
       return next;
     }, {replace: true, preventScrollReset: true});
-  };
+  }
+
+  const setQuery = (value: string) => updateParams({q: value});
+  const setSortBy = (value: string) => updateParams({sort: (value === 'newest') ? null : value});
 
   return (
     <>
@@ -71,13 +92,21 @@ export function TagsPage() {
         }
       />
 
-      <SearchInput
-        className='mb-4'
-        value={query}
-        onValueChange={setQuery}
-        placeholder='Search by name or content...'
-        aria-label='Search your tags'
-      />
+      <div className='mb-4 flex flex-col gap-3 sm:flex-row sm:items-center'>
+        <SearchInput
+          className='flex-1'
+          value={query}
+          onValueChange={setQuery}
+          placeholder='Search by name or content...'
+          aria-label='Search your tags'
+        />
+        <label className='flex items-center gap-2 text-sm text-muted sm:shrink-0'>
+          Sort
+          <select className='input w-40' value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+            {SORTS.map((sort) => <option key={sort.value} value={sort.value}>{sort.label}</option>)}
+          </select>
+        </label>
+      </div>
 
       {(isPending) ? (
         <TagListSkeleton/>

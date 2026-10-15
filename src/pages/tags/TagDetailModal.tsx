@@ -9,7 +9,7 @@ import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 import { AddTagButton, NsfwBadge, verificationInfo, VerificationBadge } from './tagDirectory';
-import { HiddenContentSection, ListingEditForm, ManageListingCard, useListingAccess } from './TagListingManager';
+import { HiddenContentSection, ListingEditForm, ManageListingCard, TagServersSection, useListingAccess } from './TagListingManager';
 
 
 const TITLE_ID = 'tag-modal-title';
@@ -147,6 +147,9 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
               <span className='block truncate font-mono text-sm' title={item.id}>{item.id}</span>
             </StatTile>
           </div>
+
+          {/* who added it, the owner and staff only */}
+          <TagServersSection item={item} access={access}/>
 
           <section>
             <h3 className='section-label mb-1'>Tag Information</h3>

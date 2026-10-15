@@ -65,7 +65,6 @@ export function TagVariablesEditor({ tag, scope, readOnly, onDirtyChange }: {
   return (
     <div className='space-y-4'>
       {(readOnly) ? <ReadOnlyNote>This tag is locked, so its variables are read-only.</ReadOnlyNote> : null}
-      {(tag.reference_tag) ? <ReadOnlyNote>This tag is an alias; the bot uses the storage of “{tag.reference_tag.name}”.</ReadOnlyNote> : null}
       {STORAGE_ORDER.map((meta) => {
         const storageId = storageIdFor(scope, meta.type);
         return (

@@ -1,6 +1,7 @@
 // Fixture data for the dev-only dashboard mocks. Shapes follow notsobot.api's `to_dict()` output.
 
 import type {
+  AdminEntitlement,
   AdminTagDirectoryItem,
   AdminUser,
   AdminUserEntry,
@@ -108,6 +109,8 @@ export function createTags(): Array<Tag> {
     tag('1290000000000000110', 'rules', '1. Be nice\n2. No spam\n3. Have fun', {locked: true, uses: 77}),
     tag('1290000000000000100', 'nsfwjoke', 'A very spicy joke goes here.', {nsfw: true, uses: 3}),
   ];
+  // an alias has no content of its own and shares its parent's variables and blobs
+  tags.push(tag('1290000000000000095', 'count', '', {reference_tag: tags[0], uses: 41}));
   const words = ['hello', 'ping', 'weather', 'roll', 'meme', 'shrug', 'flip', 'lenny', 'hug', 'pat', 'dance', 'wave', 'tableflip',
     'unflip', 'thonk', 'yeet', 'bonk', 'poll', 'remind', 'math', 'echo', 'avatar', 'banner', 'emoji', 'say', 'time', 'zalgo', 'owo'];
   words.forEach((word, i) => {
@@ -362,13 +365,15 @@ const REPORT_CONTENT = [
   ['spamming the same tag in every channel and pinging @everyone through it', 'keeps using `.tag` to post slurs after being asked to stop',
     'impersonating a NotSoBot dev in DMs and asking people for their tokens'],
   ['whole server is built around abusing the image commands to post gore', 'server advertises selling stolen accounts, bot is in their #shop channel'],
+  ['used `.imagine` to make this and posted it in a sfw channel', 'this caption has someone\'s home address in it'],
+  ['tag posts a different nsfw image every time it\'s used', 'tag is just a mass ping of every role in the server'],
 ];
 
 export function createReports(users: Array<AdminUser>): Array<Report> {
   const reports: Array<Report> = [];
   for (let i = 0; i < 37; i++) {
     const reporter = users[(i * 7) % users.length];
-    const type = [0, 1, 0, 2, 1, 0][i % 6];
+    const type = [0, 1, 3, 2, 4, 0][i % 6];
     const status = [0, 0, 1, 0, 2, 1, 0][i % 7];
     const contents = REPORT_CONTENT[type];
     const dm = i % 4 === 3;
@@ -385,7 +390,10 @@ export function createReports(users: Array<AdminUser>): Array<Report> {
       reviewed_by: (status) ? mockUser.id : null,
       status,
       // a couple of targets get reported more than once
-      target_id: (type === 1) ? users[[4, 12, 4, 21][Math.floor(i / 6) % 4]].id : (type === 2) ? ['1100000000000000099', '1100000000000000042'][i % 2] : null,
+      target_id: (type === 1 || type === 3) ? users[[4, 12, 4, 21][Math.floor(i / 6) % 4]].id
+        : (type === 2) ? ['1100000000000000099', '1100000000000000042'][i % 2]
+        : (type === 4) ? ['1400000000000000007', '1400000000000000013'][i % 2]
+        : null,
       type,
       user: {
         avatar: reporter.avatar,
@@ -449,4 +457,67 @@ export function createVoices(users: Array<AdminUser>): Array<AdminVoice> {
       user: {avatar: owner.avatar, discriminator: owner.discriminator, id: owner.id, username: owner.username},
     };
   });
+}
+
+
+// SKU ids from notsobot.api's `DiscordSkus`, keyed by the premium type they give
+const PREMIUM_SKUS: Record<number, string> = {
+  2: '1182569865735831582',
+  3: '1318864356179710044',
+  4: '1492322196146618429',
+};
+
+// the mock user has an active Premium+ subscription, an older cancelled Premium one and a replaced staff grant;
+// everyone else gets a mix of active, expired, cancelled and staff-given ones
+export function createEntitlements(users: Array<AdminUser>): Array<AdminEntitlement> {
+  const day = 24 * 3600000;
+  const now = Date.now();
+  const ref = (user: {avatar: string | null, discriminator: string, id: string, username: string}) => {
+    return {avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username};
+  };
+  const base = {consumed: false, deleted: false, granted_by: null, guild_id: null, type: 1};
+  const iso = (offset: number) => new Date(now + offset).toISOString();
+
+  const entitlements: Array<AdminEntitlement> = [
+    {
+      ...base, active: true, created_at: iso(-40 * day), ends_at: iso(20 * day), external_id: '1350000000000000101',
+      id: '1350000000000000901', premium_type: 3, provider: 'discord', sku_id: PREMIUM_SKUS[3], starts_at: iso(-40 * day),
+      updated_at: iso(-10 * day), user: ref(mockUser),
+    },
+    {
+      ...base, active: false, created_at: iso(-200 * day), deleted: true, ends_at: iso(-50 * day), external_id: '1350000000000000102',
+      id: '1350000000000000801', premium_type: 2, provider: 'discord', sku_id: PREMIUM_SKUS[2], starts_at: iso(-200 * day),
+      updated_at: iso(-50 * day), user: ref(mockUser),
+    },
+    {
+      ...base, active: false, created_at: iso(-300 * day), deleted: true, ends_at: null, external_id: null, granted_by: owner.id,
+      id: '1350000000000000701', premium_type: 4, provider: 'manual', sku_id: PREMIUM_SKUS[4], starts_at: null,
+      updated_at: iso(-200 * day), user: ref(mockUser),
+    },
+  ];
+
+  for (let i = 0; i < 40; i++) {
+    const user = users[(i * 5) % users.length];
+    const premiumType = [2, 3, 4, 3, 2][i % 5];
+    const manual = i % 6 === 5;
+    const kind = i % 4; // 0 active, 1 expired, 2 cancelled, 3 active with no end
+    const started = now - (i + 3) * 9 * day;
+    entitlements.push({
+      ...base,
+      active: kind === 0 || kind === 3,
+      created_at: new Date(started).toISOString(),
+      deleted: kind === 2,
+      ends_at: (manual || kind === 3) ? null : (kind === 1) ? iso(-(i + 1) * day) : new Date(started + 30 * day + (i + 3) * 9 * day).toISOString(),
+      external_id: (manual) ? null : (1350000000000001000n + BigInt(i)).toString(),
+      granted_by: (manual) ? owner.id : null,
+      id: (1350000000000000600n - BigInt(i) * 4194304n).toString(),
+      premium_type: premiumType,
+      provider: (manual) ? 'manual' : 'discord',
+      sku_id: PREMIUM_SKUS[premiumType],
+      starts_at: (manual) ? null : new Date(started).toISOString(),
+      updated_at: new Date(started).toISOString(),
+      user: ref(user),
+    });
+  }
+  return entitlements;
 }

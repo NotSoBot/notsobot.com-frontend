@@ -136,9 +136,11 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
     id: 'ms-arguments',
     title: 'Arguments and equations',
     body: [
-      'Arguments are positional: they are read in the order the command lists them, separated by spaces. In this reference `NAME=value` means the argument is optional and `value` is used when you leave it out, `NAME?` means optional with no fixed default, and `...NAME` means "the rest of the line".',
-      'Because arguments are positional, to set a later one you have to fill in the earlier ones too. For example, to make `spin` go counter-clockwise without the circle crop you write `spin img false false`.',
-      'Yes/no arguments accept `true`, `yes`, `y` or `+` for yes. Anything else counts as no.',
+      'Arguments are read in the order the command lists them, separated by spaces. In this reference `NAME=value` means the argument is optional and `value` is used when you leave it out, `NAME?` means optional with no fixed default, and `...NAME` means "the rest of the line".',
+      'You can also set an argument by name with `NAME=value`, using the names from this reference. Names ignore case and underscores, so `SAMPLE_RATE=`, `sample_rate=` and `samplerate=` are the same. Arguments without a name fill in the ones you didn\'t name, in order. For example, to turn off the circle crop of `spin` you can write `spin img circle=false` instead of `spin img true false`. A named argument the command doesn\'t have is an error, and `NAME=` on its own keeps the default.',
+      'Text that is the rest of the line keeps any `word=value` in it as plain text, unless the word is the name of one of the command\'s earlier arguments. Wrap text in `{jsonify:}` (or `text="..."`) to be safe. A quoted JSON string like `"two words"` is always read as one argument.',
+      'User input like `{args}` is pasted in before the script runs, so `magik img {args}` lets the user set any of the command\'s arguments (`2 scale=10` sets both ITERATIONS and SCALE), though each one still has to be in range. To limit them to one argument, wrap it in `{jsonify:}` and name it: `magik img iterations={jsonify:{args}}`. The input then always stays a single value for that argument and can never set another one.',
+      'Yes/no arguments accept `true`, `yes`, `y`, `+`, `1` or the argument\'s own name (like `join a b vertical`) for yes. Anything else counts as no.',
       'Any number can also be an equation, and equations can use variables and functions. Equations must not contain spaces, since a space starts the next argument: write `(imgw/2)-(textw/2)`, not `(imgw / 2) - (textw / 2)`.',
       'Equations support `+`, `-`, `*`, `/`, parentheses and decimal numbers. The engine also understands `%` (remainder) and `^` (power).',
     ].join('\n\n'),
@@ -156,6 +158,14 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
       {
         code: '{mediascript:load {iv} img\ncrop img imgw/2 imgh/2 imgw/4 imgh/4\nrender img}',
         result: 'Crops out the middle half of the image.',
+      },
+      {
+        code: '{mediascript:load {avatar} pfp\nspin pfp circle=false\nrender pfp image/gif}',
+        result: 'Spins the avatar without cropping it to a circle, without having to fill in CLOCKWISE first.',
+      },
+      {
+        code: '{mediascript:load {iv} img\nmagik img iterations={jsonify:{args}}\nrender img}',
+        result: 'Magiks the image as many times as the user says. The input can only ever set ITERATIONS.',
       },
     ],
   },
@@ -238,7 +248,7 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
     ].join('\n\n'),
     examples: [
       {
-        code: '{mediascript:load {avatar} pfp\nsetframecount pfp max(10,pfpfc)\nforeachframe pfp 0 pfpfc {jsonify:\nhueshifthsv pfpx idx*36 100 0\n}\nrender pfp image/gif}',
+        code: '{mediascript:load {avatar} pfp\nsetframecount pfp max(10,pfpfc)\nforeachframe pfp 0 pfpfc {jsonify:\nhueshifthsv pfpx hue=idx*36 saturation=100\n}\nrender pfp image/gif}',
         result: 'Makes an avatar GIF with at least 10 frames that cycles through colors.',
       },
       {
@@ -332,11 +342,11 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
         result: 'Writes white text in the middle of the image.',
       },
       {
-        code: '{mediascript:load {search.google.images:cake} img\ncreate sun min(imgw,imgh)/3 min(imgw,imgh)/3 255 255 0\ncropcircle sun\noverlay img sun imgw-sunw 0\nrender img}',
+        code: '{mediascript:load {search.google.images:cake} img\ncreate sun min(imgw,imgh)/3 min(imgw,imgh)/3 red=255 green=255\ncropcircle sun\noverlay img sun imgw-sunw 0\nrender img}',
         result: 'Draws a yellow "sun" in the top right corner of a cake picture.',
       },
       {
-        code: '{mediascript:load {avatar} pfp\nfit pfp 512 512\nsetframecount pfp max(36,pfpfc)\nforeachframe pfp 0 pfpfc/2 {jsonify:\nrotate3d pfpx (10*idx)+5 45 0 1.5 none tpr\n}\nforeachframe pfp pfpfc/2 pfpfc {jsonify:\nrotate3d pfpx (10*idx)+5-360 45 0 1.5 none tpr\n}\nrender pfp image/gif}',
+        code: '{mediascript:load {avatar} pfp\nfit pfp 512 512\nsetframecount pfp max(36,pfpfc)\nforeachframe pfp 0 pfpfc/2 {jsonify:\nrotate3d pfpx pan=(10*idx)+5 tilt=45 zoom=1.5 order=tpr\n}\nforeachframe pfp pfpfc/2 pfpfc {jsonify:\nrotate3d pfpx pan=(10*idx)+5-360 tilt=45 zoom=1.5 order=tpr\n}\nrender pfp image/gif}',
         result: 'Spins the avatar around in 3D, like the dancing cockroach meme.',
       },
     ],
@@ -440,7 +450,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
     examples: [
       {
-        code: '{mediascript:load {avatar} pfp\nsetframecount pfp max(10,pfpfc)\nforeachframe pfp 0 pfpfc {jsonify:\nhueshifthsv pfpx rand(0,360) 100 0\n}\nrender pfp image/gif}',
+        code: '{mediascript:load {avatar} pfp\nsetframecount pfp max(10,pfpfc)\nforeachframe pfp 0 pfpfc {jsonify:\nhueshifthsv pfpx hue=rand(0,360) saturation=100\n}\nrender pfp image/gif}',
         result: 'Gives every frame of the avatar a random hue.',
       },
     ],
@@ -476,11 +486,11 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     name: 'if',
     category: 'flow',
     summary: 'Runs MediaScript code only when a comparison is true.',
-    syntax: 'if EXPRESSION OPERATOR EXPRESSION ...MEDIASCRIPTCODE',
+    syntax: 'if LEFT OPERATOR RIGHT ...MEDIASCRIPTCODE',
     args: [
-      {name: 'EXPRESSION', description: 'a number or equation (no spaces)'},
+      {name: 'LEFT', description: 'a number or equation (no spaces)'},
       {name: 'OPERATOR', range: '==, !=, <=, >=, <, >', description: 'how to compare'},
-      {name: 'EXPRESSION', description: 'a number or equation (no spaces)'},
+      {name: 'RIGHT', description: 'a number or equation (no spaces)'},
       {name: 'MEDIASCRIPTCODE', rest: true, description: 'the code to run, JSON-encoded with `{jsonify:}` if it has more than one line'},
     ],
     examples: [
@@ -632,7 +642,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'DARKMODE', default: 'true', description: 'ask the page for its dark theme'},
     ],
     examples: [
-      {code: '{mediascript:screenshot https://notsobot.com page 10 1280 720\nrender page image/png}', result: 'A 1280x720 screenshot of the site.'},
+      {code: '{mediascript:screenshot https://notsobot.com page timeout=10 width=1280 height=720\nrender page image/png}', result: 'A 1280x720 screenshot of the site.'},
     ],
   },
   {
@@ -663,7 +673,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'WORDS', rest: true, description: 'the words, split by new lines (wrap in `{jsonify:}`)'},
     ],
     examples: [
-      {code: '{mediascript:wordcloud cloud 0 0 {jsonify:cake\ncake\ncake\npie\ncookies}\nrender cloud image/png}', result: 'A word cloud where "cake" is the biggest word.'},
+      {code: '{mediascript:wordcloud cloud words={jsonify:cake\ncake\ncake\npie\ncookies}\nrender cloud image/png}', result: 'A word cloud where "cake" is the biggest word.'},
     ],
     notes: ['The size is kept between 512 and 2048 pixels.'],
   },
@@ -853,8 +863,8 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'stretch MEDIA_KEY WIDTH=1.0 HEIGHT=1.0 CROP=FALSE',
     args: [
       media(),
-      {name: 'WIDTH', default: '1.0', range: '0..3', description: 'width multiplier'},
-      {name: 'HEIGHT', default: '1.0', range: '0..3', description: 'height multiplier'},
+      {name: 'WIDTH', default: '1.0', range: '0.01..3', description: 'width multiplier'},
+      {name: 'HEIGHT', default: '1.0', range: '0.01..3', description: 'height multiplier'},
       {name: 'CROP', default: 'FALSE', description: 'crop back to the original size'},
     ],
   },
@@ -901,7 +911,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'trim MEDIA_KEY THRESHOLD=10',
     args: [
       media(),
-      {name: 'THRESHOLD', default: '10', description: 'how dark a border must be to count as black'},
+      {name: 'THRESHOLD', default: '10', range: '0..100000', description: 'how dark a border must be to count as black'},
     ],
   },
   {
@@ -932,10 +942,10 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     name: 'rotate',
     category: 'size',
     summary: 'Rotates the media by a number of degrees.',
-    syntax: 'rotate MEDIA_KEY DEGREES FILLCOLOR=none|black CROP=false',
+    syntax: 'rotate MEDIA_KEY DEGREES=90 FILLCOLOR=none|black CROP=false',
     args: [
       media(),
-      {name: 'DEGREES', range: '-360..360', description: 'how far to rotate'},
+      {name: 'DEGREES', default: '90', range: '-360..360', description: 'how far to rotate'},
       {name: 'FILLCOLOR', default: 'none|black', description: 'color for the uncovered corners, as `image_color|video_color` or one color for both'},
       {name: 'CROP', default: 'false', description: 'crop back to the original size'},
     ],
@@ -1032,7 +1042,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'speed MEDIA_KEY SPEED=0',
     args: [
       media(),
-      {name: 'SPEED', default: '0', description: 'the speed multiplier, e.g. 2 for double speed or 0.5 for half'},
+      {name: 'SPEED', default: '0', range: 'more than 0', description: 'the speed multiplier, e.g. 2 for double speed or 0.5 for half; 0 leaves it as is'},
     ],
   },
   {
@@ -1120,21 +1130,21 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     name: 'overlay',
     category: 'compose',
     summary: 'Places one media on top of another at a position.',
-    syntax: 'overlay MEDIA_KEY MEDIA_KEY_2 X=0 Y=0 COLOR=none SIMILARITY=0.01 BLEND=0 LOOP=TRUE OPACITY=100',
+    syntax: 'overlay MEDIA_KEY MEDIA_KEY_2 X=0 Y=0 COLOR=none SIMILARITY=0.1 BLEND=0 LOOP=TRUE OPACITY=100',
     args: [
       media('the background media (gets changed)'),
       {name: 'MEDIA_KEY_2', description: 'the media to put on top'},
       {name: 'X', default: '0', description: 'left position of the top media'},
       {name: 'Y', default: '0', description: 'top position of the top media'},
       {name: 'COLOR', default: 'none', description: 'a color to key out of the top media (like a green screen)'},
-      {name: 'SIMILARITY', default: '0.01', range: '0..1', description: 'how close a color must be to be keyed out'},
+      {name: 'SIMILARITY', default: '0.1', range: '0.01..1', description: 'how close a color must be to be keyed out'},
       {name: 'BLEND', default: '0', range: '0.0..1.0', description: 'how softly keyed edges blend'},
       {name: 'LOOP', default: 'TRUE', description: 'loop the shorter media to match the longer one'},
       {name: 'OPACITY', default: '100', range: '0..100', description: 'opacity of the top media'},
     ],
     examples: [
       {code: '{mediascript:load {iv} img\nload {avatar} pfp\noverlay img pfp (imgw/2)-(pfpw/2) (imgh/2)-(pfph/2)\nrender img}', result: 'Puts the avatar in the middle of the image.'},
-      {code: '{mediascript:load {video} clip\nload https://example.com/greenscreen.mp4 gs\noverlay clip gs 0 0 green 0.3 0.2\nrender clip}', result: 'Overlays a green-screen video with the green removed.'},
+      {code: '{mediascript:load {video} clip\nload https://example.com/greenscreen.mp4 gs\noverlay clip gs color=green similarity=0.3 blend=0.2\nrender clip}', result: 'Overlays a green-screen video with the green removed.'},
     ],
   },
   {
@@ -1347,9 +1357,9 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'hueshiftrgb MEDIA_KEY RED=0 GREEN=0 BLUE=0',
     args: [
       media(),
-      {name: 'RED', default: '0', range: '0..255'},
-      {name: 'GREEN', default: '0', range: '0..255'},
-      {name: 'BLUE', default: '0', range: '0..255'},
+      {name: 'RED', default: '0', range: '-100000..100000', description: 'usually -255..255'},
+      {name: 'GREEN', default: '0', range: '-100000..100000'},
+      {name: 'BLUE', default: '0', range: '-100000..100000'},
     ],
   },
   {
@@ -1501,7 +1511,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'jpeg MEDIA_KEY QUALITY=1',
     args: [
       media(),
-      {name: 'QUALITY', default: '1', description: 'image quality; lower is crunchier'},
+      {name: 'QUALITY', default: '1', range: '1..100', description: 'image quality; lower is crunchier'},
     ],
   },
   {
@@ -1519,11 +1529,12 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     aliases: ['magick', 'magic'],
     category: 'filters',
     summary: 'Applies the classic liquid-rescale "magik" warp.',
-    syntax: 'magik MEDIA_KEY ITERATIONS=1 RESCALE=false',
+    syntax: 'magik MEDIA_KEY ITERATIONS=1 RESCALE=false SCALE=2',
     args: [
       media(),
       {name: 'ITERATIONS', default: '1', range: '1..10', description: 'how many times to apply it'},
       {name: 'RESCALE', default: 'false'},
+      {name: 'SCALE', default: '2', range: '1..10', description: 'how strongly each pass squishes the image'},
     ],
   },
   {
@@ -1531,10 +1542,10 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     aliases: ['pixel'],
     category: 'filters',
     summary: 'Pixelates the media.',
-    syntax: 'pixelate MEDIA_KEY PIXEL_SIZE=9 NO_LINES=false',
+    syntax: 'pixelate MEDIA_KEY PIXEL_WIDTH=9 NO_LINES=false',
     args: [
       media(),
-      {name: 'PIXEL_SIZE', default: '9', range: '2..100', description: 'size of each block'},
+      {name: 'PIXEL_WIDTH', default: '9', range: '2..100', description: 'size of each block (`PIXEL_SIZE=` also works)'},
       {name: 'NO_LINES', default: 'false', description: 'hide the grid lines between blocks'},
     ],
   },
@@ -1582,7 +1593,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'paint MEDIA_KEY RADIUS=3',
     args: [
       media(),
-      {name: 'RADIUS', default: '3', range: '1..10', description: 'brush size'},
+      {name: 'RADIUS', default: '3', range: '0..10', description: 'brush size'},
     ],
   },
   {
@@ -1593,7 +1604,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     args: [
       media(),
       {name: 'CONTRAST', default: '0.0', range: '0..1000'},
-      {name: 'EDGE', default: '2.0', range: '0..1000'},
+      {name: 'EDGE', default: '2.0', range: '1..1000'},
       {name: 'MIXING', default: '33', range: '0..100'},
       {name: 'SMOOTHING', default: '0', range: '0..1000'},
     ],
@@ -1635,9 +1646,9 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'glitch MEDIA_KEY AMOUNT=0 ITERATIONS=0 SEED=0',
     args: [
       media(),
-      {name: 'AMOUNT', default: '0', description: '0 picks automatically'},
-      {name: 'ITERATIONS', default: '0', description: '0 picks automatically'},
-      {name: 'SEED', default: '0', description: 'use the same seed to get the same glitch; 0 is random'},
+      {name: 'AMOUNT', default: '0', range: '0..99', description: '0 picks automatically'},
+      {name: 'ITERATIONS', default: '0', range: '0..115', description: '0 picks automatically'},
+      {name: 'SEED', default: '0', range: '0..99', description: 'use the same seed to get the same glitch; 0 is random'},
     ],
   },
   {
@@ -1647,8 +1658,8 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'datamosh MEDIA_KEY CHANCE=8 REPEAT=20',
     args: [
       media(),
-      {name: 'CHANCE', default: '8', range: '1..100'},
-      {name: 'REPEAT', default: '20', range: '1..100'},
+      {name: 'CHANCE', default: '8', range: '0..100'},
+      {name: 'REPEAT', default: '20', range: '0..100'},
     ],
   },
   {
@@ -1779,8 +1790,8 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'wave MEDIA_KEY AMPLITUDE=10 WAVE_LENGTH=64',
     args: [
       media(),
-      {name: 'AMPLITUDE', default: '10', description: 'wave height'},
-      {name: 'WAVE_LENGTH', default: '64', description: 'distance between waves'},
+      {name: 'AMPLITUDE', default: '10', range: '-2048..2048', description: 'wave height'},
+      {name: 'WAVE_LENGTH', default: '64', range: '1..20480', description: 'distance between waves'},
     ],
   },
   {
@@ -1790,8 +1801,8 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'waves MEDIA_KEY AMPLITUDE=10 WAVE_LENGTH=64 SPEED=1',
     args: [
       media(),
-      {name: 'AMPLITUDE', default: '10', description: 'wave height'},
-      {name: 'WAVE_LENGTH', default: '64', description: 'distance between waves'},
+      {name: 'AMPLITUDE', default: '10', range: '-2048..2048', description: 'wave height'},
+      {name: 'WAVE_LENGTH', default: '64', range: '1..20480', description: 'distance between waves'},
       {name: 'SPEED', default: '1', range: '1..10'},
     ],
   },
@@ -1814,7 +1825,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'skew MEDIA_KEY AMOUNT=1 VERTICAL=false',
     args: [
       media(),
-      {name: 'AMOUNT', default: '1'},
+      {name: 'AMOUNT', default: '1', range: '-80..80', description: 'shear angle in degrees'},
       {name: 'VERTICAL', default: 'false'},
     ],
   },
@@ -1889,8 +1900,8 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       {name: 'ORDER', default: 'ptr', description: '1 to 3 letters from `p`, `t`, `r` giving the rotation order, e.g. `ptr` is pan, then tilt, then roll'},
     ],
     examples: [
-      {code: '{mediascript:load {iv} img\nrotate3d img 30 20 0\nrender img image/png}', result: 'Turns the image as if seen from an angle.'},
-      {code: '{mediascript:load {avatar} pfp\nsetframecount pfp 36\nforeachframe pfp 0 pfpfc {jsonify:\nrotate3d pfpx idx*10 0 0\n}\nrender pfp image/gif}', result: 'A full 3D turn over 36 frames.'},
+      {code: '{mediascript:load {iv} img\nrotate3d img pan=30 tilt=20\nrender img image/png}', result: 'Turns the image as if seen from an angle.'},
+      {code: '{mediascript:load {avatar} pfp\nsetframecount pfp 36\nforeachframe pfp 0 pfpfc {jsonify:\nrotate3d pfpx pan=idx*10\n}\nrender pfp image/gif}', result: 'A full 3D turn over 36 frames.'},
     ],
   },
   {
@@ -1959,7 +1970,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'slide MEDIA_KEY SPEED=1.0 DIRECTION=RIGHT',
     args: [
       media(),
-      {name: 'SPEED', default: '1.0', range: '0.1..10.0'},
+      {name: 'SPEED', default: '1.0', range: '0.01..10.0'},
       {name: 'DIRECTION', default: 'RIGHT', range: 'down, left, right, up'},
     ],
   },
@@ -2010,7 +2021,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     syntax: 'audiodelay MEDIA_KEY DELAY=0.5',
     args: [
       media(),
-      {name: 'DELAY', default: '0.5', description: 'seconds; can be negative'},
+      {name: 'DELAY', default: '0.5', range: '-600..600', description: 'seconds; can be negative'},
     ],
   },
   {
@@ -2051,7 +2062,7 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       media(),
       {name: 'DECAY', default: '0.88', range: '0.001..1.0'},
       {name: 'DELAY', default: '60', range: '1..20000', description: 'milliseconds'},
-      {name: 'VOLUME', default: '0.4', range: '0..1'},
+      {name: 'VOLUME', default: '0.4', range: '0..1000'},
     ],
   },
   {

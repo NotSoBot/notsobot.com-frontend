@@ -14,7 +14,7 @@ import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, Read
 import { CodeEditor } from './CodeEditor';
 import { TagBlobsEditor } from './TagBlobsEditor';
 import { TagDirectoryPanel } from './TagDirectoryPanel';
-import { TAG_CONTENT_MAX, TAG_NAME_MAX, TagBadges, tagLocation, TagLocationLabel } from './tagMeta';
+import { dashboardTagPath, TAG_CONTENT_MAX, TAG_NAME_MAX, TagBadges, tagLocation, TagLocationLabel } from './tagMeta';
 import { StorageScopeForm } from './StorageScopeForm';
 import { TagVariablesEditor } from './TagVariablesEditor';
 
@@ -170,16 +170,24 @@ function TagEditor({ tag }: {tag: Tag}) {
         <TagContentForm tag={tag} readOnly={readOnly} onDirtyChange={setContentDirty}/>
       </div>
       <div id={`${tabsId}-variables-panel`} role='tabpanel' aria-labelledby={`${tabsId}-variables`} hidden={tab !== 'variables'} className='space-y-4'>
-        <StorageScopeForm scope={scope} onChange={setScope}/>
-        {(tab === 'variables' || variablesDirty) ? (
-          <TagVariablesEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setVariablesDirty}/>
-        ) : null}
+        {(tag.reference_tag) ? <AliasStorageNote tag={tag} kind='variables'/> : (
+          <>
+            <StorageScopeForm scope={scope} onChange={setScope}/>
+            {(tab === 'variables' || variablesDirty) ? (
+              <TagVariablesEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setVariablesDirty}/>
+            ) : null}
+          </>
+        )}
       </div>
       <div id={`${tabsId}-blobs-panel`} role='tabpanel' aria-labelledby={`${tabsId}-blobs`} hidden={tab !== 'blobs'} className='space-y-4'>
-        <StorageScopeForm scope={scope} onChange={setScope}/>
-        {(tab === 'blobs' || blobsDirty) ? (
-          <TagBlobsEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setBlobsDirty}/>
-        ) : null}
+        {(tag.reference_tag) ? <AliasStorageNote tag={tag} kind='blobs'/> : (
+          <>
+            <StorageScopeForm scope={scope} onChange={setScope}/>
+            {(tab === 'blobs' || blobsDirty) ? (
+              <TagBlobsEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setBlobsDirty}/>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div id={`${tabsId}-directory-panel`} role='tabpanel' aria-labelledby={`${tabsId}-directory`} hidden={tab !== 'directory'}>
@@ -188,6 +196,23 @@ function TagEditor({ tag }: {tag: Tag}) {
 
       <UnsavedChangesGuard when={contentDirty || variablesDirty || blobsDirty || directoryDirty}/>
     </>
+  );
+}
+
+
+// aliases have no storage of their own: the bot reads and writes the parent tag's variables and blobs
+function AliasStorageNote({ tag, kind }: {tag: Tag, kind: 'variables' | 'blobs'}) {
+  const { user } = useAuth();
+  const parent = tag.reference_tag!;
+  // the editor only loads tags you own (or any tag, for staff)
+  const canOpenParent = parent.user.id === user?.id || isStaff(user);
+  return (
+    <ReadOnlyNote>
+      This tag is an alias of “{parent.name}”. Alias tags use their parent tag’s {kind}, so there’s nothing to edit here.
+      {(canOpenParent) ? (
+        <> <Link to={`${dashboardTagPath(parent.id)}?tab=${kind}`} className='font-medium text-brand hover:underline'>Edit them on “{parent.name}”</Link></>
+      ) : null}
+    </ReadOnlyNote>
   );
 }
 

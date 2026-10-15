@@ -27,6 +27,7 @@ import type {
   ContentFlagType,
   ContentFlagsPage,
   GuildListKind,
+  MeTagsSortBy,
   Reminder,
   ReminderPatch,
   RemindersPage,
@@ -38,6 +39,7 @@ import type {
   TagDirectoryItem,
   TagDirectoryListingInput,
   TagPatch,
+  TagServers,
   TagsPage,
   TagStorageScope,
   TagStorageType,
@@ -182,14 +184,14 @@ export function usePatchMeSettingsMutation() {
 
 /* tags */
 
-export function useMeTagsQuery(query: string) {
+export function useMeTagsQuery(query: string, sortBy: MeTagsSortBy = 'newest') {
   const { token } = useAuth();
   return useInfiniteQuery({
-    queryKey: queryKeys.meTagsList(token, query),
-    queryFn: ({ pageParam, signal }) => api.fetchMeTags({query, before: pageParam, limit: ME_TAGS_PAGE_SIZE}, signal),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage: TagsPage) => {
-      return (lastPage.items.length < ME_TAGS_PAGE_SIZE) ? undefined : lastPage.items[lastPage.items.length - 1].id;
+    queryKey: queryKeys.meTagsList(token, query, sortBy),
+    queryFn: ({ pageParam, signal }) => api.fetchMeTags({query, sortBy, offset: pageParam, limit: ME_TAGS_PAGE_SIZE}, signal),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: TagsPage, pages: Array<TagsPage>) => {
+      return (lastPage.items.length < ME_TAGS_PAGE_SIZE) ? undefined : pages.reduce((total, page) => total + page.items.length, 0);
     },
     placeholderData: keepPreviousData,
   });
@@ -417,6 +419,31 @@ export function useMeRemindersQuery() {
   return useQuery({
     queryKey: queryKeys.meReminders(token),
     queryFn: ({ signal }) => api.fetchMeReminders(signal),
+  });
+}
+
+
+export function useMeEntitlementsQuery() {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meEntitlements(token),
+    queryFn: ({ signal }) => api.fetchMeEntitlements(signal),
+  });
+}
+
+
+export const ME_REPORTS_PAGE_SIZE = 25;
+
+export function useMeReportsQuery(filters: {status: number | null, page: number}) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meReports(token, filters),
+    queryFn: ({ signal }) => api.fetchMeReports({
+      status: filters.status,
+      offset: filters.page * ME_REPORTS_PAGE_SIZE,
+      limit: ME_REPORTS_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -662,6 +689,17 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
 
 // one listing (with its content) by tag id, for staff editing it from the public directory; null if it isn't listed.
 // Lives under the admin list keys so `usePatchAdminTagDirectoryMutation` updates and refetches it too.
+// Which servers added the tag, for its owner and staff only. Staff read it from the admin route (their own tags too).
+export function useTagServersQuery(tagId: string, { owner, staff }: {owner: boolean, staff: boolean}) {
+  const { token } = useAuth();
+  return useQuery<TagServers>({
+    queryKey: (staff) ? queryKeys.adminTagServers(token, tagId) : queryKeys.meTagServers(token, tagId),
+    queryFn: ({ signal }) => (staff) ? api.fetchAdminTagServers(tagId, signal) : api.fetchMeTagServers(tagId, signal),
+    enabled: (owner || staff) && !!token,
+  });
+}
+
+
 export function useAdminTagDirectoryItemQuery(tagId: string, { enabled = true }: {enabled?: boolean} = {}) {
   const { token } = useAuth();
   return useQuery({
@@ -798,6 +836,8 @@ export interface AdminContentFlagsFilters {
   userId: string,
   guildId: string,
   channelId: string,
+  tagId: string,
+  commandId: string,
   status: number | null,
   category: string,
   needsHumanReview: boolean | null,
@@ -814,6 +854,8 @@ export function useAdminContentFlagsQuery(filters: AdminContentFlagsFilters) {
       userId: filters.userId,
       guildId: filters.guildId,
       channelId: filters.channelId,
+      tagId: filters.tagId,
+      commandId: filters.commandId,
       status: filters.status,
       category: filters.category,
       needsHumanReview: filters.needsHumanReview,
@@ -890,6 +932,31 @@ export function usePatchAdminReportMutation() {
       });
     },
     onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+  });
+}
+
+
+export interface AdminEntitlementsFilters {
+  userId: string,
+  provider: string | null,
+  premiumType: number | null,
+  active: boolean | null,
+  page: number,
+}
+
+export function useAdminEntitlementsQuery(filters: AdminEntitlementsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminEntitlements(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminEntitlements({
+      userId: filters.userId,
+      provider: filters.provider,
+      premiumType: filters.premiumType,
+      active: filters.active,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
   });
 }
 

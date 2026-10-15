@@ -18,6 +18,8 @@
   ],
   "vars": {
     "SITE_DOMAIN": "notsobot.com",
+    // only production is indexed, beta gets noindex on every page and a robots.txt that disallows everything
+    "ALLOW_INDEXING": "true",
     // from oasis.notsobot.com's website settings, analytics stays off while empty
     "UMAMI_WEBSITE_ID": ""
   },
@@ -28,6 +30,7 @@
       ],
       "vars": {
         "SITE_DOMAIN": "beta.notsobot.com",
+        "ALLOW_INDEXING": "false",
         "UMAMI_WEBSITE_ID": ""
       }
     }

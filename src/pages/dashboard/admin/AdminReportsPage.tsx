@@ -1,4 +1,4 @@
-// Bug, user and server reports sent with the bot's `report` command (prefixed and slash).
+// Bug, user, server, message and tag reports sent with the bot's `report` commands (prefixed, slash and context menus).
 // `content` is whatever the reporter typed, so it's only ever rendered as plain text.
 
 import { ExternalLink, Filter, Inbox, X } from 'lucide-react';
@@ -14,10 +14,11 @@ import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportsQuery, usePatchAdminRepor
 import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
+import { REPORT_TYPES, type ReportTone, reportJumpUrl, reportTypeInfo } from '../reports/reportLabels';
 import { Chip, CopyableValue, DetailList, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
-type Tone = 'warning' | 'danger' | 'neutral' | 'brand' | 'success';
+type Tone = ReportTone;
 
 const STATUSES: Array<{value: ReportStatus, label: string, action: string, tone: Tone}> = [
   {value: ReportStatuses.OPEN, label: 'Open', action: 'Reopen', tone: 'warning'},
@@ -25,19 +26,21 @@ const STATUSES: Array<{value: ReportStatus, label: string, action: string, tone:
   {value: ReportStatuses.DISMISSED, label: 'Dismissed', action: 'Dismiss', tone: 'neutral'},
 ];
 
-const TYPES: Array<{value: number, label: string, tone: Tone}> = [
-  {value: ReportTypes.BUG, label: 'Bug', tone: 'brand'},
-  {value: ReportTypes.USER, label: 'User', tone: 'danger'},
-  {value: ReportTypes.SERVER, label: 'Server', tone: 'warning'},
-];
+const TYPES = REPORT_TYPES;
+
+// message reports are only for the bot's own responses, they target whoever used the command
+const TARGET_LABELS: Record<number, string> = {
+  [ReportTypes.USER]: 'user',
+  [ReportTypes.SERVER]: 'server',
+  [ReportTypes.MESSAGE]: 'command user',
+  [ReportTypes.TAG]: 'tag',
+};
 
 function statusInfo(status: number) {
   return STATUSES.find((item) => item.value === status) ?? {value: status, label: `Status ${status}`, action: '', tone: 'neutral' as Tone};
 }
 
-function typeInfo(type: number) {
-  return TYPES.find((item) => item.value === type) ?? {value: type, label: `Type ${type}`, tone: 'neutral' as Tone};
-}
+const typeInfo = reportTypeInfo;
 
 
 function parseEnum(value: string | null): number | null {
@@ -77,7 +80,7 @@ export function AdminReportsPage() {
     <>
       <DashboardHeader
         title='Reports'
-        description='Bug, user and server reports sent with the bot’s report command, newest first.'
+        description='Bug, user, server, message and tag reports sent with the bot’s report commands, newest first.'
       />
 
       <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4'>
@@ -103,7 +106,7 @@ export function AdminReportsPage() {
         />
         <IdFilter
           label='Target id'
-          placeholder='Any user or server'
+          placeholder='Any user, server or tag'
           value={targetId}
           onChange={(value) => update({target_id: value})}
         />
@@ -234,10 +237,9 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
     });
   };
 
-  // where the report command was used; a DM has no guild
-  const jumpUrl = (report.channel_id && report.message_id)
-    ? `https://discord.com/channels/${report.guild_id ?? '@me'}/${report.channel_id}/${report.message_id}`
-    : null;
+  // where the report command was used, or the reported message for message reports; a DM has no guild
+  const isMessageReport = report.type === ReportTypes.MESSAGE;
+  const jumpUrl = reportJumpUrl(report);
 
   return (
     <li className='card p-4 sm:p-5'>
@@ -277,14 +279,19 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
         </div>
         {(report.type !== ReportTypes.BUG) ? (
           <div>
-            <h3 className='section-label mb-1'>Reported {(report.type === ReportTypes.SERVER) ? 'server' : 'user'}</h3>
+            <h3 className='section-label mb-1'>Reported {TARGET_LABELS[report.type] ?? 'target'}</h3>
             {(report.target_id) ? (
               <div className='flex flex-wrap items-center gap-2'>
                 <CopyableValue value={report.target_id} truncate={0}/>
                 <FilterButton label='Show reports about this target' onClick={() => onFilterTarget(report.target_id!)}/>
-                {(report.type === ReportTypes.USER) ? (
+                {(report.type === ReportTypes.USER || report.type === ReportTypes.MESSAGE) ? (
                   <Link to={`${Routes.DASHBOARD_ADMIN_USERS}?q=${report.target_id}`} className='text-xs text-code hover:underline'>
                     Find in users
+                  </Link>
+                ) : null}
+                {(report.type === ReportTypes.TAG) ? (
+                  <Link to={`${Routes.DASHBOARD_ADMIN_ALL_TAGS}?q=${report.target_id}`} className='text-xs text-code hover:underline'>
+                    Find in tags
                   </Link>
                 ) : null}
               </div>
@@ -301,7 +308,7 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
       </div>
 
       <div className='mt-4'>
-        <h3 className='section-label mb-1'>Sent from</h3>
+        <h3 className='section-label mb-1'>{(isMessageReport) ? 'Reported message' : 'Sent from'}</h3>
         <DetailList
           items={[
             ['Server', (report.guild_id) ? <CopyableValue value={report.guild_id} truncate={0}/> : 'Direct messages'],

@@ -139,7 +139,7 @@ export const TAG_DOC_GUIDE: Array<TagDocGuideSection> = [
     body: [
       '`{if:value|operator|value|then:...|else:...|finally:...}` compares two values and runs the matching branch. `then:`, `else:` and `finally:` can come in any order and any of them can be left out (at least one is needed). Only the branch that matches is evaluated; `finally:` is always evaluated afterwards and added after it.',
       'Both values are evaluated first, then compared. Write the operator with no spaces around it (`|=|`, not `| = |`), otherwise it is not recognised and the whole `{if}` is output as text. Spaces left around the values also count as part of them.',
-      '`=` and `!=` compare text exactly, including upper and lower case. `>`, `>=`, `<` and `<=` compare numbers (decimals are fine, and an empty value counts as 0); if either value is not a number, the comparison is false. `~` is a loose equals: numbers are compared by value, so `1.50` matches `1.5`, and anything else is compared as text ignoring case, so `Yes` matches `yes`.',
+      '`=` and `!=` compare text exactly, including upper and lower case. `>`, `>=`, `<` and `<=` compare numbers (decimals are fine, and an empty value counts as 0); if either value is not a number, the comparison is false. `~` is a loose equals: numbers are compared by value, so `1.50` matches `1.5`, and anything else is compared as text ignoring case, so `Yes` matches `yes`. `?` treats the second value as a regex and checks if it matches anywhere in the first value, ignoring case (use `^` and `$` to match the whole thing, and `\\|` for a literal `|` in the regex).',
       'For combining checks, `{and:a|b|c}` runs each part in order and stops at the first one that comes out empty. If none are empty it outputs the last part. `{or:a|b|c}` outputs the first part that is not empty. Both run left to right and skip the rest once they have an answer. With a single part (no `|`), `{or}` simply evaluates and outputs it.',
     ].join('\n\n'),
     table: {
@@ -152,6 +152,7 @@ export const TAG_DOC_GUIDE: Array<TagDocGuideSection> = [
         ['<', 'Less than', 'Numbers'],
         ['<=', 'Less than or equal', 'Numbers'],
         ['~', 'Loosely equal', 'Numbers by value, otherwise text ignoring case'],
+        ['?', 'Regex match', 'Text, against the regex in the second value, ignoring case'],
       ],
     },
     examples: [
@@ -612,12 +613,16 @@ export const TAG_DOC_GUIDE: Array<TagDocGuideSection> = [
     body: [
       'When a function fails (for example a download that does not work, a limit being reached, or setting a variable that starts with `__`), the whole tag stops and the bot replies with a "Command Error" message explaining what went wrong. Nothing else from the tag is sent.',
       'Not every mistake is an error. Unknown function names, and functions given arguments they cannot use, are left in the output as plain text, which makes typos easy to spot.',
-      'To handle errors yourself, `{iferror:a|b|c}` tries each part in order and outputs the first one that does not fail, and `{evalsilent:...}` runs its contents and simply drops any error. To stop a tag on purpose, `{exit:message}` throws away everything produced so far and sends only the message, while `{exitsilent:message}` stops but keeps what was already produced. An exit inside `{iferror}` or `{evalsilent}` is not caught: it still stops the whole tag.',
+      'To handle errors yourself, `{iferror:a|b|c}` tries each part in order and outputs the first one that does not fail (inside a later part, `{get:error}` is the message of the error before it), and `{evalsilent:...}` runs its contents and simply drops any error. To stop a tag on purpose, `{exit:message}` throws away everything produced so far and sends only the message, while `{exitsilent:message}` stops but keeps what was already produced. An exit inside `{iferror}` or `{evalsilent}` is not caught: it still stops the whole tag.',
     ].join('\n\n'),
     examples: [
       {
         code: '{iferror:{attach:{arg}}|That link didn\'t work!}',
         result: 'Attaches the file, or says "That link didn\'t work!" if it can\'t be downloaded.',
+      },
+      {
+        code: '{iferror:{attach:{arg}}|Failed: {get:error}}',
+        result: 'Attaches the file, or says why it couldn\'t be downloaded.',
       },
       {
         code: '{if:{argslen}|=|0|then:{exit:Please give me something to rate!}}Rating {args}...',

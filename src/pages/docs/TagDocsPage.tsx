@@ -4,7 +4,7 @@ import { Link, useLocation, useSearchParams } from 'react-router';
 
 import { Segmented } from '@/components/ui/Segmented';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { TagsDisabledNotice } from '@/components/ui/TagsDisabledNotice';
+import { QuarantineNotice } from '@/components/ui/QuarantineNotice';
 import { Routes } from '@/config';
 import {
   MEDIASCRIPT_CATEGORIES,
@@ -116,7 +116,7 @@ export function TagDocsPage() {
     <div className='[font-variant-ligatures:none]'>
       <div className='border-b border-line bg-surface'>
         <div className='container-page py-10 sm:py-12'>
-          <TagsDisabledNotice className='mb-6 max-w-3xl'/>
+          <QuarantineNotice className='mb-6 max-w-3xl'/>
           <div className='mb-3 flex items-center gap-2 text-sm font-medium text-brand'>
             <BookOpen className='size-4'/>
             Documentation

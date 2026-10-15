@@ -2,6 +2,7 @@ import { ApiEndpoints } from './endpoints';
 import { ApiRequestError, apiRequest } from './client';
 import { ApiErrorCodes } from './types';
 import type {
+  AdminEntitlementsPage,
   AdminTagBlob,
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
@@ -22,8 +23,10 @@ import type {
   ContentFlagType,
   ContentFlagsPage,
   CommandStat,
+  EntitlementsPage,
   Reminder,
   ReminderPatch,
+  MeReportsPage,
   RemindersPage,
   Report,
   ReportPatch,
@@ -38,7 +41,9 @@ import type {
   TagDirectoryListingInput,
   TagDirectoryPage,
   TagPatch,
+  TagServers,
   TagsPage,
+  MeTagsSortBy,
   TagStorageScope,
   TagStorageType,
   TagVariable,
@@ -143,10 +148,17 @@ export const api = {
     return apiRequest<UserSettings>(ApiEndpoints.USER_ME_SETTINGS, {method: 'PATCH', body});
   },
 
-  fetchMeTags: (params: {query?: string, before?: string, limit?: number}, signal?: AbortSignal) => {
+  // `before` only works with the default (newest) sort, `offset` pages any of them
+  fetchMeTags: (params: {query?: string, sortBy?: MeTagsSortBy, before?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
     return apiRequest<TagsPage>(ApiEndpoints.USER_ME_TAGS, {
       signal,
-      query: {query: params.query || undefined, before: params.before, limit: params.limit},
+      query: {
+        query: params.query || undefined,
+        sort_by: (params.sortBy && params.sortBy !== 'newest') ? params.sortBy : undefined,
+        before: params.before,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
     });
   },
 
@@ -210,6 +222,11 @@ export const api = {
     return apiRequest<TagBlobs>(ApiEndpoints.USER_ME_TAG_BLOBS(tagId), {signal, query: {...scope}});
   },
 
+  // the servers that added the tag, only for its owner (staff use `fetchAdminTagServers`)
+  fetchMeTagServers: (tagId: string, signal?: AbortSignal) => {
+    return apiRequest<TagServers>(ApiEndpoints.USER_ME_TAG_SERVERS(tagId), {signal});
+  },
+
   // replaces every blob in the given scope (blobs left out are removed)
   putMeTagBlobs: (tagId: string, body: TagBlobsPut) => {
     return apiRequest<TagBlobs>(ApiEndpoints.USER_ME_TAG_BLOBS(tagId), {method: 'PUT', body});
@@ -219,12 +236,27 @@ export const api = {
     return apiRequest<RemindersPage>(ApiEndpoints.USER_ME_REMINDERS, {signal});
   },
 
+  fetchMeReports: (params: {status?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<MeReportsPage>(ApiEndpoints.USER_ME_REPORTS, {
+      signal,
+      query: {
+        status: params.status,
+        offset: params.offset,
+        limit: params.limit,
+      },
+    });
+  },
+
   patchMeReminder: (reminderId: string, body: ReminderPatch) => {
     return apiRequest<Reminder>(ApiEndpoints.USER_ME_REMINDER(reminderId), {method: 'PATCH', body});
   },
 
   deleteMeReminder: (reminderId: string) => {
     return apiRequest<void>(ApiEndpoints.USER_ME_REMINDER(reminderId), {method: 'DELETE'});
+  },
+
+  fetchMeEntitlements: (signal?: AbortSignal) => {
+    return apiRequest<EntitlementsPage>(ApiEndpoints.USER_ME_ENTITLEMENTS, {signal});
   },
 
   fetchMeVoices: (signal?: AbortSignal) => {
@@ -321,6 +353,10 @@ export const api = {
     });
   },
 
+  fetchAdminTagServers: (tagId: string, signal?: AbortSignal) => {
+    return apiRequest<TagServers>(ApiEndpoints.ADMIN_TAG_SERVERS(tagId), {signal});
+  },
+
   fetchAdminTagBlobs: (tagId: string, params: {storageType?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
     return apiRequest<AdminTagStoragePage<AdminTagBlob>>(ApiEndpoints.ADMIN_TAG_BLOBS(tagId), {
       signal,
@@ -414,6 +450,8 @@ export const api = {
     userId?: string,
     guildId?: string,
     channelId?: string,
+    tagId?: string,
+    commandId?: string,
     status?: number | null,
     category?: string,
     needsHumanReview?: boolean | null,
@@ -428,6 +466,8 @@ export const api = {
         user_id: params.userId || undefined,
         guild_id: params.guildId || undefined,
         channel_id: params.channelId || undefined,
+        tag_id: params.tagId || undefined,
+        command_id: params.commandId || undefined,
         status: params.status,
         category: params.category || undefined,
         needs_human_review: params.needsHumanReview,
@@ -466,6 +506,27 @@ export const api = {
 
   patchAdminReport: (reportId: string, body: ReportPatch) => {
     return apiRequest<Report>(ApiEndpoints.ADMIN_REPORT(reportId), {method: 'PATCH', body});
+  },
+
+  fetchAdminEntitlements: (params: {
+    userId?: string,
+    provider?: string | null,
+    premiumType?: number | null,
+    active?: boolean | null,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<AdminEntitlementsPage>(ApiEndpoints.ADMIN_ENTITLEMENTS, {
+      signal,
+      query: {
+        user_id: params.userId || undefined,
+        provider: params.provider || undefined,
+        premium_type: params.premiumType ?? undefined,
+        active: params.active ?? undefined,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
   },
 
   fetchAdminVoices: (params: {query?: string, userId?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {

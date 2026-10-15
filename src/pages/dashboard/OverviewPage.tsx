@@ -15,6 +15,7 @@ import { Skeleton } from './ui';
 
 
 const SECTION_BLURBS: Record<string, string> = {
+  Premium: 'Your premium tier and the subscriptions behind it.',
   Tags: 'Edit your tags, their variables and stored blobs.',
   Servers: 'Prefixes, allow/blocklists, loggers and server settings.',
   Voices: 'Rename the voices you cloned with the bot.',
@@ -44,15 +45,17 @@ export function OverviewPage() {
             <h1 className='truncate text-2xl font-bold text-white sm:text-3xl'>{userDisplayTag(user)}</h1>
             <p className='mt-0.5 truncate font-mono text-xs text-subtle'>{user.id}</p>
           </div>
-          <div
+          <Link
+            to={Routes.DASHBOARD_PREMIUM}
+            title='Your premium and subscriptions'
             className={cn(
-              'flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium',
-              premium ? 'border-warning/50 bg-warning/10 text-warning' : 'border-line-strong bg-surface-2 text-muted',
+              'flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium transition-colors',
+              premium ? 'border-warning/50 bg-warning/10 text-warning hover:bg-warning/20' : 'border-line-strong bg-surface-2 text-muted hover:text-white',
             )}
           >
             <Crown aria-hidden className='size-4'/>
             {premiumLabel(user.premium_type)}
-          </div>
+          </Link>
         </div>
       </section>
 

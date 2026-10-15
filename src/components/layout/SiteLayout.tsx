@@ -3,6 +3,7 @@ import { Outlet, ScrollRestoration, useMatches } from 'react-router';
 
 import { Routes } from '@/config';
 import type { RouteHandle } from '@/router';
+import { pageTitle } from '@/seo';
 
 import { Footer } from './Footer';
 import { Navbar } from './Navbar';
@@ -16,10 +17,10 @@ function usePageTitle(): string {
   for (let i = matches.length - 1; 0 <= i; i--) {
     const handle = matches[i].handle as RouteHandle | undefined;
     if (handle?.title) {
-      return `${handle.title} · NotSoBot`;
+      return pageTitle(handle);
     }
   }
-  return 'NotSoBot';
+  return pageTitle(undefined);
 }
 
 

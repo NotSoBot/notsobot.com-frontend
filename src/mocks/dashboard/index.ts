@@ -22,6 +22,7 @@ import {
   createAdminUsers,
   createBlobs,
   createContentFlags,
+  createEntitlements,
   createReminders,
   createReports,
   createGuilds,
@@ -47,6 +48,7 @@ const state = {
   reminders: createReminders(),
   reports: createReports(adminUsers),
   voices: createVoices(adminUsers),
+  entitlements: createEntitlements(adminUsers),
   // the mock user is a NotSoBot owner unless turned off (kept across reloads like guildsError)
   owner: sessionStorage.getItem('dashboardMocks:notOwner') !== '1',
   tags: createTags(),
@@ -159,11 +161,20 @@ route('DELETE', '/users/@me', () => {
 route('GET', '/users/@me/tags', (_match, { query }) => {
   const needle = (query.get('query') || '').toLowerCase();
   const before = query.get('before');
+  const offset = Math.max(0, Number(query.get('offset')) || 0);
   const limit = Math.min(100, Math.max(1, Number(query.get('limit')) || 100));
+  const newest = (a: Tag, b: Tag) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1;
+  const sorters: Record<string, (a: Tag, b: Tag) => number> = {
+    newest,
+    oldest: (a, b) => newest(b, a),
+    uses: (a, b) => b.uses - a.uses || newest(a, b),
+    name: (a, b) => a.name.localeCompare(b.name) || newest(b, a),
+    last_used: (a, b) => (b.last_used ? Date.parse(b.last_used) : -Infinity) - (a.last_used ? Date.parse(a.last_used) : -Infinity) || newest(a, b),
+  };
   const matching = state.tags
     .filter((tag) => !needle || tag.name.includes(needle) || tag.content.toLowerCase().includes(needle))
-    .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1);
-  const items = matching.filter((tag) => !before || BigInt(tag.id) < BigInt(before)).slice(0, limit);
+    .sort(sorters[query.get('sort_by') || 'newest'] ?? newest);
+  const items = matching.filter((tag) => !before || BigInt(tag.id) < BigInt(before)).slice(offset, offset + limit);
   return {count: matching.length, items};
 });
 
@@ -854,6 +865,38 @@ route('GET', '/admin/tags/(\\d+)/blobs', ([ , tagId ], { query }) => {
   return adminStoragePage(entries, query);
 });
 
+// mirror `GET /users/@me/tags/<tag_id>/servers` and `/admin/tags/<tag_id>/servers`: made-up servers that added the tag,
+// as many as the listing's `server_count` (a few of them are only counted, like DMs)
+const MOCK_SERVER_WORDS = ['Pixel', 'Meme', 'Cozy', 'Gamer', 'Art', 'Late Night', 'Study', 'Anime', 'Retro', 'Chill', 'Bot Testing', 'Music'];
+
+function tagServers(tagId: string) {
+  const listing = state.directory.get(tagId) ?? state.adminDirectory.find((item) => item.id === tagId);
+  const total = listing?.server_count ?? 0;
+  const otherCount = Math.min(total, total % 3);
+  const name = listing?.tag.name ?? 'tag';
+  const servers = Array.from({length: total - otherCount}, (_, i) => {
+    const known = state.guilds[i]?.summary;
+    return {
+      added: new Date(Date.now() - (i + 1) * 36e5 * 31).toISOString(),
+      icon: null,
+      id: known?.id ?? String(1200000000000000000n + BigInt(tagId.slice(-6)) * 1000n + BigInt(i)),
+      name: known?.name ?? `${MOCK_SERVER_WORDS[i % MOCK_SERVER_WORDS.length]} Club ${i + 1}`,
+      names: (i % 5 === 2) ? [name, `${name}2`] : [name],
+    };
+  });
+  return {other_count: otherCount, server_count: total, servers, truncated: false};
+}
+
+route('GET', '/users/@me/tags/(\\d+)/servers', ([ , tagId ]) => {
+  findTag(tagId);
+  return tagServers(tagId);
+});
+
+route('GET', '/admin/tags/(\\d+)/servers', ([ , tagId ]) => {
+  requireBotOwner();
+  return tagServers(tagId);
+});
+
 // mirrors `POST /admin/tags/directory/<tag_id>/assets`, nothing is stored so the cdn url won't load
 route('POST', '/admin/tags/directory/(\\d+)/assets', ([ , tagId ], { body }) => {
   requireBotOwner();
@@ -980,6 +1023,9 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
   const type = query.get('type');
   const guildId = query.get('guild_id');
   const channelId = query.get('channel_id');
+  const tagId = query.get('tag_id');
+  // mirrors `_content_flag_command_condition`
+  const commandId = (query.get('command_id') || '').trim().toLowerCase().split(/\s+/).join('.');
   const search = (query.get('search') || '').trim().toLowerCase();
   // mirrors `_content_flag_search_condition`
   const matchesSearch = (flag: ContentFlag) => {
@@ -990,10 +1036,10 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
     if (search.startsWith('#') && /^\d+$/.test(caseId)) {
       return flag.id === caseId;
     }
-    if (/^\d+$/.test(caseId) && (flag.id === caseId || flag.message_id === caseId)) {
+    if (/^\d+$/.test(caseId) && (flag.id === caseId || flag.message_id === caseId || flag.tag_id === caseId)) {
       return true;
     }
-    if ([flag.query, flag.source_url].some((value) => value && value.toLowerCase().includes(search))) {
+    if ([flag.query, flag.source_url, flag.command_id].some((value) => value && value.toLowerCase().includes(search))) {
       return true;
     }
     if (search.length >= 6 && /^[0-9a-f]+$/.test(search)) {
@@ -1005,6 +1051,11 @@ route('GET', '/admin/content-flags', (_match, { query }) => {
     .filter((flag) => !userId || flag.user_id === userId)
     .filter((flag) => !guildId || flag.guild_id === guildId)
     .filter((flag) => !channelId || flag.channel_id === channelId)
+    .filter((flag) => !tagId || flag.tag_id === tagId)
+    .filter((flag) => {
+      const value = (flag.command_id || '').toLowerCase();
+      return !commandId || value === commandId || value.startsWith(`${commandId}.`);
+    })
     .filter((flag) => status === null || status === '' || flag.status === Number(status))
     .filter((flag) => !category || flag.category === category)
     .filter((flag) => needsReview === null || flag.needs_human_review === needsReview)
@@ -1071,6 +1122,30 @@ route('PATCH', '/admin/reports/(\\d+)', ([ , reportId ], { body }) => {
 });
 
 
+// entitlements: read only, newest first like the api
+route('GET', '/users/@me/entitlements', () => {
+  const items = state.entitlements
+    .filter((entitlement) => entitlement.user?.id === mockUser.id)
+    .map(({ external_id: _externalId, user: _user, ...entitlement }) => entitlement);
+  return {count: items.length, items};
+});
+
+route('GET', '/admin/entitlements', (_match, { query }) => {
+  requireBotOwner();
+  const userId = query.get('user_id');
+  const provider = query.get('provider');
+  const premiumType = query.get('premium_type');
+  const active = parseBool(query.get('active'));
+  const matching = state.entitlements
+    .filter((entitlement) => !userId || entitlement.user?.id === userId)
+    .filter((entitlement) => !provider || entitlement.provider === provider)
+    .filter((entitlement) => !premiumType || entitlement.premium_type === Number(premiumType))
+    .filter((entitlement) => active === null || entitlement.active === active)
+    .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1);
+  return pageOf(matching, query);
+});
+
+
 // voices: only the name can be changed, from either side
 function findVoice(voiceId: string) {
   const voice = state.voices.find((other) => other.id === voiceId);
@@ -1089,6 +1164,16 @@ function renameVoice(voiceId: string, body: Record<string, unknown>) {
   voice.name = name;
   return voice;
 }
+
+route('GET', '/users/@me/reports', (_match, { query }) => {
+  // every other fixture report stands in for the mock user's own (bug, message and tag ones), staff fields left out like the api does
+  const status = query.get('status');
+  const matching = state.reports
+    .filter((_report, index) => index % 2 === 0)
+    .filter((report) => status === null || status === '' || report.status === Number(status))
+    .map(({ notes: _notes, reviewed_by: _reviewedBy, user: _user, ...report }) => report);
+  return pageOf(matching, query);
+});
 
 route('GET', '/users/@me/reminders', () => {
   return {count: state.reminders.length, items: state.reminders};

@@ -22,35 +22,5 @@ export const Urls = Object.freeze({
 });
 
 
-export const Routes = Object.freeze({
-  HOME: '/',
-  AUTH_LOGIN: '/auth/login',
-  AUTH_LOGIN_CALLBACK: '/auth/login/callback',
-  AUTH_REDIRECT: '/auth/redirect',
-  COMMANDS: '/commands',
-  DASHBOARD: '/dashboard',
-  DASHBOARD_TAGS: '/dashboard/tags',
-  DASHBOARD_TAG: '/dashboard/tags/:tagId',
-  DASHBOARD_SERVERS: '/dashboard/servers',
-  DASHBOARD_SERVER: '/dashboard/servers/:guildId',
-  DASHBOARD_SETTINGS: '/dashboard/settings',
-  DASHBOARD_REMINDERS: '/dashboard/reminders',
-  DASHBOARD_VOICES: '/dashboard/voices',
-  DASHBOARD_ADMIN_ALL_TAGS: '/dashboard/admin/all-tags',
-  DASHBOARD_ADMIN_TAGS: '/dashboard/admin/tags',
-  DASHBOARD_ADMIN_USERS: '/dashboard/admin/users',
-  DASHBOARD_ADMIN_FLAGS: '/dashboard/admin/flags',
-  DASHBOARD_ADMIN_REPORTS: '/dashboard/admin/reports',
-  DASHBOARD_ADMIN_VOICES: '/dashboard/admin/voices',
-  FAQ: '/faq',
-  FOXBOT: '/foxbot',
-  INVITE: '/invite',
-  LEGAL_PRIVACY: '/legal/privacy',
-  LEGAL_TERMS_OF_SERVICE: '/legal/tos',
-  STATUS: '/status',
-  TAG_DIRECTORY: '/directory/tags',
-  TAG_DOCS: '/docs/tags',
-  TAG_DIRECTORY_ITEM: '/directory/tags/:tagId',
-  SUPPORT: '/support',
-  SUPPORT_INVITE: '/support/invite',
-});
+// in its own module so the worker can import it (this file reads import.meta.env)
+export { Routes } from './routes';

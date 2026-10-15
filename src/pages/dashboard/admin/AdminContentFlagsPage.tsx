@@ -63,6 +63,8 @@ export function AdminContentFlagsPage() {
   const userId = (searchParams.get('user_id') || '').trim();
   const guildId = (searchParams.get('guild_id') || '').trim();
   const channelId = (searchParams.get('channel_id') || '').trim();
+  const tagId = (searchParams.get('tag_id') || '').trim();
+  const commandId = (searchParams.get('command_id') || '').trim();
   const status = parseStatus(searchParams.get('status'));
   const category = searchParams.get('category') || '';
   const needsHumanReview = parseBool(searchParams.get('needs_human_review'));
@@ -74,6 +76,8 @@ export function AdminContentFlagsPage() {
     userId,
     guildId,
     channelId,
+    tagId,
+    commandId,
     status,
     category,
     needsHumanReview,
@@ -83,7 +87,7 @@ export function AdminContentFlagsPage() {
   });
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_CONTENT_FLAGS_PAGE_SIZE});
-  const filtered = !!(userId || guildId || channelId || status !== null || category || needsHumanReview !== null || type || debouncedSearch);
+  const filtered = !!(userId || guildId || channelId || tagId || commandId || status !== null || category || needsHumanReview !== null || type || debouncedSearch);
   const pagination = {
     page,
     count: data?.count ?? 0,
@@ -103,7 +107,7 @@ export function AdminContentFlagsPage() {
         className='mb-4'
         value={search}
         onValueChange={(value) => update({q: value})}
-        placeholder='Search by case #, message id, text, prompt, url or hash...'
+        placeholder='Search by case #, message id, tag id, command, text, prompt, url or hash...'
         aria-label='Search content flags'
       />
 
@@ -145,6 +149,16 @@ export function AdminContentFlagsPage() {
         <IdFilter label='User id' placeholder='Any user' value={userId} onChange={(value) => update({user_id: value})}/>
         <IdFilter label='Guild id' placeholder='Any guild' value={guildId} onChange={(value) => update({guild_id: value})}/>
         <IdFilter label='Channel id' placeholder='Any channel' value={channelId} onChange={(value) => update({channel_id: value})}/>
+        <IdFilter label='Tag id' placeholder='Any tag' value={tagId} onChange={(value) => update({tag_id: value})}/>
+        {/* wider so the example in the placeholder isn't cut off */}
+        <IdFilter
+          className='sm:col-span-2 lg:col-span-8'
+          label='Command id'
+          placeholder='Any command, e.g. tag or tag.show'
+          value={commandId}
+          pattern={COMMAND_ID_PATTERN}
+          onChange={(value) => update({command_id: value})}
+        />
       </div>
 
       {(isPending || steppingBack) ? (
@@ -170,30 +184,39 @@ export function AdminContentFlagsPage() {
 }
 
 
-// edits locally and lands in the URL once typing stops, only for empty or all-digit values
-function IdFilter({ label, placeholder, value, onChange }: {
+const SNOWFLAKE_PATTERN = /^\d+$/;
+// `tag.show`, `media.aiv.tools.extract.media`; spaces are allowed since the api treats them as dots
+const COMMAND_ID_PATTERN = /^[\w.\- ]+$/;
+
+// edits locally and lands in the URL once typing stops, only for empty values or ones matching `pattern`
+function IdFilter({ className = 'lg:col-span-4', label, placeholder, value, pattern = SNOWFLAKE_PATTERN, onChange }: {
+  className?: string,
   label: string,
   placeholder: string,
   value: string,
+  pattern?: RegExp,
   onChange: (value: string | null) => void,
 }) {
+  const numeric = pattern === SNOWFLAKE_PATTERN;
   const [ input, setInput ] = useState(value);
   useEffect(() => setInput(value), [value]);
   const debounced = useDebouncedValue(input.trim(), 400);
   useEffect(() => {
-    if (debounced !== value && (!debounced || /^\d+$/.test(debounced))) {
+    if (debounced !== value && (!debounced || pattern.test(debounced))) {
       onChange(debounced);
     }
     // only when the typed value settles
   }, [debounced]);
 
   return (
-    <label className='text-sm lg:col-span-4'>
+    <label className={cn('text-sm', className)}>
       <span className='mb-1 block text-subtle'>{label}</span>
       <span className='relative block'>
         <input
           className='input pr-9 font-mono'
-          inputMode='numeric'
+          inputMode={(numeric) ? 'numeric' : 'text'}
+          spellCheck={false}
+          autoCapitalize='off'
           placeholder={placeholder}
           value={input}
           onChange={(event) => setInput(event.target.value)}

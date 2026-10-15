@@ -246,6 +246,26 @@ export interface TagDirectoryItem {
   verified: number,
 }
 
+// `GET /users/@me/tags/:id/servers` (owner) and `/admin/tags/:id/servers` (staff): where the tag has been added
+export interface TagServer {
+  // when the server first added the tag
+  added: string,
+  icon: string | null,
+  id: string,
+  name: string,
+  // what the tag is called there, usually just one
+  names: Array<string>,
+}
+
+export interface TagServers {
+  // DMs, personal tags and servers NotSoBot has no record of, only counted
+  other_count: number,
+  server_count: number,
+  servers: Array<TagServer>,
+  // more servers than the API lists (it caps the list, newest first)
+  truncated: boolean,
+}
+
 export interface TagDirectoryPage {
   count: number,
   items: Array<TagDirectoryItem>,
@@ -345,6 +365,8 @@ export interface TagsPage {
   count: number,
   items: Array<Tag>,
 }
+
+export type MeTagsSortBy = 'newest' | 'oldest' | 'uses' | 'name' | 'last_used';
 
 export interface TagPatch {
   name?: string,
@@ -741,6 +763,8 @@ export const ReportTypes = {
   BUG: 0,
   USER: 1,
   SERVER: 2,
+  MESSAGE: 3,
+  TAG: 4,
 } as const;
 export type ReportType = (typeof ReportTypes)[keyof typeof ReportTypes];
 
@@ -762,7 +786,8 @@ export interface Report {
   reviewed_at: ApiTimestamp | null,
   reviewed_by: string | null,
   status: number,
-  // the reported user (USER) or guild (SERVER); null for bugs
+  // the reported user (USER), guild (SERVER), whoever used the command for a bot response (MESSAGE) or tag (TAG); null for bugs
+  // message reports have the reported message in channel_id/message_id instead of where the report was sent from
   target_id: string | null,
   type: number,
   // the reporter
@@ -772,6 +797,14 @@ export interface Report {
 export interface ReportsPage {
   count: number,
   items: Array<Report>,
+}
+
+// the caller's own reports, without the reporter (it's them) or the staff-only notes and reviewer
+export type MeReport = Omit<Report, 'notes' | 'reviewed_by' | 'user'>;
+
+export interface MeReportsPage {
+  count: number,
+  items: Array<MeReport>,
 }
 
 export interface ReportPatch {
@@ -789,4 +822,50 @@ export interface AdminVoice extends Voice {
 export interface AdminVoicesPage {
   count: number,
   items: Array<AdminVoice>,
+}
+
+
+// where an entitlement came from: a Discord subscription, or premium given from the admin dashboard
+export const EntitlementProviders = {
+  DISCORD: 'discord',
+  MANUAL: 'manual',
+} as const;
+export type EntitlementProvider = (typeof EntitlementProviders)[keyof typeof EntitlementProviders];
+
+// `/users/@me/entitlements`: the caller's premium subscriptions and grants, newest first
+export interface Entitlement {
+  // counts right now: not deleted, consumed, expired or not started yet
+  active: boolean,
+  consumed: boolean,
+  created_at: ApiTimestamp | null,
+  // cancelled on Discord, or a manual grant that was replaced or removed
+  deleted: boolean,
+  ends_at: ApiTimestamp | null,
+  // the staff member who gave a manual one
+  granted_by: string | null,
+  guild_id: string | null,
+  id: string,
+  // the `UserPremiumTypes` the sku gives, null for a sku NotSoBot doesn't sell
+  premium_type: number | null,
+  provider: string,
+  sku_id: string,
+  starts_at: ApiTimestamp | null,
+  type: number,
+  updated_at: ApiTimestamp | null,
+}
+
+export interface EntitlementsPage {
+  count: number,
+  items: Array<Entitlement>,
+}
+
+// `/admin/entitlements`: everyone's, with Discord's own id and the owner (null for guild-only ones)
+export interface AdminEntitlement extends Entitlement {
+  external_id: string | null,
+  user: AdminUserRef | null,
+}
+
+export interface AdminEntitlementsPage {
+  count: number,
+  items: Array<AdminEntitlement>,
 }
