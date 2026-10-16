@@ -363,7 +363,7 @@ export const TAG_DOC_FUNCTIONS_PART3: Array<TagDocFunction> = [
     notes: [
       'Counts as 1 network request and 1 AI request (5 AI requests per run by default).',
       'Always runs in safe mode.',
-      'Uses the model picked with `{settings:ML_IMAGINE_MODEL|...}` (`FLUX_KLEIN` or `SDXL_TURBO`); `{settings:ML_IMAGINE_DO_NOT_ERROR|true}` is passed along too.',
+      'Uses the model picked with `{settings:ML_IMAGINE_MODEL|...}` (currently only `FLUX_KLEIN`); `{settings:ML_IMAGINE_DO_NOT_ERROR|true}` is passed along too.',
       IV_FALLBACK_NOTE,
       'Left as plain text if no image is found, or if attachments are not allowed here.',
       'Errors if the tag already has the maximum number of attachments (10), or if the result is larger than the upload limit.',
@@ -406,12 +406,12 @@ export const TAG_DOC_FUNCTIONS_PART3: Array<TagDocFunction> = [
     examples: [
       {code: '{imagine:a cat wearing a tiny crown}', result: 'Attaches a generated image of a crowned cat'},
       {code: '{imagine}', result: 'Attaches an image from a random prompt'},
-      {code: '{settings:ML_IMAGINE_MODEL|SDXL_TURBO}{imagine:{args}}', result: 'Generates with the SDXL Turbo model'},
+      {code: '{settings:ML_IMAGINE_MODEL|FLUX_KLEIN}{imagine:{args}}', result: 'Generates with the Flux Klein model'},
     ],
     notes: [
       'Counts as 1 network request and 1 AI request (5 AI requests per run by default).',
       'Always runs in safe mode.',
-      'Uses the model picked with `{settings:ML_IMAGINE_MODEL|...}` (`FLUX_KLEIN` for realistic, `SDXL_TURBO` for funny); `{settings:ML_IMAGINE_DO_NOT_ERROR|true}` is passed along too.',
+      'Uses the model picked with `{settings:ML_IMAGINE_MODEL|...}` (currently only `FLUX_KLEIN`); `{settings:ML_IMAGINE_DO_NOT_ERROR|true}` is passed along too.',
       'Left as plain text if attachments are not allowed here.',
       'Errors if the tag already has the maximum number of attachments (10), or if the result is larger than the upload limit.',
     ],

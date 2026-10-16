@@ -1,9 +1,9 @@
-import { Ban, ChevronRight, Server } from 'lucide-react';
-import { useCallback } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { Ban, ChevronRight, Flag, MessageSquareWarning, Server, Tags as TagsIcon, type LucideIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
+import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminGuildSummary, AdminGuildsSortBy } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminGuildsQuery } from '@/lib/api/dashboardQueries';
@@ -12,13 +12,19 @@ import { cn } from '@/lib/utils';
 import { GuildIcon } from '../servers/GuildIcon';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { AdminServerModal, BotChip } from './AdminServerModal';
-import { Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage } from './adminUi';
+import { adminServerPath, Chip, FLAGGED_WITHIN, Pagination, useSearchParamState, useStepBackFromEmptyPage } from './adminUi';
+import { useOpenListItem } from './AdminTagModal';
 
 
 const SORTS: Array<{value: AdminGuildsSortBy, label: string}> = [
-  {value: 'newest', label: 'Newest'},
-  {value: 'oldest', label: 'Oldest'},
+  // by id, which is when the server was made on Discord (not when NotSoBot joined it)
+  {value: 'newest', label: 'Newest created'},
+  {value: 'oldest', label: 'Oldest created'},
   {value: 'name', label: 'Name'},
+  {value: 'flags_most', label: 'Most flags'},
+  {value: 'flags_least', label: 'Fewest flags'},
+  {value: 'reports_most', label: 'Most reports'},
+  {value: 'reports_least', label: 'Fewest reports'},
 ];
 
 // `?bot=`: whether NotSoBot is in the server right now (`bot_guilds`)
@@ -40,6 +46,7 @@ export function AdminServersPage() {
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'newest';
   const bot = BOT_FILTERS.find((item) => item.value === searchParams.get('bot')) ?? BOT_FILTERS[0];
   const blocked = BLOCKED_FILTERS.find((item) => item.value === searchParams.get('blocked')) ?? BLOCKED_FILTERS[0];
+  const flaggedWithin = FLAGGED_WITHIN.find((item) => item.value === searchParams.get('within')) ?? FLAGGED_WITHIN[0];
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
 
@@ -47,6 +54,7 @@ export function AdminServersPage() {
     query: debouncedQuery,
     inBot: bot.inBot,
     blocked: blocked.blocked,
+    flaggedWithin: flaggedWithin.hours,
     sortBy,
     page,
   });
@@ -59,27 +67,10 @@ export function AdminServersPage() {
     onChange: setPage,
     fetching: isFetching && isPlaceholderData,
   };
-  const filtered = !!(debouncedQuery || bot.inBot !== null || blocked.blocked !== null);
+  const filtered = !!(debouncedQuery || bot.inBot !== null || blocked.blocked !== null || flaggedWithin.hours);
 
-  // `?server=<id>` opens the server over the list, like the user dashboard's server list
-  const serverId = searchParams.get('server');
-  const location = useLocation();
-  const navigate = useNavigate();
-  const openedHere = (location.state as {serverOpenedHere?: boolean} | null)?.serverOpenedHere === true;
-  const closeServer = useCallback(() => {
-    if (openedHere) {
-      navigate(-1);
-    } else {
-      // arrived on a link with `?server=` (a report, the tags list), there's no list entry to go back to
-      update({server: null}, false);
-    }
-    // update is recreated every render
-  }, [navigate, openedHere]);
-  const serverSearch = (guildId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('server', guildId);
-    return `?${next.toString()}`;
-  };
+  // `/dashboard/admin/servers/<id>` opens the server over the list, ← / → step through this page's servers
+  const { openId: serverId, previousId, nextId, open, close } = useOpenListItem(items, (guild) => guild.id, Routes.DASHBOARD_ADMIN_SERVERS);
 
   return (
     <>
@@ -104,6 +95,17 @@ export function AdminServersPage() {
               onChange={(value) => update({bot: (value === 'any') ? null : value})}
             />
           </div>
+          <div className='flex max-w-full items-center gap-2 text-sm text-muted'>
+            <span aria-hidden>Last flagged</span>
+            <div className='overflow-x-auto'>
+              <Segmented
+                label='Last flagged within'
+                value={flaggedWithin.value}
+                options={FLAGGED_WITHIN.map(({ value, label }) => ({value, label}))}
+                onChange={(value) => update({within: (value === 'any') ? null : value})}
+              />
+            </div>
+          </div>
           <label className='flex items-center gap-2 text-sm text-muted'>
             Blocked
             <select className='input w-36' value={blocked.value} onChange={(event) => update({blocked: (event.target.value === 'any') ? null : event.target.value})}>
@@ -112,7 +114,7 @@ export function AdminServersPage() {
           </label>
           <label className='flex items-center gap-2 text-sm text-muted sm:ml-auto'>
             Sort
-            <select className='input w-36' value={sortBy} onChange={(event) => update({sort: (event.target.value === 'newest') ? null : event.target.value})}>
+            <select className='input w-40' value={sortBy} onChange={(event) => update({sort: (event.target.value === 'newest') ? null : event.target.value})}>
               {SORTS.map((sort) => <option key={sort.value} value={sort.value}>{sort.label}</option>)}
             </select>
           </label>
@@ -131,25 +133,30 @@ export function AdminServersPage() {
         <>
           <Pagination {...pagination} className='mt-0 mb-4'/>
           <ul className={cn('card divide-y divide-line transition-opacity', isPlaceholderData && 'opacity-60')}>
-            {items.map((guild) => <ServerRow key={guild.id} guild={guild} search={serverSearch(guild.id)}/>)}
+            {items.map((guild) => <ServerRow key={guild.id} guild={guild} onOpen={open}/>)}
           </ul>
           <Pagination {...pagination}/>
         </>
       )}
 
-      {(serverId) ? <AdminServerModal key={serverId} guildId={serverId} onClose={closeServer}/> : null}
+      {(serverId) ? <AdminServerModal guildId={serverId} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close}/> : null}
     </>
   );
 }
 
 
-function ServerRow({ guild, search }: {guild: AdminGuildSummary, search: string}) {
+function ServerRow({ guild, onOpen }: {guild: AdminGuildSummary, onOpen: (guildId: string) => void}) {
   return (
     <li>
       <Link
-        to={{search}}
-        state={{serverOpenedHere: true}}
-        preventScrollReset
+        to={adminServerPath(guild.id)}
+        onClick={(event) => {
+          // a plain click opens it over the list (keeping the filters), new tabs and copied links still get the url
+          if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
+            event.preventDefault();
+            onOpen(guild.id);
+          }
+        }}
         className={cn(
           'flex items-center gap-3 px-4 py-3 first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 sm:px-5',
           guild.blocked && 'bg-danger/[0.04] shadow-[inset_3px_0_0_var(--color-danger)]',
@@ -161,6 +168,7 @@ function ServerRow({ guild, search }: {guild: AdminGuildSummary, search: string}
             {guild.name || 'Never saved'}
           </div>
           <div className='truncate font-mono text-xs text-subtle'>{guild.id}</div>
+          <ServerCounts counts={guild.counts} className='mt-1 sm:hidden'/>
         </div>
         <div className='flex shrink-0 flex-wrap justify-end gap-1.5'>
           {(guild.blocked) ? (
@@ -171,9 +179,43 @@ function ServerRow({ guild, search }: {guild: AdminGuildSummary, search: string}
           ) : null}
           <BotChip bot={guild.bot}/>
         </div>
+        <ServerCounts counts={guild.counts} className='hidden sm:flex'/>
         <ChevronRight aria-hidden className='size-4 shrink-0 text-subtle'/>
       </Link>
     </li>
+  );
+}
+
+
+// the modal's shortcut counts, so staff can spot busy or troublesome servers without opening each one
+const COUNTS: Array<{key: keyof AdminGuildSummary['counts'], icon: LucideIcon, label: string, alert?: boolean}> = [
+  {key: 'tags', icon: TagsIcon, label: 'tags'},
+  {key: 'content_flags', icon: Flag, label: 'content flags', alert: true},
+  {key: 'reports', icon: MessageSquareWarning, label: 'reports', alert: true},
+];
+
+function ServerCounts({ counts, className }: {counts: AdminGuildSummary['counts'], className?: string}) {
+  return (
+    <div className={cn('flex shrink-0 items-center gap-3 text-xs tabular-nums', className)}>
+      {COUNTS.map(({ key, icon: Icon, label, alert }) => {
+        const value = counts[key];
+        const text = `${value.toLocaleString()} ${label}`;
+        return (
+          <span
+            key={key}
+            title={text}
+            className={cn(
+              'inline-flex items-center gap-1 sm:min-w-12',
+              (!value) ? 'text-subtle/60' : (alert) ? 'text-warning' : 'text-muted',
+            )}
+          >
+            <Icon aria-hidden className='size-3.5 shrink-0'/>
+            <span aria-hidden>{value.toLocaleString()}</span>
+            <span className='sr-only'>{text}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 

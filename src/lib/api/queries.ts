@@ -16,7 +16,7 @@ export const queryKeys = {
   // dashboard; everything per-user lives under ['users', '@me'] so logging out drops it
   meSettings: (token: string | null) => ['users', '@me', token, 'settings'] as const,
   meTags: (token: string | null) => ['users', '@me', token, 'tags'] as const,
-  meTagsList: (token: string | null, query: string, sortBy: MeTagsSortBy, directory: MeTagsDirectoryFilter, serverId: string | null) => ['users', '@me', token, 'tags', 'list', {query, sortBy, directory, serverId}] as const,
+  meTagsList: (token: string | null, query: string, sortBy: MeTagsSortBy, directory: MeTagsDirectoryFilter, serverId: string | null, page: number) => ['users', '@me', token, 'tags', 'list', {query, sortBy, directory, serverId, page}] as const,
   meTag: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId] as const,
   meTagVariables: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'variables', scope] as const,
   meTagBlobs: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'blobs', scope] as const,

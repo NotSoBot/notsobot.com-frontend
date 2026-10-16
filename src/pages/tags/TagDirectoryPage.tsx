@@ -76,7 +76,7 @@ export function TagDirectoryPage() {
   const items = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
   const count = data?.pages[0]?.count ?? 0;
 
-  // `/directory/tags/:tagId` is a child route, so this page stays mounted (search, loaded pages,
+  // `/tags/directory/:tagId` is a child route, so this page stays mounted (search, loaded pages,
   // scroll position) and the tag opens as a modal on top of it.
   const { tagId } = useParams();
   const location = useLocation();
@@ -96,7 +96,7 @@ export function TagDirectoryPage() {
     if (openedHere) {
       navigate(-1);
     } else {
-      // arrived on a shared /directory/tags/:id link; there's no directory entry to go back to
+      // arrived on a shared /tags/directory/:id link; there's no directory entry to go back to
       navigate({pathname: Routes.TAG_DIRECTORY, search: location.search}, {replace: true, preventScrollReset: true});
     }
   }, [navigate, openedHere, location.search]);
@@ -264,7 +264,7 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
     >
       <div className='flex flex-1 flex-col p-4'>
         <div className='mb-3 flex items-start gap-3'>
-          <AssetThumbnail assets={item.assets} nsfw={tag.nsfw} playing={hovered}/>
+          <AssetThumbnail assets={item.assets} thumbnail={item.thumbnail} nsfw={tag.nsfw} playing={hovered}/>
           <div className='min-w-0 flex-1'>
             <div className='mb-1 flex items-center gap-2'>
               <h2 className='truncate text-lg font-medium text-white transition-colors group-hover:text-brand'>

@@ -232,6 +232,52 @@ export interface TagDirectoryAsset {
 // `TagAssets.to_dict()`, same shape as a directory listing's assets
 export type TagAsset = TagDirectoryAsset;
 
+// the listing's own thumbnail for the directory card, always a small png (videos give their first frame)
+export interface TagDirectoryThumbnail {
+  id: string,
+  urls: {cdn: string},
+}
+
+// `TagDirectoryEditRequestStatuses`: a verified listing's change request, drafted by the owner and reviewed by staff
+export const TagDirectoryEditRequestStatuses = {
+  DRAFT: 0,
+  PENDING: 1,
+  APPROVED: 2,
+  REJECTED: 3,
+} as const;
+
+// `TagDirectoryEditRequestThumbnailModes`, what the request does to the listing's thumbnail
+export const TagDirectoryEditRequestThumbnailModes = {
+  KEEP: 0,
+  REPLACE: 1,
+  REMOVE: 2,
+} as const;
+
+export interface TagDirectoryEditRequestAsset extends TagDirectoryAsset {
+  // uploaded with the request, the others are the listing's own (kept, maybe moved)
+  is_new: boolean,
+}
+
+// `TagDirectoryEditRequest.to_dict()`
+export interface TagDirectoryEditRequest {
+  // the media the listing would have, in order, the first is the cover
+  assets: Array<TagDirectoryEditRequestAsset>,
+  // the proposed tag content, null leaves it unchanged
+  content: string | null,
+  created: string,
+  edited: string | null,
+  id: string,
+  note: string,
+  // staff's, when rejected
+  reason: string | null,
+  reviewed: string | null,
+  status: number,
+  submitted: string | null,
+  // the uploaded replacement, only when `thumbnail_mode` is REPLACE
+  thumbnail: TagDirectoryThumbnail | null,
+  thumbnail_mode: number,
+}
+
 // `Tag.to_dict(directory_view=True)` — content/guild_id are always blanked out
 export interface DirectoryTag {
   assets: Array<unknown>,
@@ -266,6 +312,10 @@ export interface TagDirectoryItem {
   id: string,
   server_count: number,
   tag: DirectoryTag,
+  // shown on the directory card instead of the cover, same visibility as `assets`
+  thumbnail: TagDirectoryThumbnail | null,
+  // the owner's (`/users/@me/tags/:id/directory`): the open change request, otherwise the last one
+  edit_request?: TagDirectoryEditRequest | null,
   title: string,
   verified: number,
 }
@@ -310,8 +360,10 @@ export const ApiErrorCodes = {
   UNKNOWN_JOB: 10006,
   UNKNOWN_TAG: 10009,
   UNKNOWN_TAG_DIRECTORY_ITEM: 10011,
+  UNKNOWN_CONTENT_FLAG: 10016,
   UNKNOWN_TAG_ASSET: 10019,
   UNKNOWN_TAG_DIRECTORY_ASSET: 10020,
+  UNKNOWN_TAG_DIRECTORY_EDIT_REQUEST: 10021,
   UNKNOWN_SERVER: 10012,
   UNKNOWN_REPORT: 10017,
   UNKNOWN_REMINDER: 10007,
@@ -335,6 +387,10 @@ export const ApiErrorCodes = {
   TAG_DIRECTORY_VERIFICATION_REQUIRES_DESCRIPTION: 50032,
   TAG_DIRECTORY_VERIFICATION_REQUIRES_CATEGORY: 50033,
   TAG_DIRECTORY_ASSETS_REQUIRE_PENDING: 50034,
+  TAG_DIRECTORY_EDIT_REQUEST_REQUIRES_VERIFIED: 50035,
+  TAG_DIRECTORY_EDIT_REQUEST_NOT_DRAFT: 50036,
+  TAG_DIRECTORY_EDIT_REQUEST_NOT_PENDING: 50037,
+  TAG_DIRECTORY_EDIT_REQUEST_NO_CHANGES: 50038,
   MAX_TAG_DIRECTORY: 30013,
   MAX_TAG_DIRECTORY_ASSETS: 30018,
   // the session's Discord grant was revoked/expired (not the site session itself)
@@ -614,6 +670,8 @@ export interface AdminGuildSummary {
   blocked_reason: string | null,
   // null when the bot isn't in it
   bot: AdminGuildBot | null,
+  // the detail's counts, minus reminders
+  counts: Omit<AdminGuild['counts'], 'reminders'>,
   icon: string | null,
   id: string,
   // null when the bot is in it but it was never saved (no settings yet)
@@ -625,7 +683,7 @@ export interface AdminGuildsPage {
   items: Array<AdminGuildSummary>,
 }
 
-export type AdminGuildsSortBy = 'newest' | 'oldest' | 'name';
+export type AdminGuildsSortBy = 'newest' | 'oldest' | 'name' | 'flags_most' | 'flags_least' | 'reports_most' | 'reports_least';
 
 // `/admin/guilds/<id>`: the `UserGuild` shape (every area editable) plus where the bot is and what's linked to it
 export interface AdminGuild extends UserGuild {
@@ -704,6 +762,9 @@ export interface AdminTagDirectoryItem {
   id: string,
   server_count: number,
   tag: AdminDirectoryTag,
+  thumbnail?: TagDirectoryThumbnail | null,
+  // a change request waiting for review
+  edit_request?: TagDirectoryEditRequest | null,
   title: string,
   user: AdminUserRef | null,
   verified: number,
@@ -741,6 +802,8 @@ export interface AdminUserContentFlags {
 
 export interface AdminUserEntry {
   content_flags: AdminUserContentFlags,
+  // reports about the user (`GET /admin/reports?target_id=`)
+  reports: number,
   user: AdminUser,
 }
 

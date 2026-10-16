@@ -10,7 +10,6 @@ export { LLM_MODEL_CHOICES, LOCALE_CHOICES, TIMEZONE_CHOICES, TTS_VOICE_CHOICES,
 // `MLDiffusionModelsToText`
 export const DIFFUSION_MODEL_CHOICES: ReadonlyArray<Choice> = [
   {value: 'FLUX_KLEIN', label: 'Flux Klein (Realistic)'},
-  {value: 'SDXL_TURBO', label: 'SDXL Turbo (Funny)'},
 ];
 
 // `DownloadQualities` (the API takes the values)

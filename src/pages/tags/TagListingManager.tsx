@@ -383,7 +383,7 @@ export function ManageListingCard({ item, access, editing, onEdit }: {
           </div>
           {(verify.isError) ? <InlineError>{errorMessage(verify.error, 'Couldn’t change the verification.')}</InlineError> : null}
           <Link
-            to={{pathname: Routes.DASHBOARD_ADMIN_TAGS, search: `?q=${encodeURIComponent(`id:${item.id}`)}&status=all`}}
+            to={{pathname: Routes.DASHBOARD_ADMIN_TAG_DIRECTORY, search: `?q=${encodeURIComponent(`id:${item.id}`)}&status=all`}}
             className='btn btn-ghost mt-2 w-full'
           >
             Open in admin

@@ -31,6 +31,7 @@ import type {
   EntitlementsPage,
   Reminder,
   ReminderPatch,
+  MeReport,
   MeReportsPage,
   RemindersPage,
   Report,
@@ -241,6 +242,63 @@ export const api = {
     return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_ASSET(tagId, assetId), {method: 'DELETE'}).then(normalizeListing);
   },
 
+  // an image or video, the api shrinks it (a video's first frame) to a small png; same rules as the assets
+  uploadMeTagDirectoryThumbnail: (tagId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_THUMBNAIL(tagId), {method: 'PUT', body, timeout: 120_000}).then(normalizeListing);
+  },
+
+  // the card goes back to showing the cover
+  deleteMeTagDirectoryThumbnail: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_THUMBNAIL(tagId), {method: 'DELETE'}).then(normalizeListing);
+  },
+
+  // a verified listing's change request (content, media, thumbnail), staff review it. Each answers with the whole
+  // listing, `edit_request` included. Opening one keeps the open request if there already is one
+  startMeTagDirectoryEditRequest: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST(tagId), {method: 'PUT'}).then(normalizeListing);
+  },
+
+  // drafts only. `content` null (or the current content) leaves it unchanged, `thumbnail_mode` is KEEP or REMOVE
+  patchMeTagDirectoryEditRequest: (tagId: string, body: {content?: string | null, note?: string, thumbnail_mode?: number}) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST(tagId), {method: 'PATCH', body}).then(normalizeListing);
+  },
+
+  // draft or submitted, its uploads go with it
+  discardMeTagDirectoryEditRequest: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST(tagId), {method: 'DELETE'}).then(normalizeListing);
+  },
+
+  submitMeTagDirectoryEditRequest: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST_SUBMIT(tagId), {method: 'POST'}).then(normalizeListing);
+  },
+
+  // back to a draft so it can be changed
+  withdrawMeTagDirectoryEditRequest: (tagId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST_WITHDRAW(tagId), {method: 'POST'}).then(normalizeListing);
+  },
+
+  uploadMeTagDirectoryEditRequestAsset: (tagId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST_ASSETS(tagId), {method: 'POST', body, timeout: 120_000}).then(normalizeListing);
+  },
+
+  moveMeTagDirectoryEditRequestAsset: (tagId: string, assetId: string, position: number) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST_ASSET(tagId, assetId), {method: 'PATCH', body: {position}}).then(normalizeListing);
+  },
+
+  deleteMeTagDirectoryEditRequestAsset: (tagId: string, assetId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST_ASSET(tagId, assetId), {method: 'DELETE'}).then(normalizeListing);
+  },
+
+  uploadMeTagDirectoryEditRequestThumbnail: (tagId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_EDIT_REQUEST_THUMBNAIL(tagId), {method: 'PUT', body, timeout: 120_000}).then(normalizeListing);
+  },
+
   deleteMeTag: (tagId: string) => {
     return apiRequest<void>(ApiEndpoints.USER_ME_TAG(tagId), {method: 'DELETE'});
   },
@@ -274,6 +332,11 @@ export const api = {
 
   fetchMeReminders: (signal?: AbortSignal) => {
     return apiRequest<RemindersPage>(ApiEndpoints.USER_ME_REMINDERS, {signal});
+  },
+
+  // one of the caller's reports, `/dashboard/reports/:reportId`
+  fetchMeReport: (reportId: string, signal?: AbortSignal) => {
+    return apiRequest<MeReport>(ApiEndpoints.USER_ME_REPORT(reportId), {signal});
   },
 
   fetchMeReports: (params: {status?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
@@ -413,6 +476,8 @@ export const api = {
     sortBy?: AdminTagDirectorySortBy,
     verified?: number | null,
     nsfw?: boolean | null,
+    // only listings with (or without) a change request waiting for review
+    editRequest?: boolean | null,
     offset?: number,
     limit?: number,
   }, signal?: AbortSignal) => {
@@ -424,6 +489,7 @@ export const api = {
         sort_by: params.sortBy,
         verified: params.verified,
         nsfw: params.nsfw,
+        edit_request: params.editRequest,
         offset: params.offset || undefined,
         limit: params.limit,
       },
@@ -433,6 +499,16 @@ export const api = {
   // `content` rewrites the tag even though it's locked (verified/pending)
   patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, name?: string, title?: string, description?: string, category?: number}) => {
     return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body}).then(normalizeListing);
+  },
+
+  // applies the owner's change request, the listing stays verified
+  approveAdminTagDirectoryEditRequest: (tagId: string) => {
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_EDIT_REQUEST_APPROVE(tagId), {method: 'POST'}).then(normalizeListing);
+  },
+
+  // `reason` is shown to the owner
+  rejectAdminTagDirectoryEditRequest: (tagId: string, reason: string) => {
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_EDIT_REQUEST_REJECT(tagId), {method: 'POST', body: {reason: reason || undefined}}).then(normalizeListing);
   },
 
   // archives a file, or whatever `url` points at, for the tag; the content isn't touched
@@ -548,6 +624,11 @@ export const api = {
     return apiRequest<void>(ApiEndpoints.JOB(jobId), {method: 'DELETE'});
   },
 
+  // one flag, for a link to it that isn't on the loaded list page
+  fetchAdminContentFlag: (flagId: string, signal?: AbortSignal) => {
+    return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG(flagId), {signal});
+  },
+
   patchAdminContentFlag: (flagId: string, body: ContentFlagPatch) => {
     return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG(flagId), {method: 'PATCH', body});
   },
@@ -582,6 +663,10 @@ export const api = {
         limit: params.limit,
       },
     });
+  },
+
+  fetchAdminReport: (reportId: string, signal?: AbortSignal) => {
+    return apiRequest<Report>(ApiEndpoints.ADMIN_REPORT(reportId), {signal});
   },
 
   patchAdminReport: (reportId: string, body: ReportPatch) => {
@@ -629,6 +714,8 @@ export const api = {
     query?: string,
     inBot?: boolean | null,
     blocked?: boolean | null,
+    // hours, only servers whose last content flag is that recent
+    flaggedWithin?: number | null,
     sortBy?: AdminGuildsSortBy,
     offset?: number,
     limit?: number,
@@ -639,6 +726,7 @@ export const api = {
         query: params.query || undefined,
         in_bot: params.inBot ?? undefined,
         blocked: params.blocked ?? undefined,
+        flagged_within: params.flaggedWithin ?? undefined,
         sort_by: params.sortBy,
         offset: params.offset || undefined,
         limit: params.limit,

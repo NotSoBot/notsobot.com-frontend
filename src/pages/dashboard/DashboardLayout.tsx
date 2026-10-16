@@ -17,6 +17,8 @@ interface Section {
   icon: LucideIcon,
   color: string,
   end?: boolean,
+  // shown indented under this one on desktop, right after it in the mobile row
+  children?: ReadonlyArray<Section>,
 }
 
 // the account: Overview first, the rest alphabetical (export/delete your data is at the bottom of Settings)
@@ -41,8 +43,14 @@ export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_ADMIN_ENTITLEMENTS, label: 'Entitlements', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_ADMIN_REPORTS, label: 'Reports', icon: Inbox, color: '#faa81a'},
   {to: Routes.DASHBOARD_ADMIN_SERVERS, label: 'Servers', icon: Server, color: '#faa81a'},
-  {to: Routes.DASHBOARD_ADMIN_TAGS, label: 'Tag Directory', icon: ShieldCheck, color: '#3ba55c'},
-  {to: Routes.DASHBOARD_ADMIN_ALL_TAGS, label: 'Tags', icon: Tags, color: '#00b0f4'},
+  {
+    to: Routes.DASHBOARD_ADMIN_TAGS,
+    label: 'Tags',
+    icon: Tags,
+    color: '#00b0f4',
+    end: true,
+    children: [{to: Routes.DASHBOARD_ADMIN_TAG_DIRECTORY, label: 'Tag Directory', icon: ShieldCheck, color: '#3ba55c'}],
+  },
   {to: Routes.DASHBOARD_ADMIN_USERS, label: 'Users', icon: Users, color: '#5865f2'},
   {to: Routes.DASHBOARD_ADMIN_VOICES, label: 'Voices', icon: AudioLines, color: '#eb459e'},
 ];
@@ -99,8 +107,8 @@ export function DashboardLayout() {
 function SectionList({ sections }: {sections: ReadonlyArray<Section>}) {
   return (
     <ul className='-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0'>
-      {sections.map((section) => (
-        <li key={section.to} className='shrink-0'>
+      {sections.flatMap((section) => [section, ...(section.children ?? []).map((child) => ({...child, nested: true}))]).map((section) => (
+        <li key={section.to} className={cn('shrink-0', ('nested' in section) && 'lg:pl-5')}>
           <NavLink
             to={section.to}
             end={section.end}

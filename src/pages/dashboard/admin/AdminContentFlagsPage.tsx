@@ -4,8 +4,8 @@
 // api fetches it, so the reviewer's browser never touches the source), blurred until revealed and never for
 // child safety flags.
 
-import { AlertTriangle, ArrowUpRight, Ban, Check, Clock, Eye, Flag, Info, Languages, type LucideIcon, MessageSquareWarning, Server, ShieldCheck, X } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { AlertTriangle, ArrowUpRight, Ban, Check, Clock, CloudOff, Eye, Flag, ImageOff, Info, Languages, type LucideIcon, MessageSquareWarning, Server, ShieldCheck, X } from 'lucide-react';
+import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
 import { isOwner, useAuth } from '@/auth';
@@ -30,7 +30,7 @@ import {
   type ContentFlagUser,
   UserFlags,
 } from '@/lib/api';
-import { ADMIN_CONTENT_FLAGS_PAGE_SIZE, errorMessage, useAdminContentFlagsQuery, useFetchContentFlagMatches, useFlagAdminContentFlagPromptMutation, usePatchAdminContentFlagMutation, usePatchAdminUserMutation, useTranslateAdminContentFlagMutation } from '@/lib/api/dashboardQueries';
+import { ADMIN_CONTENT_FLAGS_PAGE_SIZE, errorMessage, useAdminContentFlagQuery, useAdminContentFlagsQuery, useFetchContentFlagMatches, useFlagAdminContentFlagPromptMutation, usePatchAdminContentFlagMutation, usePatchAdminUserMutation, useTranslateAdminContentFlagMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime, formatMemory } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
@@ -42,11 +42,15 @@ import { BLOCK_REASON_MAX, BlockUserDialog } from './BlockUserDialog';
 type Tone = 'warning' | 'danger' | 'neutral' | 'brand';
 
 // `short` is the action's label in the phone-width action bar, where the buttons share one row
-const STATUSES: Array<{value: ContentFlagStatus, label: string, action: string, short: string, tone: Tone, icon: LucideIcon}> = [
-  {value: ContentFlagStatuses.PENDING, label: 'Pending', action: 'Mark pending', short: 'Pending', tone: 'warning', icon: Clock},
-  {value: ContentFlagStatuses.CONFIRMED, label: 'Confirmed', action: 'Confirm', short: 'Confirm', tone: 'danger', icon: Check},
-  {value: ContentFlagStatuses.DISMISSED, label: 'Dismissed', action: 'Dismiss', short: 'Dismiss', tone: 'neutral', icon: X},
-  {value: ContentFlagStatuses.REPORTED, label: 'Reported', action: 'Mark reported', short: 'Report', tone: 'brand', icon: Flag},
+// `description` is what the status means, shown on hover over its chip
+const REPORTED_DESCRIPTION = 'Reported: staff reported this content outside NotSoBot (like Discord Trust & Safety, or NCMEC for child safety). ' +
+  'It’s only a marker, nothing is sent from here. It counts as confirmed, so matching uploads are auto-confirmed too.';
+
+const STATUSES: Array<{value: ContentFlagStatus, label: string, action: string, short: string, tone: Tone, icon: LucideIcon, description: string}> = [
+  {value: ContentFlagStatuses.PENDING, label: 'Pending', action: 'Mark pending', short: 'Pending', tone: 'warning', icon: Clock, description: 'Pending: waiting for a staff review.'},
+  {value: ContentFlagStatuses.CONFIRMED, label: 'Confirmed', action: 'Confirm', short: 'Confirm', tone: 'danger', icon: Check, description: 'Confirmed: staff agreed the content breaks the rules. Matching uploads are auto-confirmed.'},
+  {value: ContentFlagStatuses.DISMISSED, label: 'Dismissed', action: 'Dismiss', short: 'Dismiss', tone: 'neutral', icon: X, description: 'Dismissed: staff decided it was a false positive.'},
+  {value: ContentFlagStatuses.REPORTED, label: 'Reported', action: 'Mark reported', short: 'Report', tone: 'brand', icon: Flag, description: REPORTED_DESCRIPTION},
 ];
 
 // setting one of these first offers to set it on the other pending flags of the same media
@@ -62,8 +66,61 @@ function pdqHint(distance?: number): string {
 
 const TITLE_ID = 'admin-content-flag-modal-title';
 
+// What the safety scan did with it (`action`, set in `responses/tools.py` and `content_flag.py`). Coloured by whether the
+// content got out: the ones that stopped it are calm teal/blue/grey, `logged` (it went through, only logged for review)
+// is amber. Red and yellow stay for the verdict and category chips.
+const FLAG_ACTIONS: Record<string, {label: string, icon: LucideIcon, className: string, description: string}> = {
+  blocked: {
+    label: 'blocked',
+    icon: Ban,
+    className: 'bg-[#1abc9c]/15 text-[#5fd4bd]',
+    description: 'Blocked: the command errored instead of sending it, nobody saw it.',
+  },
+  replaced: {
+    label: 'replaced',
+    icon: ImageOff,
+    className: 'bg-[#3498db]/15 text-[#7cc0f0]',
+    description: 'Replaced: the output was swapped for a black image, the original wasn’t sent.',
+  },
+  not_hosted: {
+    label: 'not hosted',
+    icon: CloudOff,
+    className: 'bg-line-strong text-muted',
+    description: 'Not hosted: it was too big for Discord and NotSoBot wouldn’t host it, so it wasn’t sent.',
+  },
+  logged: {
+    label: 'logged',
+    icon: Eye,
+    className: 'bg-warning/20 text-warning',
+    description: 'Logged: it went through to the user, and was only logged for a review.',
+  },
+};
+
+function ActionChip({ action }: {action: string}) {
+  const info = FLAG_ACTIONS[action];
+  if (!info) {
+    return <Chip>{action}</Chip>;
+  }
+  const Icon = info.icon;
+  return (
+    <span title={info.description} className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap', info.className)}>
+      <Icon aria-hidden className='size-3'/>
+      {info.label}
+    </span>
+  );
+}
+
+// the modal's status buttons: confirm is the strong red, mark pending the pending chip's light yellow, and reporting an
+// outline in the reported chip's colour so it doesn't read as a third verdict
+const STATUS_BUTTON_CLASSES: Record<number, string> = {
+  [ContentFlagStatuses.PENDING]: 'border border-warning/40 bg-warning/15 text-warning hover:bg-warning/25',
+  [ContentFlagStatuses.CONFIRMED]: 'btn-danger',
+  [ContentFlagStatuses.DISMISSED]: 'btn-secondary',
+  [ContentFlagStatuses.REPORTED]: 'border border-brand/50 bg-transparent text-[#aab2ff] hover:bg-brand/15',
+};
+
 function statusInfo(status: number) {
-  return STATUSES.find((item) => item.value === status) ?? {value: status, label: `Status ${status}`, action: '', short: '', tone: 'neutral' as Tone, icon: Flag};
+  return STATUSES.find((item) => item.value === status) ?? {value: status, label: `Status ${status}`, action: '', short: '', tone: 'neutral' as Tone, icon: Flag, description: ''};
 }
 
 // the admin user list searching that id
@@ -171,7 +228,10 @@ export function AdminContentFlagsPage() {
     page,
   });
   const items = data?.items ?? [];
-  const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (flag) => flag.id);
+  const { openId, openItem: listedItem, previousId, nextId, open, close } = useOpenListItem(items, (flag) => flag.id, Routes.DASHBOARD_ADMIN_FLAGS);
+  // a link to a flag that isn't on this page
+  const linked = useAdminContentFlagQuery(openId, !listedItem);
+  const openItem = listedItem ?? linked.data ?? null;
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_CONTENT_FLAGS_PAGE_SIZE});
   const filtered = !!(userId || guildId || channelId || tagId || commandId || status !== null || category || needsHumanReview !== null || autoConfirmed !== null || type || debouncedSearch);
   const pagination = {
@@ -206,7 +266,10 @@ export function AdminContentFlagsPage() {
             onChange={(event) => update({status: (event.target.value === String(DEFAULT_STATUS)) ? null : event.target.value})}
           >
             <option value={ANY_STATUS}>Any</option>
-            {STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            {STATUSES.filter((item) => item.value !== ContentFlagStatuses.REPORTED).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            <optgroup label='Reported outside NotSoBot'>
+              <option value={ContentFlagStatuses.REPORTED}>Reported</option>
+            </optgroup>
           </select>
         </label>
         <label className='text-sm lg:col-span-3'>
@@ -374,23 +437,29 @@ function ContentFlagRow({ flag, onOpen }: {flag: ContentFlag, onOpen: (id: strin
     <li>
       <button
         type='button'
-        className='flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 sm:px-5'
+        className='grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-4 px-4 py-3 text-left first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 sm:px-5'
         onClick={() => onOpen(flag.id)}
       >
-        {/* fixed widths so every row lines up in columns */}
-        <span className='w-44 font-mono text-sm text-white'>#{flag.id}</span>
-        <Chip tone={status.tone} className='w-20 justify-center'>{status.label}</Chip>
-        <Chip className='w-14 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
-        {(flag.category)
-          ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'} className='w-36 justify-center'>{flag.category}</Chip>
-          : <span aria-hidden className='w-36'/>}
-        <span className='w-44 min-w-0'><UserCell user={user} fallbackId={flag.user_id} size='sm'/></span>
-        <span className='flex min-w-0 flex-1 flex-wrap gap-1.5'>
-          {(user?.blocked) ? <Chip tone='danger'>Blocked</Chip> : null}
+        {/* left: what it is and its id (fixed widths, so rows line up), who posted it under them */}
+        <span className='flex min-w-0 flex-col gap-2'>
+          <span className='flex items-center gap-3'>
+            <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
+            <span className='font-mono text-sm leading-5 text-white'>#{flag.id}</span>
+          </span>
+          <UserCell user={user} fallbackId={flag.user_id} size='sm'/>
+        </span>
+        {/* middle: why it was flagged, stacked */}
+        <span className='flex flex-col items-center gap-1'>
+          {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
           {(flag.needs_human_review) ? <Chip tone='warning'>needs review</Chip> : null}
           {(flag.auto_confirmed_from) ? <Chip>auto-confirmed</Chip> : null}
+          {(user?.blocked) ? <Chip tone='danger'>user blocked</Chip> : null}
         </span>
-        <span className='ml-auto text-xs whitespace-nowrap text-subtle'>{formatDateTime(flag.created)}</span>
+        {/* right: the review status, and when it was flagged */}
+        <span className='flex min-w-0 flex-col items-end gap-2'>
+          <Chip tone={status.tone} title={status.description} className='w-20 justify-center'>{status.label}</Chip>
+          <span className='text-xs whitespace-nowrap text-subtle'>{formatDateTime(flag.created)}</span>
+        </span>
       </button>
     </li>
   );
@@ -498,23 +567,25 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
 
   return (
     <div>
-      {/* clear of the modal's close button */}
-      <div className='px-4 pt-4 pr-14 pb-3 sm:px-6 sm:pt-5 sm:pr-14'>
+      {/* same layout as the list's rows: what it is and its id on the left, why it was flagged stacked in the middle, and
+          the review status in the top right, just left of the close button (its left edge is 48px in) and lined up with the
+          "Flag #id" line: the columns sit at the top, so that line is always the padding plus half of its 28px height. From sm
+          up the padding is even and the outer columns are both 1fr, so the middle one is centred on the modal (the status
+          and close button sit in the right column's empty space) */}
+      <div className='relative grid gap-x-4 gap-y-2 px-4 pt-4 pr-36 pb-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start sm:px-6 sm:pt-5'>
         <div className='min-w-0'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-lg font-semibold text-white'>Flag #{flag.id}</h2>
-            {/* on phones the status sits alone on the id's line and the rest of the chips wrap below */}
-            <Chip tone={status.tone} className='ml-auto sm:ml-0'>{status.label}</Chip>
-            <div className='flex basis-full flex-wrap items-center gap-2 sm:basis-auto'>
-              <Chip>{(isText) ? 'text' : 'media'}</Chip>
-              {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
-              {(flag.action) ? <Chip>action: {flag.action}</Chip> : null}
-              {(flag.needs_human_review) ? <Chip tone='warning'>needs human review</Chip> : null}
-              {(flag.auto_confirmed_from) ? <Chip title={`Same media as #${flag.auto_confirmed_from}, which was already confirmed`}>auto-confirmed</Chip> : null}
-            </div>
+          <div className='flex h-7 items-center gap-2.5'>
+            <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
+            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-lg leading-7 font-semibold text-white'>Flag #{flag.id}</h2>
           </div>
-          <p className='mt-1.5 text-xs text-subtle sm:mt-1'><ExactDate value={flag.created} format={formatDateTime}/></p>
+          <p className='mt-1 text-xs text-subtle'><ExactDate value={flag.created} format={formatDateTime}/></p>
         </div>
+        <div className='flex flex-wrap items-center gap-1 sm:flex-col sm:flex-nowrap'>
+          {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
+          {(flag.needs_human_review) ? <Chip tone='warning'>needs human review</Chip> : null}
+          {(flag.auto_confirmed_from) ? <Chip title={`Same media as #${flag.auto_confirmed_from}, which was already confirmed`}>auto-confirmed</Chip> : null}
+        </div>
+        <Chip tone={status.tone} title={status.description} className='absolute top-[20px] right-16 w-20 justify-center sm:top-[24px]'>{status.label}</Chip>
       </div>
 
       {/* who posted it and where, each a link to their admin page */}
@@ -561,7 +632,8 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
           </div>
         ) : null}
 
-        <div className='grid gap-4 lg:grid-cols-2'>
+        {/* side by side once there's room, where the command/server/channel/message ids sit on the right */}
+        <div className='grid gap-4 sm:grid-cols-2'>
           <DetailList
             items={[
               ['Model', flag.model || '—'],
@@ -580,23 +652,13 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
           />
           <DetailList
             items={[
+              // what the safety scan did with it, first so it's always in the same spot (beside Model)
+              ['Action', (flag.action) ? <ActionChip action={flag.action}/> : '—'],
               ['Command', (flag.command_id) ? <span className='font-mono'>{flag.command_id}</span> : '—'],
-              ['Guild', (flag.guild_id) ? (
-                <span className='flex flex-wrap items-center gap-2'>
-                  <CopyableValue value={flag.guild_id} truncate={0}/>
-                  <Link to={adminServerPath(flag.guild_id)} className='text-xs text-code hover:underline'>Open server</Link>
-                </span>
-              ) : '—'],
+              ['Guild', (flag.guild_id) ? <CopyableValue value={flag.guild_id} truncate={0} to={adminServerPath(flag.guild_id)} linkTitle='Open this server'/> : '—'],
               ['Channel', (flag.channel_id) ? <CopyableValue value={flag.channel_id} truncate={0}/> : '—'],
               ['Message', (flag.message_id) ? <CopyableValue value={flag.message_id} truncate={0}/> : '—'],
-              (flag.tag_id) ? ['Tag', (
-                <span className='flex flex-wrap items-center gap-2'>
-                  <CopyableValue value={flag.tag_id} truncate={0}/>
-                  <Link to={`${Routes.DASHBOARD_ADMIN_ALL_TAGS}?q=${flag.tag_id}`} className='text-xs text-code hover:underline'>
-                    Find in tags
-                  </Link>
-                </span>
-              )] : null,
+              (flag.tag_id) ? ['Tag', <CopyableValue value={flag.tag_id} truncate={0} to={`${Routes.DASHBOARD_ADMIN_TAGS}?q=${flag.tag_id}`} linkTitle='Find this tag in tags'/>] : null,
               (flag.reviewed_at || flag.reviewed_by) ? ['Reviewed', (
                 <span>
                   {(flag.reviewed_at) ? <ExactDate value={flag.reviewed_at} format={formatDateTime}/> : null}
@@ -723,21 +785,30 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
         </form>
       </div>
 
-      {/* the current status is left out, its button would only ever be disabled */}
+      {/* confirm on the left, dismiss on the right, and reporting set apart after a divider (it isn't a review verdict,
+          it marks the content as reported elsewhere). The current status' slot turns into "Mark pending", so the buttons
+          never move around */}
       <AdminModalFooter {...navigation}>
-        {STATUSES.filter((item) => item.value !== flag.status).map((item) => (
-          <button
-            key={item.value}
-            type='button'
-            className={cn('btn min-w-0 flex-1 px-2 sm:flex-none sm:px-3', (item.value === ContentFlagStatuses.CONFIRMED) ? 'btn-danger' : 'btn-secondary')}
-            disabled={changingStatus}
-            onClick={() => changeStatus(item.value)}
-          >
-            {(pendingStatus === item.value) ? <Spinner className='size-4'/> : <item.icon aria-hidden className='hidden size-4 shrink-0 sm:block'/>}
-            <span className='truncate sm:hidden'>{item.short}</span>
-            <span className='hidden sm:inline'>{item.action}</span>
-          </button>
-        ))}
+        {([ ContentFlagStatuses.CONFIRMED, ContentFlagStatuses.DISMISSED, ContentFlagStatuses.REPORTED ] as Array<ContentFlagStatus>).map((slot) => {
+          const value: ContentFlagStatus = (flag.status === slot) ? ContentFlagStatuses.PENDING : slot;
+          const item = statusInfo(value);
+          return (
+            <Fragment key={slot}>
+              {(slot === ContentFlagStatuses.REPORTED) ? <span aria-hidden className='mx-0.5 h-6 w-px shrink-0 self-center bg-line-strong sm:mx-1'/> : null}
+              <button
+                type='button'
+                className={cn('btn min-w-0 flex-1 px-2 sm:flex-none sm:px-3', STATUS_BUTTON_CLASSES[item.value])}
+                disabled={changingStatus}
+                title={(item.value === ContentFlagStatuses.REPORTED) ? REPORTED_DESCRIPTION : undefined}
+                onClick={() => changeStatus(value)}
+              >
+                {(pendingStatus === value) ? <Spinner className='size-4'/> : <item.icon aria-hidden className='hidden size-4 shrink-0 sm:block'/>}
+                <span className='truncate sm:hidden'>{item.short}</span>
+                <span className='hidden sm:inline'>{item.action}</span>
+              </button>
+            </Fragment>
+          );
+        })}
       </AdminModalFooter>
 
       {(matches) ? (
@@ -1256,6 +1327,10 @@ function ReportFlagDialog({ flag, onClose }: {flag: ContentFlag, onClose: () => 
         }}
       >
         <h2 id={titleId} className='pr-10 text-lg font-semibold text-white'>Mark flag #{flag.id} reported?</h2>
+        <p className='mt-2 text-sm text-muted'>
+          For content you’ve reported outside NotSoBot, like to Discord Trust &amp; Safety or to NCMEC for child safety. This only
+          marks the flag, nothing is sent from here. It counts as confirmed, so matching uploads are auto-confirmed too.
+        </p>
 
         <div className='mt-3 rounded-md border border-line bg-deep p-3'>
           <UserCell user={user} fallbackId={flag.user_id}/>

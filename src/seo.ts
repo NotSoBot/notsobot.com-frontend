@@ -43,14 +43,19 @@ export const PAGES: Readonly<Record<keyof typeof Routes, PageMeta>> = Object.fre
   DASHBOARD_PREMIUM: {title: 'Premium', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_REMINDERS: {title: 'Your Reminders', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_REPORTS: {title: 'Your Reports', description: DASHBOARD_DESCRIPTION},
+  DASHBOARD_REPORT: {title: 'Report', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_VOICES: {title: 'Your Voices', description: DASHBOARD_DESCRIPTION},
-  DASHBOARD_ADMIN_ALL_TAGS: {title: 'Tags', description: ADMIN_DESCRIPTION},
-  DASHBOARD_ADMIN_TAGS: {title: 'Tag Directory', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_TAGS: {title: 'Tags', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_TAG_DIRECTORY: {title: 'Tag Directory', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_USERS: {title: 'Users', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_USER: {title: 'User', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_ENTITLEMENTS: {title: 'Entitlements', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_FLAGS: {title: 'Content Flags', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_FLAG: {title: 'Content Flag', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_REPORTS: {title: 'Reports', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_REPORT: {title: 'Report', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_SERVERS: {title: 'Servers', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_SERVER: {title: 'Server', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_VOICES: {title: 'Voices', description: ADMIN_DESCRIPTION},
   FAQ: {
     title: 'FAQ',
@@ -82,7 +87,7 @@ export const PAGE_ALIASES: Readonly<Record<string, keyof typeof Routes>> = Objec
   '/docs': 'TAG_DOCS',
   '/privacy': 'LEGAL_PRIVACY',
   '/terms': 'LEGAL_TERMS_OF_SERVICE',
-  '/dashboard/admin': 'DASHBOARD_ADMIN_ALL_TAGS',
+  '/dashboard/admin': 'DASHBOARD_ADMIN_TAGS',
 });
 
 export const NOT_FOUND_PAGE: PageMeta = {title: 'Not Found', description: 'We couldn\'t find that page.'};

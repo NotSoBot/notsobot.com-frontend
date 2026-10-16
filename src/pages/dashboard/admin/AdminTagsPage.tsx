@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Clock, Pencil, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Clock, Music, Pencil, ShieldCheck, ShieldX, Trash2, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -9,14 +9,22 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
   ApiErrorCodes,
   ApiRequestError,
+  TagDirectoryEditRequestThumbnailModes,
   TagDirectoryVerificationStates,
   type AdminTagDirectoryItem,
+  type TagDirectoryEditRequest,
   type AdminTagDirectorySortBy,
   type TagAsset,
   type TagDirectoryAsset,
   type TagDirectoryCategory,
 } from '@/lib/api';
-import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagDirectoryQuery, usePatchAdminTagDirectoryMutation } from '@/lib/api/dashboardQueries';
+import {
+  ADMIN_TAGS_PAGE_SIZE,
+  errorMessage,
+  useAdminTagDirectoryEditRequestMutation,
+  useAdminTagDirectoryQuery,
+  usePatchAdminTagDirectoryMutation,
+} from '@/lib/api/dashboardQueries';
 import { cn, formatDate, formatMemory } from '@/lib/utils';
 import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
 import { CategoryBadge, categoryOptionFromParam, CategorySelect, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge, verificationRequirement } from '@/pages/tags/tagDirectory';
@@ -31,10 +39,12 @@ import { TagStoragePanel } from './TagStoragePanel';
 
 // same order and `status` param as the public directory, but defaults to the review queue
 const FILTERS = [
-  {value: 'all', label: 'All', verified: null},
-  {value: 'verified', label: 'Verified', verified: TagDirectoryVerificationStates.VERIFIED},
-  {value: 'pending', label: 'Pending', verified: TagDirectoryVerificationStates.PENDING_VERIFICATION},
-  {value: 'unverified', label: 'Unverified', verified: TagDirectoryVerificationStates.NOT_VERIFIED},
+  {value: 'all', label: 'All', verified: null, editRequest: null},
+  {value: 'verified', label: 'Verified', verified: TagDirectoryVerificationStates.VERIFIED, editRequest: null},
+  {value: 'pending', label: 'Pending', verified: TagDirectoryVerificationStates.PENDING_VERIFICATION, editRequest: null},
+  {value: 'unverified', label: 'Unverified', verified: TagDirectoryVerificationStates.NOT_VERIFIED, editRequest: null},
+  // verified listings whose owner asked for changes
+  {value: 'changes', label: 'Change requests', verified: null, editRequest: true},
 ] as const;
 
 const DEFAULT_FILTER = FILTERS.find((item) => item.value === 'pending')!;
@@ -71,15 +81,16 @@ export function AdminTagsPage() {
     sortBy,
     verified: filter.verified,
     nsfw: (hideNsfw) ? false : null,
+    editRequest: filter.editRequest,
     page,
   });
   const items = data?.items ?? [];
   const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (item) => item.id);
-  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
+  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_TAGS_PAGE_SIZE});
   const pagination = {
     page,
     count: data?.count ?? 0,
-    pageSize: ADMIN_PAGE_SIZE,
+    pageSize: ADMIN_TAGS_PAGE_SIZE,
     onChange: setPage,
     fetching: isFetching && isPlaceholderData,
   };
@@ -198,6 +209,7 @@ function DirectoryTagCard({ item, onOpen }: {item: AdminTagDirectoryItem, onOpen
           <VerificationBadge verified={item.verified}/>
           <CategoryBadge category={item.category}/>
           {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
+          {(item.edit_request) ? <Chip tone='brand'>Change request</Chip> : null}
         </div>
       </div>
       {(item.description) ? (
@@ -363,6 +375,8 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
       <div className='mt-3'>
         <UserCell user={item.user} fallbackId={tag.user_id ?? null}/>
       </div>
+
+      {(item.edit_request) ? <EditRequestReview item={item} request={item.edit_request}/> : null}
 
       {(listingDraft !== null) ? (
         <div className='mt-3 space-y-3'>
@@ -531,6 +545,15 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
 
       <TagStoragePanel tagId={item.id} className='mt-4'/>
 
+      {(item.thumbnail) ? (
+        <div className='mt-4'>
+          <h3 className='section-label mb-1.5'>Listing thumbnail</h3>
+          <a href={item.thumbnail.urls.cdn} target='_blank' rel='noreferrer noopener' className='inline-block'>
+            <img src={item.thumbnail.urls.cdn} alt='' loading='lazy' className='size-16 rounded-md border border-line object-cover'/>
+          </a>
+        </div>
+      ) : null}
+
       {(item.assets?.length) ? (
         <div className='mt-4'>
           <h3 className='section-label mb-1.5'>Listing assets</h3>
@@ -562,6 +585,190 @@ function AssetRow({ asset }: {asset: TagDirectoryAsset}) {
       )}
       {(details) ? <span className='text-xs text-subtle'>{details}</span> : null}
     </li>
+  );
+}
+
+
+// The owner's change request for a verified listing: what it changes next to what's live, approve or reject it
+function EditRequestReview({ item, request }: {item: AdminTagDirectoryItem, request: TagDirectoryEditRequest}) {
+  const toast = useToast();
+  const mutation = useAdminTagDirectoryEditRequestMutation();
+  const [ rejecting, setRejecting ] = useState(false);
+  const [ reason, setReason ] = useState('');
+  const name = item.title || item.tag.name;
+
+  const liveIds = item.assets.map((asset) => asset.id);
+  const proposedIds = request.assets.map((asset) => asset.id);
+  const mediaChanged = liveIds.join() !== proposedIds.join();
+  const removed = item.assets.filter((asset) => !proposedIds.includes(asset.id));
+  const contentChanged = request.content !== null && request.content !== item.tag.content;
+
+  const approve = () => mutation.mutate({tagId: item.id, approve: true}, {
+    onSuccess: () => toast(`${name}: change request approved`),
+  });
+  const reject = () => mutation.mutate({tagId: item.id, reject: reason.trim()}, {
+    onSuccess: () => {
+      setRejecting(false);
+      toast(`${name}: change request rejected`);
+    },
+  });
+
+  return (
+    <section className='mt-4 rounded-lg border border-brand/40 bg-brand/5 p-4'>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div>
+          <h3 className='font-semibold text-white'>Change request</h3>
+          <p className='text-xs text-subtle'>
+            {(request.submitted) ? `Submitted ${formatDate(request.submitted)}. ` : ''}Approving applies it, the listing stays verified.
+          </p>
+        </div>
+        <div className='flex flex-wrap gap-2'>
+          <ActionButton
+            label='Approve changes'
+            icon={<Check className='size-4'/>}
+            className='btn-primary'
+            disabled={mutation.isPending}
+            pending={mutation.isPending && !!mutation.variables && 'approve' in mutation.variables}
+            onClick={approve}
+          />
+          <ActionButton
+            label='Reject'
+            icon={<X className='size-4'/>}
+            className='btn-danger'
+            disabled={mutation.isPending || rejecting}
+            pending={false}
+            onClick={() => setRejecting(true)}
+          />
+        </div>
+      </div>
+
+      <div className='mt-3 space-y-4 text-sm'>
+        <div>
+          <h4 className='section-label mb-1'>Note from the owner</h4>
+          <p className='whitespace-pre-wrap text-fg'>{request.note || <span className='text-subtle italic'>(none)</span>}</p>
+        </div>
+
+        <div>
+          <h4 className='section-label mb-1'>Content</h4>
+          {(contentChanged) ? (
+            <div className='grid gap-2 md:grid-cols-2'>
+              <div>
+                <p className='mb-1 text-xs text-subtle'>Now</p>
+                <pre className='max-h-64 overflow-auto rounded-md border border-line bg-deep p-2 font-mono text-xs whitespace-pre-wrap break-words text-muted'>{item.tag.content}</pre>
+              </div>
+              <div>
+                <p className='mb-1 text-xs text-subtle'>Proposed</p>
+                <pre className='max-h-64 overflow-auto rounded-md border border-brand/40 bg-deep p-2 font-mono text-xs whitespace-pre-wrap break-words text-fg'>{request.content}</pre>
+              </div>
+            </div>
+          ) : <p className='text-subtle'>Unchanged</p>}
+        </div>
+
+        <div>
+          <h4 className='section-label mb-1'>Thumbnail</h4>
+          {(request.thumbnail_mode === TagDirectoryEditRequestThumbnailModes.KEEP) ? (
+            <p className='text-subtle'>Unchanged</p>
+          ) : (
+            <div className='flex items-center gap-3'>
+              <MiniMedia url={item.thumbnail?.urls.cdn ?? null} mimetype='image/png' label='Now'/>
+              <span aria-hidden className='text-subtle'>→</span>
+              {(request.thumbnail_mode === TagDirectoryEditRequestThumbnailModes.REMOVE) ? (
+                <span className='text-muted'>Removed, the card uses the cover</span>
+              ) : (
+                <MiniMedia url={request.thumbnail?.urls.cdn ?? null} mimetype='image/png' label='Proposed'/>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h4 className='section-label mb-1'>Media</h4>
+          {(mediaChanged) ? (
+            <div className='space-y-2'>
+              <ul className='flex flex-wrap gap-2'>
+                {request.assets.map((asset, index) => (
+                  <li key={asset.id}>
+                    <MiniMedia
+                      url={asset.urls.cdn}
+                      mimetype={asset.metadata.mimetype}
+                      label={(index === 0) ? 'Cover' : `#${index + 1}`}
+                      badge={(asset.is_new) ? 'New' : undefined}
+                    />
+                  </li>
+                ))}
+                {(!request.assets.length) ? <li className='text-muted'>No media</li> : null}
+              </ul>
+              {(removed.length) ? (
+                <div>
+                  <p className='mb-1 text-xs text-subtle'>Removed</p>
+                  <ul className='flex flex-wrap gap-2 opacity-60'>
+                    {removed.map((asset) => (
+                      <li key={asset.id}><MiniMedia url={asset.urls.cdn} mimetype={asset.metadata.mimetype}/></li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : <p className='text-subtle'>Unchanged</p>}
+        </div>
+      </div>
+
+      {(rejecting) ? (
+        <div className='mt-4 space-y-2 border-t border-line pt-4'>
+          <Field label='Reason' hint='Shown to the owner. Optional.' counter={<CharCounter length={reason.length} max={DESCRIPTION_MAX}/>}>
+            {(props) => (
+              <textarea
+                {...props}
+                className='input min-h-20 resize-y'
+                maxLength={DESCRIPTION_MAX}
+                value={reason}
+                disabled={mutation.isPending}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className='flex flex-wrap justify-end gap-2'>
+            <button type='button' className='btn btn-ghost btn-sm' disabled={mutation.isPending} onClick={() => setRejecting(false)}>Back</button>
+            <ActionButton
+              label='Reject change request'
+              icon={<ShieldX className='size-4'/>}
+              className='btn-danger'
+              disabled={mutation.isPending}
+              pending={mutation.isPending && !!mutation.variables && 'reject' in mutation.variables}
+              onClick={reject}
+            />
+          </div>
+        </div>
+      ) : null}
+      {(mutation.isError) ? <p className='mt-2 text-sm text-danger'>{errorMessage(mutation.error, 'Couldn’t update the change request.')}</p> : null}
+    </section>
+  );
+}
+
+
+function MiniMedia({ url, mimetype, label, badge }: {url: string | null, mimetype: string, label?: string, badge?: string}) {
+  const kind = (mimetype.startsWith('video/')) ? 'video' : (mimetype.startsWith('audio/')) ? 'audio' : 'image';
+  return (
+    <div className='flex flex-col items-center gap-1'>
+      <a
+        href={url ?? undefined}
+        target='_blank'
+        rel='noreferrer noopener'
+        className='relative flex size-16 items-center justify-center overflow-hidden rounded-md border border-line bg-deep text-subtle'
+      >
+        {(!url) ? (
+          <span className='text-[10px]'>None</span>
+        ) : (kind === 'audio') ? (
+          <Music aria-hidden className='size-5'/>
+        ) : (kind === 'video') ? (
+          <video src={url} muted playsInline preload='metadata' aria-hidden className='size-full object-cover'/>
+        ) : (
+          <img src={url} alt='' loading='lazy' className='size-full object-cover'/>
+        )}
+        {(badge) ? <span className='absolute top-0.5 right-0.5 rounded bg-brand px-1 text-[10px] font-medium text-white'>{badge}</span> : null}
+      </a>
+      {(label) ? <span className='text-[10px] text-subtle'>{label}</span> : null}
+    </div>
   );
 }
 

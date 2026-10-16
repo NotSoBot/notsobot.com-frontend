@@ -1,17 +1,19 @@
 import { AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight, Hash, Server, Tag as TagIcon, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { TagDirectoryVerificationStates, type TagDirectoryItem } from '@/lib/api';
 import { useAdminTagDirectoryItemQuery, useMeTagDirectoryQuery } from '@/lib/api/dashboardQueries';
 import { useTagDirectoryItemQuery } from '@/lib/api/queries';
+import { Routes } from '@/routes';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 import { AddTagButton, categoryLabel, NsfwBadge, verificationInfo } from './tagDirectory';
 import { HiddenContentSection, ListingEditForm, ManageListingCard, TagServersSection, useListingAccess } from './TagListingManager';
-import { MediaSection } from './TagMedia';
+import { MediaSection, ThumbnailManager } from './TagMedia';
 
 
 const TITLE_ID = 'tag-modal-title';
@@ -144,7 +146,42 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
           </div>
 
           {(editing && canManage) ? (
-            <ListingEditForm item={item} access={access} onDone={() => onEditingChange(false)}/>
+            <>
+              <ListingEditForm item={item} access={access} onDone={() => onEditingChange(false)}/>
+              {/* the media saves as it goes (it isn't part of the form), and only the owner can change it. A verified
+                  listing's media changes through a change request, which lives in the dashboard */}
+              {(access.owner && own.data && own.data.verified === TagDirectoryVerificationStates.VERIFIED) ? (
+                <p className='rounded-lg border border-line bg-surface p-4 text-sm text-muted'>
+                  This listing is verified, so its content, thumbnail and media are locked.{' '}
+                  <Link to={`${Routes.DASHBOARD_TAG_EDIT.replace(':tagId', item.id)}?tab=directory`} className='text-brand hover:underline'>
+                    Request changes in your dashboard
+                  </Link>
+                  {' '}and NotSoBot staff will review them.
+                </p>
+              ) : (access.owner && own.data) ? (
+                <div className='space-y-5 rounded-lg border border-line bg-surface p-4'>
+                  <section>
+                    <h3 className='mb-1 font-semibold text-white'>Thumbnail</h3>
+                    <p className='mb-3 text-sm text-muted'>The small picture on the directory card. Images and videos are shrunk to a small PNG (videos use their first frame). Without one, the cover is used.</p>
+                    <ThumbnailManager
+                      assets={own.data.assets}
+                      thumbnail={own.data.thumbnail}
+                      manage={{tagId: item.id, verified: own.data.verified}}
+                    />
+                  </section>
+                  <div className='border-t border-line pt-5'>
+                    <MediaSection
+                      key={item.id}
+                      assets={own.data.assets}
+                      nsfw={false}
+                      tagName={tag.name}
+                      manage={{tagId: item.id, verified: own.data.verified}}
+                      headingClassName='font-semibold text-white'
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : (
             <>
               {(item.description) ? (

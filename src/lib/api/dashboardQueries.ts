@@ -1,7 +1,7 @@
 // Query/mutation hooks for the user dashboard (`/users/@me/...`, see docs/dashboard-api.md).
 // Every key is scoped to the session token, so switching accounts never shows someone else's data.
 
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 
 import { useAuth } from '@/auth';
@@ -136,6 +136,16 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
         return `Listings can have up to ${TAG_DIRECTORY_ASSETS_MAX} images, videos or audio files.`;
       case ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ASSET:
         return 'That file was already removed.';
+      case ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_EDIT_REQUEST:
+        return 'That change request doesn’t exist anymore.';
+      case ApiErrorCodes.TAG_DIRECTORY_EDIT_REQUEST_REQUIRES_VERIFIED:
+        return 'Only verified listings need a change request, edit this one directly.';
+      case ApiErrorCodes.TAG_DIRECTORY_EDIT_REQUEST_NOT_DRAFT:
+        return 'Withdraw the change request before changing it.';
+      case ApiErrorCodes.TAG_DIRECTORY_EDIT_REQUEST_NOT_PENDING:
+        return 'That change request isn’t waiting for review anymore.';
+      case ApiErrorCodes.TAG_DIRECTORY_EDIT_REQUEST_NO_CHANGES:
+        return 'The change request doesn’t change anything yet.';
       case ApiErrorCodes.FILE_TOO_LARGE:
         return 'That file is too big.';
       case ApiErrorCodes.INVALID_FILE_TYPE:
@@ -209,15 +219,12 @@ export function usePatchMeSettingsMutation() {
 /* tags */
 
 // `serverId`: only the tags in that server
-export function useMeTagsQuery(query: string, sortBy: MeTagsSortBy = 'newest', directory: MeTagsDirectoryFilter = null, serverId: string | null = null) {
+// one page (0-based) of `ME_TAGS_PAGE_SIZE`, the list pages with arrows
+export function useMeTagsQuery(query: string, sortBy: MeTagsSortBy = 'newest', directory: MeTagsDirectoryFilter = null, serverId: string | null = null, page = 0) {
   const { token } = useAuth();
-  return useInfiniteQuery({
-    queryKey: queryKeys.meTagsList(token, query, sortBy, directory, serverId),
-    queryFn: ({ pageParam, signal }) => api.fetchMeTags({query, sortBy, directory, serverId, offset: pageParam, limit: ME_TAGS_PAGE_SIZE}, signal),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage: TagsPage, pages: Array<TagsPage>) => {
-      return (lastPage.items.length < ME_TAGS_PAGE_SIZE) ? undefined : pages.reduce((total, page) => total + page.items.length, 0);
-    },
+  return useQuery({
+    queryKey: queryKeys.meTagsList(token, query, sortBy, directory, serverId, page),
+    queryFn: ({ signal }) => api.fetchMeTags({query, sortBy, directory, serverId, offset: page * ME_TAGS_PAGE_SIZE, limit: ME_TAGS_PAGE_SIZE}, signal),
     placeholderData: keepPreviousData,
   });
 }
@@ -243,9 +250,9 @@ export function useMeTagQuery(tagId: string, { enabled = true }: {enabled?: bool
     enabled,
     // show the row from the list immediately when coming from it
     placeholderData: () => {
-      const lists = queryClient.getQueriesData<{pages: Array<TagsPage>}>({queryKey: [...queryKeys.meTags(token), 'list']});
+      const lists = queryClient.getQueriesData<TagsPage>({queryKey: [...queryKeys.meTags(token), 'list']});
       for (const [ , data ] of lists) {
-        const found = data?.pages.flatMap((page) => page.items).find((tag) => tag.id === tagId);
+        const found = data?.items.find((tag) => tag.id === tagId);
         if (found) {
           return found;
         }
@@ -343,6 +350,74 @@ export function useMeTagDirectoryAssetMutation(tagId: string) {
     onSuccess: (directory: TagDirectoryItem) => {
       queryClient.setQueryData(queryKeys.meTagDirectory(token, tagId), directory);
       void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
+
+export function useMeTagDirectoryThumbnailMutation(tagId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (action: {upload: File} | {remove: true}): Promise<TagDirectoryItem> => {
+      if ('upload' in action) {
+        return api.uploadMeTagDirectoryThumbnail(tagId, action.upload);
+      }
+      return api.deleteMeTagDirectoryThumbnail(tagId);
+    },
+    onSuccess: (directory: TagDirectoryItem) => {
+      queryClient.setQueryData(queryKeys.meTagDirectory(token, tagId), directory);
+      void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
+
+export type EditRequestAction =
+  {start: true} |
+  {patch: {content?: string | null, note?: string, thumbnail_mode?: number}} |
+  {discard: true} |
+  {submit: true} |
+  {withdraw: true} |
+  {upload: File} |
+  {move: string, position: number} |
+  {remove: string} |
+  {uploadThumbnail: File};
+
+// everything on the owner's change request, each answers with the listing (`edit_request` included)
+export function useMeTagDirectoryEditRequestMutation(tagId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (action: EditRequestAction): Promise<TagDirectoryItem> => {
+      if ('start' in action) {
+        return api.startMeTagDirectoryEditRequest(tagId);
+      }
+      if ('patch' in action) {
+        return api.patchMeTagDirectoryEditRequest(tagId, action.patch);
+      }
+      if ('discard' in action) {
+        return api.discardMeTagDirectoryEditRequest(tagId);
+      }
+      if ('submit' in action) {
+        return api.submitMeTagDirectoryEditRequest(tagId);
+      }
+      if ('withdraw' in action) {
+        return api.withdrawMeTagDirectoryEditRequest(tagId);
+      }
+      if ('upload' in action) {
+        return api.uploadMeTagDirectoryEditRequestAsset(tagId, action.upload);
+      }
+      if ('move' in action) {
+        return api.moveMeTagDirectoryEditRequestAsset(tagId, action.move, action.position);
+      }
+      if ('remove' in action) {
+        return api.deleteMeTagDirectoryEditRequestAsset(tagId, action.remove);
+      }
+      return api.uploadMeTagDirectoryEditRequestThumbnail(tagId, action.uploadThumbnail);
+    },
+    onSuccess: (directory: TagDirectoryItem) => {
+      queryClient.setQueryData(queryKeys.meTagDirectory(token, tagId), directory);
     },
   });
 }
@@ -480,6 +555,15 @@ export function useMeEntitlementsQuery() {
 
 
 export const ME_REPORTS_PAGE_SIZE = 25;
+
+export function useMeReportQuery(reportId: string | null) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: ['users', '@me', token, 'report', reportId],
+    queryFn: ({ signal }) => api.fetchMeReport(reportId!, signal),
+    enabled: !!reportId,
+  });
+}
 
 export function useMeReportsQuery(filters: {status: number | null, page: number}) {
   const { token } = useAuth();
@@ -680,6 +764,8 @@ export function useDeleteMeMutation() {
 /* admin (owner only) */
 
 export const ADMIN_PAGE_SIZE = 25;
+// the tags and tag directory pages show more at once (the api allows up to 100)
+export const ADMIN_TAGS_PAGE_SIZE = 50;
 export const ADMIN_CONTENT_FLAGS_PAGE_SIZE = 50;
 
 export interface AdminTagsFilters {
@@ -730,8 +816,8 @@ export function useAdminTagsQuery(filters: AdminTagsFilters) {
       searchContent: filters.searchContent,
       sortBy: filters.sortBy,
       nsfw: filters.nsfw,
-      offset: filters.page * ADMIN_PAGE_SIZE,
-      limit: ADMIN_PAGE_SIZE,
+      offset: filters.page * ADMIN_TAGS_PAGE_SIZE,
+      limit: ADMIN_TAGS_PAGE_SIZE,
     }, signal),
     placeholderData: keepPreviousData,
   });
@@ -744,6 +830,8 @@ export interface AdminTagDirectoryFilters {
   sortBy: AdminTagDirectorySortBy,
   verified: number | null,
   nsfw: boolean | null,
+  // only listings with a change request waiting for review
+  editRequest?: boolean | null,
   page: number,
 }
 
@@ -757,8 +845,9 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
       sortBy: filters.sortBy,
       verified: filters.verified,
       nsfw: filters.nsfw,
-      offset: filters.page * ADMIN_PAGE_SIZE,
-      limit: ADMIN_PAGE_SIZE,
+      editRequest: filters.editRequest,
+      offset: filters.page * ADMIN_TAGS_PAGE_SIZE,
+      limit: ADMIN_TAGS_PAGE_SIZE,
     }, signal),
     placeholderData: keepPreviousData,
   });
@@ -825,6 +914,34 @@ export function usePatchAdminTagDirectoryMutation() {
 }
 
 
+// approving changes the live listing (and maybe the tag's content), rejecting only closes the request
+export function useAdminTagDirectoryEditRequestMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'tags'];
+  return useMutation({
+    mutationFn: (action: {tagId: string, approve: true} | {tagId: string, reject: string}): Promise<AdminTagDirectoryItem> => {
+      if ('approve' in action) {
+        return api.approveAdminTagDirectoryEditRequest(action.tagId);
+      }
+      return api.rejectAdminTagDirectoryEditRequest(action.tagId, action.reject);
+    },
+    onSuccess: (item: AdminTagDirectoryItem) => {
+      queryClient.setQueriesData<AdminTagDirectoryPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === item.id) ? item : other)};
+      });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({queryKey: listKey});
+      void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
+
 // tag assets only show up on the admin listing, refetch it so the card picks up the change
 export function useUploadAdminTagAssetMutation() {
   const { token } = useAuth();
@@ -868,6 +985,18 @@ export interface AdminUsersFilters {
   // hours, null for any time
   flaggedWithin: number | null,
   page: number,
+}
+
+// one user's row by id (the search matches ids), for a link to one that isn't on the loaded page. Lives under the list
+// keys, so blocking/editing them refreshes it too
+export function useAdminUserEntryQuery(userId: string | null, enabled = true) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminUsers(token, {id: userId}),
+    queryFn: ({ signal }) => api.fetchAdminUsers({query: userId!, limit: 10}, signal),
+    select: (page) => page.items.find((entry) => entry.user.id === userId) ?? null,
+    enabled: enabled && !!userId,
+  });
 }
 
 export function useAdminUsersQuery(filters: AdminUsersFilters) {
@@ -949,6 +1078,16 @@ export interface AdminContentFlagsFilters {
   page: number,
 }
 
+// one flag by id, for a link to one that isn't on the loaded page (`enabled` is false when it is)
+export function useAdminContentFlagQuery(flagId: string | null, enabled = true) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: [...queryKeys.admin(token), 'content-flag', flagId],
+    queryFn: ({ signal }) => api.fetchAdminContentFlag(flagId!, signal),
+    enabled: enabled && !!flagId,
+  });
+}
+
 export function useAdminContentFlagsQuery(filters: AdminContentFlagsFilters) {
   const { token } = useAuth();
   return useQuery({
@@ -993,6 +1132,7 @@ export function usePatchAdminContentFlagMutation() {
   return useMutation({
     mutationFn: ({ flagId, patch }: {flagId: string, patch: ContentFlagPatch}) => api.patchAdminContentFlag(flagId, patch),
     onSuccess: (flag: ContentFlag) => {
+      queryClient.setQueryData([...queryKeys.admin(token), 'content-flag', flag.id], flag);
       queryClient.setQueriesData<ContentFlagsPage>({queryKey: listKey}, (page) => {
         if (!page) {
           return page;
@@ -1016,6 +1156,7 @@ export function useFlagAdminContentFlagPromptMutation() {
   return useMutation({
     mutationFn: ({ flagId }: {flagId: string}) => api.flagAdminContentFlagPrompt(flagId),
     onSuccess: (flag: ContentFlag) => {
+      queryClient.setQueryData([...queryKeys.admin(token), 'content-flag', flag.id], flag);
       queryClient.setQueriesData<ContentFlagsPage>({queryKey: listKey}, (page) => {
         if (!page) {
           return page;
@@ -1035,6 +1176,7 @@ export function useTranslateAdminContentFlagMutation() {
   return useMutation({
     mutationFn: ({ flagId }: {flagId: string}) => api.translateAdminContentFlag(flagId),
     onSuccess: (flag: ContentFlag) => {
+      queryClient.setQueryData([...queryKeys.admin(token), 'content-flag', flag.id], flag);
       queryClient.setQueriesData<ContentFlagsPage>({queryKey: listKey}, (page) => {
         if (!page) {
           return page;
@@ -1054,6 +1196,16 @@ export interface AdminReportsFilters {
   targetId: string,
   guildId: string,
   page: number,
+}
+
+// one report by id, for a link to one that isn't on the loaded page
+export function useAdminReportQuery(reportId: string | null, enabled = true) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: [...queryKeys.admin(token), 'report', reportId],
+    queryFn: ({ signal }) => api.fetchAdminReport(reportId!, signal),
+    enabled: enabled && !!reportId,
+  });
 }
 
 export function useAdminReportsQuery(filters: AdminReportsFilters) {
@@ -1081,6 +1233,7 @@ export function usePatchAdminReportMutation() {
   return useMutation({
     mutationFn: ({ reportId, patch }: {reportId: string, patch: ReportPatch}) => api.patchAdminReport(reportId, patch),
     onSuccess: (report: Report) => {
+      queryClient.setQueryData([...queryKeys.admin(token), 'report', report.id], report);
       queryClient.setQueriesData<ReportsPage>({queryKey: listKey}, (page) => {
         if (!page) {
           return page;
@@ -1161,6 +1314,8 @@ export interface AdminGuildsFilters {
   query: string,
   inBot: boolean | null,
   blocked: boolean | null,
+  // hours, null for any time
+  flaggedWithin: number | null,
   sortBy: AdminGuildsSortBy,
   page: number,
 }
@@ -1173,6 +1328,7 @@ export function useAdminGuildsQuery(filters: AdminGuildsFilters) {
       query: filters.query,
       inBot: filters.inBot,
       blocked: filters.blocked,
+      flaggedWithin: filters.flaggedWithin,
       sortBy: filters.sortBy,
       offset: filters.page * ADMIN_PAGE_SIZE,
       limit: ADMIN_PAGE_SIZE,

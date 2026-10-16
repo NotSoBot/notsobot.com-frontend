@@ -1,10 +1,12 @@
 // The reports the user sent with the bot's report commands and where they stand. Read only, the reports are made in Discord.
 // `content` is whatever the user typed, so it's only ever rendered as plain text.
 
-import { ExternalLink, MessageSquareWarning } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MessageSquareWarning } from 'lucide-react';
+import { Link, useParams } from 'react-router';
 
 import { ReportTypes, type MeReport } from '@/lib/api';
-import { ME_REPORTS_PAGE_SIZE, errorMessage, useMeReportsQuery } from '@/lib/api/dashboardQueries';
+import { Routes } from '@/config';
+import { ME_REPORTS_PAGE_SIZE, errorMessage, useMeReportQuery, useMeReportsQuery } from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime, formatExactDateTime } from '@/lib/utils';
 
 import { Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage } from '../admin/adminUi';
@@ -20,7 +22,43 @@ function parseStatus(value: string | null): number | null {
 }
 
 
+// `/dashboard/reports/<id>` shows just that report (a link to it), the list otherwise
 export function ReportsPage() {
+  const { itemId } = useParams();
+  return (itemId) ? <SingleReport reportId={itemId}/> : <ReportsList/>;
+}
+
+
+function reportPath(reportId: string): string {
+  return `${Routes.DASHBOARD_REPORTS}/${reportId}`;
+}
+
+
+function SingleReport({ reportId }: {reportId: string}) {
+  const { data: report, isPending, isError, error, isRefetching, refetch } = useMeReportQuery(reportId);
+  return (
+    <>
+      <DashboardHeader title='Report' description={<span className='font-mono'>#{reportId}</span>}>
+        <Link to={Routes.DASHBOARD_REPORTS} className='btn btn-secondary btn-sm'>
+          <ArrowLeft className='size-4'/>
+          All reports
+        </Link>
+      </DashboardHeader>
+      {(isPending) ? (
+        <ListSkeleton/>
+      ) : (isError || !report) ? (
+        <ErrorPanel title='Couldn’t load this report' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
+      ) : (
+        <ul className='card divide-y divide-line'>
+          <ReportRow report={report}/>
+        </ul>
+      )}
+    </>
+  );
+}
+
+
+function ReportsList() {
   const { searchParams, page, update, setPage } = useSearchParamState();
   const status = parseStatus(searchParams.get('status'));
 
@@ -112,7 +150,7 @@ function ReportRow({ report }: {report: MeReport}) {
           {(report.reviewed_at) ? (
             <span title={formatExactDateTime(report.reviewed_at)}>Reviewed {formatDateTime(report.reviewed_at)}</span>
           ) : null}
-          <span className='font-mono' title='Report ID'>#{report.id}</span>
+          <Link to={reportPath(report.id)} className='font-mono hover:text-fg hover:underline' title='Link to this report'>#{report.id}</Link>
         </div>
       </div>
     </li>

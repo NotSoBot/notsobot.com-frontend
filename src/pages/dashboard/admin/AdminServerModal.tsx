@@ -19,6 +19,7 @@ import { ServerSettingsForm } from '../servers/ServerSettingsForm';
 import { PanelSkeleton, Panel, Skeleton, UnsavedChangesGuard } from '../ui';
 import { BLOCK_REASON_MAX } from './BlockUserDialog';
 import { Chip, CopyableValue, ExactDate } from './adminUi';
+import { AdminTagModal } from './AdminTagModal';
 
 
 const TITLE_ID = 'admin-server-modal-title';
@@ -29,26 +30,48 @@ function adminListPath(route: string, params: Record<string, string>): string {
 }
 
 
-// Any server over the admin server list (`?server=<id>`): shortcuts to what's linked to it, blocking it, and the same
-// settings sections as the user dashboard's server modal, all editable (through `/admin/guilds`).
-export function AdminServerModal({ guildId, onClose }: {guildId: string, onClose: () => void}) {
+// Any server over the admin server list (`/dashboard/admin/servers/<id>`): shortcuts to what's linked to it, blocking it,
+// and the same settings sections as the user dashboard's server modal, all editable (through `/admin/guilds`). ← / → (and
+// the footer's arrows) step through the servers on the list page.
+export function AdminServerModal({ guildId, previousId, nextId, onNavigate, onClose }: {
+  guildId: string,
+  previousId: string | null,
+  nextId: string | null,
+  onNavigate: (guildId: string) => void,
+  onClose: () => void,
+}) {
   const { data: guild, isPending, error, refetch, isRefetching } = useAdminGuildQuery(guildId);
   const [ settingsDirty, setSettingsDirty ] = useState(false);
-  const [ confirmingClose, setConfirmingClose ] = useState(false);
+  // what to do once unsaved settings are discarded: close, or go to another server
+  const [ confirming, setConfirming ] = useState<{close: true} | {navigate: string} | null>(null);
 
-  const requestClose = () => {
-    if (settingsDirty) {
-      setConfirmingClose(true);
-    } else {
+  const leave = (action: {close: true} | {navigate: string}) => {
+    if ('close' in action) {
       onClose();
+    } else {
+      setSettingsDirty(false);
+      onNavigate(action.navigate);
+    }
+  };
+  const request = (action: {close: true} | {navigate: string}) => {
+    if (settingsDirty) {
+      setConfirming(action);
+    } else {
+      leave(action);
     }
   };
 
   return (
-    <Modal labelledBy={TITLE_ID} onClose={requestClose}>
+    <AdminTagModal
+      labelledBy={TITLE_ID}
+      previousId={previousId}
+      nextId={nextId}
+      onNavigate={(id) => request({navigate: id})}
+      onClose={() => request({close: true})}
+    >
       {(guild) ? (
         <GuildScopeContext.Provider value='admin'>
-          <ServerDetails guild={guild} onDirtyChange={setSettingsDirty}/>
+          <ServerDetails key={guild.id} guild={guild} onDirtyChange={setSettingsDirty}/>
         </GuildScopeContext.Provider>
       ) : (isPending) ? (
         <div aria-busy='true'>
@@ -66,21 +89,23 @@ export function AdminServerModal({ guildId, onClose }: {guildId: string, onClose
         <ServerLoadError error={error} onRetry={() => refetch()} retrying={isRefetching}/>
       )}
 
-      {(confirmingClose) ? (
+      {(confirming) ? (
         <ConfirmDialog
           title='Discard unsaved changes?'
-          description='You have edits to this server’s settings that haven’t been saved. If you close it now, they’ll be lost.'
-          confirmLabel='Discard and close'
+          description={('close' in confirming) ?
+            'You have edits to this server’s settings that haven’t been saved. If you close it now, they’ll be lost.' :
+            'You have edits to this server’s settings that haven’t been saved. If you go to another server now, they’ll be lost.'}
+          confirmLabel={('close' in confirming) ? 'Discard and close' : 'Discard and continue'}
           onConfirm={() => {
-            setConfirmingClose(false);
-            onClose();
+            setConfirming(null);
+            leave(confirming);
           }}
-          onClose={() => setConfirmingClose(false)}
+          onClose={() => setConfirming(null)}
         />
       ) : null}
       {/* leaving the page altogether (the shortcuts, the sidebar) */}
       <UnsavedChangesGuard when={settingsDirty}/>
-    </Modal>
+    </AdminTagModal>
   );
 }
 
@@ -151,7 +176,7 @@ function ServerShortcuts({ guild }: {guild: AdminGuild}) {
   const { counts } = guild;
   return (
     <nav aria-label='Linked to this server' className='mt-4 flex flex-wrap gap-2'>
-      <YourStuffLink to={adminListPath(Routes.DASHBOARD_ADMIN_ALL_TAGS, {server: guild.id})} icon={TagsIcon} label='Tags' count={counts.tags}/>
+      <YourStuffLink to={adminListPath(Routes.DASHBOARD_ADMIN_TAGS, {server: guild.id})} icon={TagsIcon} label='Tags' count={counts.tags}/>
       {/* a count only: reminders are people's private notes, so staff don't get to read them */}
       <span
         className='inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm text-muted'

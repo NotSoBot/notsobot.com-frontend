@@ -12,7 +12,7 @@ export function AuthControls({ compact = false }: {compact?: boolean}) {
   const { status, user, login, retry } = useAuth();
 
   if (status === 'loading') {
-    return <div aria-label='Loading account' className='size-9 animate-pulse rounded-full bg-surface-3'/>;
+    return <div aria-label='Loading account' className='h-11 w-11 animate-pulse rounded-full bg-surface-3 sm:w-40'/>;
   }
 
   if (status === 'authenticated' && user) {
@@ -94,10 +94,11 @@ function UserMenu({ compact }: {compact: boolean}) {
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen((value) => !value)}
-        className='flex cursor-pointer items-center gap-2 rounded-full border border-line bg-surface-2 py-1 pr-2.5 pl-1 transition-colors hover:border-line-strong'
+        className='flex cursor-pointer items-center gap-2.5 rounded-full border border-line bg-surface-2 py-1 pr-3 pl-1 transition-colors hover:border-line-strong'
       >
-        <img src={userAvatarUrl(user, 64)} alt='' className='size-7 rounded-full bg-surface-3'/>
-        {compact ? null : <span className='max-w-36 truncate text-sm font-medium'>{user.username}</span>}
+        <img src={userAvatarUrl(user, 80)} alt='' className='size-9 rounded-full bg-surface-3'/>
+        {/* `compact` (the navbar) only leaves the name out on phones, there's room for it from sm up */}
+        <span className={cn('max-w-40 truncate text-sm font-medium text-white', compact && 'hidden sm:inline')}>{user.username}</span>
         <ChevronDown className={cn('size-4 text-subtle transition-transform', open && 'rotate-180')}/>
       </button>
 

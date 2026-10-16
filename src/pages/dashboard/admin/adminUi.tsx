@@ -1,7 +1,7 @@
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -12,16 +12,25 @@ import { cn, formatDate, formatExactDateTime, toDate } from '@/lib/utils';
 
 // the Tags tab searching `query`, like `user:<id>`
 export function adminTagsPath(query: string): string {
-  return `${Routes.DASHBOARD_ADMIN_ALL_TAGS}?${new URLSearchParams({q: query}).toString()}`;
+  return `${Routes.DASHBOARD_ADMIN_TAGS}?${new URLSearchParams({q: query}).toString()}`;
 }
 
 // the admin server list with that server open over it
 export function adminServerPath(guildId: string): string {
-  return `${Routes.DASHBOARD_ADMIN_SERVERS}?${new URLSearchParams({server: guildId}).toString()}`;
+  return `${Routes.DASHBOARD_ADMIN_SERVERS}/${guildId}`;
 }
 
 
 // Filters live in the URL so a filtered view can be linked/bookmarked; every change resets to page 1.
+// `?within=` → `flagged_within` in hours, by how long ago the last content flag was (users and servers)
+export const FLAGGED_WITHIN = [
+  {value: 'any', label: 'Any time', hours: null},
+  {value: '1d', label: '24h', hours: 24},
+  {value: '7d', label: '7 days', hours: 24 * 7},
+  {value: '30d', label: '30 days', hours: 24 * 30},
+] as const;
+
+
 export function useSearchParamState() {
   const [ searchParams, setSearchParams ] = useSearchParams();
   const page = Math.max(0, (Number(searchParams.get('page')) || 1) - 1);
@@ -237,11 +246,22 @@ export function UserCell({ user, fallbackId, size = 'md' }: {user: AdminUserRef 
 
 
 // Long values (hashes, ids) shown shortened with a copy button; the full value is in the title.
-export function CopyableValue({ value, truncate = 16, className }: {value: string, truncate?: number, className?: string}) {
+// With `to` the value itself is the link (to that server, tag or user's admin page), the copy button stays next to it.
+export function CopyableValue({ value, truncate = 16, className, to, linkTitle }: {
+  value: string,
+  truncate?: number,
+  className?: string,
+  to?: string,
+  linkTitle?: string,
+}) {
   const shown = (truncate && truncate < value.length) ? `${value.slice(0, truncate)}…` : value;
   return (
     <span className={cn('inline-flex min-w-0 items-center gap-1', className)}>
-      <code title={value} className='truncate font-mono text-xs text-fg select-all focus:outline-none' {...selectAllScope}>{shown}</code>
+      {(to) ? (
+        <Link to={to} title={linkTitle ?? value} className='truncate font-mono text-xs text-code underline-offset-2 hover:underline'>{shown}</Link>
+      ) : (
+        <code title={value} className='truncate font-mono text-xs text-fg select-all focus:outline-none' {...selectAllScope}>{shown}</code>
+      )}
       <CopyButton value={value}/>
     </span>
   );
@@ -339,7 +359,8 @@ export function CollapseButton({ onClick }: {onClick: () => void}) {
 // label/value pairs in a compact grid
 export function DetailList({ items }: {items: Array<[ReactNode, ReactNode] | null | false>}) {
   return (
-    <dl className='grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm'>
+    // content-start: next to a taller list (side by side) its rows stay packed at the top instead of spreading out
+    <dl className='grid grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-4 gap-y-1.5 text-sm'>
       {items.filter((item): item is [ReactNode, ReactNode] => !!item).map(([ label, value ], i) => (
         <div key={i} className='contents'>
           <dt className='text-subtle'>{label}</dt>

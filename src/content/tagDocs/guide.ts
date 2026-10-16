@@ -526,7 +526,7 @@ export const TAG_DOC_GUIDE: Array<TagDocGuideSection> = [
         ['MEDIA_AV_FALLBACK', 'SEARCH_YOUTUBE or search.youtube (or an alias like s.yt)', 'When `{transcribe}` finds no audio or video, search YouTube with its argument instead.'],
         ['MEDIA_IV_FALLBACK', 'MEDIA_IMAGE_IMAGINE, SEARCH_GOOGLE_IMAGES or SEARCH_DUCK_DUCK_GO_IMAGES (or the function names, like imagine, and their aliases)', 'When image functions like `{image}`, `{iv}`, `{ocr}` or `{edit}` find no image, generate one (as a temporary URL) or search for one using the argument instead.'],
         ['ML_IMAGINE_DO_NOT_ERROR', 'true or false', 'Passed to image generation as its "do not error" option.'],
-        ['ML_IMAGINE_MODEL', 'FLUX_KLEIN or SDXL_TURBO', 'Which model image generation (`{imagine}`, `{edit}`, media scripts) uses.'],
+        ['ML_IMAGINE_MODEL', 'FLUX_KLEIN', 'Which model image generation (`{imagine}`, `{edit}`, media scripts) uses.'],
       ],
     },
     examples: [
@@ -535,8 +535,8 @@ export const TAG_DOC_GUIDE: Array<TagDocGuideSection> = [
         result: 'The last image in chat, or a Google Images result for the arguments if there is none.',
       },
       {
-        code: '{settings:ML_IMAGINE_MODEL|SDXL_TURBO}{imagine:a cat in a tuxedo}',
-        result: 'An image generated with SDXL Turbo.',
+        code: '{settings:ML_IMAGINE_MODEL|FLUX_KLEIN}{imagine:a cat in a tuxedo}',
+        result: 'An image generated with Flux Klein.',
       },
     ],
   },

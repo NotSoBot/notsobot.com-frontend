@@ -3,13 +3,13 @@
 
 import { ExternalLink, Filter, Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { Routes } from '@/config';
 import { ReportStatuses, ReportTypes, type Report, type ReportPatch, type ReportStatus } from '@/lib/api';
-import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportsQuery, usePatchAdminReportMutation } from '@/lib/api/dashboardQueries';
+import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportQuery, useAdminReportsQuery, usePatchAdminReportMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
@@ -60,6 +60,7 @@ function parseStatus(value: string | null): number | null {
 
 export function AdminReportsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
+  const navigate = useNavigate();
   const type = parseEnum(searchParams.get('type'));
   const status = parseStatus(searchParams.get('status'));
   const userId = (searchParams.get('user_id') || '').trim();
@@ -76,7 +77,10 @@ export function AdminReportsPage() {
     page,
   });
   const items = data?.items ?? [];
-  const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (report) => report.id);
+  const { openId, openItem: listedItem, previousId, nextId, open, close } = useOpenListItem(items, (report) => report.id, Routes.DASHBOARD_ADMIN_REPORTS);
+  // a link to a report that isn't on this page
+  const linked = useAdminReportQuery(openId, !listedItem);
+  const openItem = listedItem ?? linked.data ?? null;
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
   const pagination = {
     page,
@@ -86,10 +90,18 @@ export function AdminReportsPage() {
     fetching: isFetching && isPlaceholderData,
   };
   const filtered = !!(type !== null || status !== ReportStatuses.OPEN || userId || targetId || guildId);
-  // closes the report first, the one it's filtering by might not be in the new list
+  // closes the report too (in the same navigation), the one it's filtering by might not be in the new list
   const filterBy = (changes: Record<string, string | null>) => {
-    close();
-    update(changes);
+    const next = new URLSearchParams(searchParams);
+    for (const [ key, value ] of Object.entries(changes)) {
+      if (value) {
+        next.set(key, value);
+      } else {
+        next.delete(key);
+      }
+    }
+    next.delete('page');
+    navigate({pathname: Routes.DASHBOARD_ADMIN_REPORTS, search: next.toString()}, {replace: true, preventScrollReset: true});
   };
 
   return (
@@ -290,23 +302,16 @@ function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
             <h3 className='section-label mb-1'>Reported {TARGET_LABELS[report.type] ?? 'target'}</h3>
             {(report.target_id) ? (
               <div className='flex flex-wrap items-center gap-2'>
-                <CopyableValue value={report.target_id} truncate={0}/>
+                {/* the id opens whatever it is: the user, the tag (searched in tags) or the server */}
+                <CopyableValue
+                  value={report.target_id}
+                  truncate={0}
+                  {...((report.type === ReportTypes.USER || report.type === ReportTypes.MESSAGE) ? {to: `${Routes.DASHBOARD_ADMIN_USERS}/${report.target_id}`, linkTitle: 'Open this user'}
+                    : (report.type === ReportTypes.TAG) ? {to: `${Routes.DASHBOARD_ADMIN_TAGS}?q=${report.target_id}`, linkTitle: 'Find this tag in tags'}
+                    : (report.type === ReportTypes.SERVER) ? {to: adminServerPath(report.target_id), linkTitle: 'Open this server'}
+                    : {})}
+                />
                 <FilterButton label='Show reports about this target' onClick={() => onFilterTarget(report.target_id!)}/>
-                {(report.type === ReportTypes.USER || report.type === ReportTypes.MESSAGE) ? (
-                  <Link to={`${Routes.DASHBOARD_ADMIN_USERS}?q=${report.target_id}`} className='text-xs text-code hover:underline'>
-                    Find in users
-                  </Link>
-                ) : null}
-                {(report.type === ReportTypes.TAG) ? (
-                  <Link to={`${Routes.DASHBOARD_ADMIN_ALL_TAGS}?q=${report.target_id}`} className='text-xs text-code hover:underline'>
-                    Find in tags
-                  </Link>
-                ) : null}
-                {(report.type === ReportTypes.SERVER) ? (
-                  <Link to={adminServerPath(report.target_id)} className='text-xs text-code hover:underline'>
-                    Open server
-                  </Link>
-                ) : null}
               </div>
             ) : (
               <p className='text-sm text-subtle'>Not given</p>
@@ -317,10 +322,7 @@ function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
           <div>
             <h3 className='section-label mb-1'>Reported tag</h3>
             <div className='flex flex-wrap items-center gap-2'>
-              <CopyableValue value={report.tag_id} truncate={0}/>
-              <Link to={`${Routes.DASHBOARD_ADMIN_ALL_TAGS}?q=${report.tag_id}`} className='text-xs text-code hover:underline'>
-                Find in tags
-              </Link>
+              <CopyableValue value={report.tag_id} truncate={0} to={`${Routes.DASHBOARD_ADMIN_TAGS}?q=${report.tag_id}`} linkTitle='Find this tag in tags'/>
             </div>
           </div>
         ) : null}
@@ -336,10 +338,7 @@ function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
         <DetailList
           items={[
             ['Server', (report.guild_id) ? (
-              <span className='inline-flex flex-wrap items-center gap-2'>
-                <CopyableValue value={report.guild_id} truncate={0}/>
-                <Link to={adminServerPath(report.guild_id)} className='text-xs text-code hover:underline'>Open server</Link>
-              </span>
+              <CopyableValue value={report.guild_id} truncate={0} to={adminServerPath(report.guild_id)} linkTitle='Open this server'/>
             ) : 'Direct messages'],
             ['Channel', (report.channel_id) ? <CopyableValue value={report.channel_id} truncate={0}/> : '—'],
             ['Message', (report.message_id) ? (

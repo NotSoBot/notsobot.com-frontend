@@ -1,4 +1,4 @@
-import { BookMarked, ChevronDown, ChevronUp, Search, Tags } from 'lucide-react';
+import { ArrowUpRight, BookMarked, ChevronDown, ChevronUp, Search, Tags } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -6,7 +6,7 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminTagItem, AdminTagsSortBy } from '@/lib/api';
-import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagsQuery } from '@/lib/api/dashboardQueries';
+import { ADMIN_TAGS_PAGE_SIZE, errorMessage, useAdminTagsQuery } from '@/lib/api/dashboardQueries';
 import { cn, formatDate } from '@/lib/utils';
 import { tagLocation, TagLocationChip, TagStatusBadges, type TagLocation, type TagLocationKind } from '@/pages/dashboard/tags/tagMeta';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
@@ -53,11 +53,11 @@ export function AdminAllTagsPage() {
   });
   const items = data?.items ?? [];
   const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (item) => item.tag.id);
-  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
+  const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_TAGS_PAGE_SIZE});
   const pagination = {
     page,
     count: data?.count ?? 0,
-    pageSize: ADMIN_PAGE_SIZE,
+    pageSize: ADMIN_TAGS_PAGE_SIZE,
     onChange: setPage,
     fetching: isFetching && isPlaceholderData,
   };
@@ -181,7 +181,8 @@ function TagCard({ item, onOpen }: {item: AdminTagItem, onOpen: (id: string) => 
       {/* pinned above the footer, so it sits in the same spot on every card whether or not there's an alias line */}
       <div className='mt-auto mb-3 flex min-w-0 flex-col gap-2'>
         <UserCell user={item.user} fallbackId={item.user?.id ?? tag.user_id ?? null} size='sm'/>
-        <TagLocationChip location={chipLocation}/>
+        {/* a guild opens that server in the admin servers page */}
+        <TagLocationChip location={chipLocation} to={(location.kind === 'server' && location.id) ? adminServerPath(location.id) : undefined}/>
       </div>
       <div className='flex items-center justify-between gap-3 border-t border-line pt-3 text-xs text-subtle'>
         <span className='tabular-nums'>{(tag.uses ?? 0).toLocaleString()} uses</span>
@@ -206,7 +207,7 @@ function TagDetails({ item, onSearch }: {item: AdminTagItem, onSearch: (query: s
   const location = itemLocation(item);
   const directoryLink = (directory) ? (
     <Link
-      to={`${Routes.DASHBOARD_ADMIN_TAGS}?${new URLSearchParams({q: `id:${tag.id}`, status: 'all'}).toString()}`}
+      to={`${Routes.DASHBOARD_ADMIN_TAG_DIRECTORY}?${new URLSearchParams({q: `id:${tag.id}`, status: 'all'}).toString()}`}
       className='inline-flex items-center gap-1.5 hover:opacity-80'
       title={`Listed in the directory${(directory.title) ? ` as “${directory.title}”` : ''}`}
     >
@@ -236,7 +237,15 @@ function TagDetails({ item, onSearch }: {item: AdminTagItem, onSearch: (query: s
             <CopyableValue value={tag.id} truncate={0}/>
           </div>
         </div>
-        <LocationChip location={location} extra={(location.kind === 'personal') ? directoryLink : null}/>
+        <LocationChip
+          location={location}
+          extra={(location.kind === 'personal') ? directoryLink : (location.kind === 'server' && location.id) ? (
+            <Link to={adminServerPath(location.id)} className='inline-flex items-center gap-0.5 font-medium text-brand hover:underline' title='Open this server'>
+              Open
+              <ArrowUpRight aria-hidden className='size-3'/>
+            </Link>
+          ) : null}
+        />
       </div>
 
       <div className='flex flex-wrap items-center gap-x-6 gap-y-3 border-y border-line bg-surface-2 px-4 py-2.5 sm:px-6'>

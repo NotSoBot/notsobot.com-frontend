@@ -4,14 +4,14 @@ import { Link, useLocation, useMatch, useNavigate, useSearchParams } from 'react
 
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Routes } from '@/config';
-import { Spinner } from '@/components/ui/Spinner';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAuth } from '@/auth';
-import { errorMessage, useMeGuildsQuery, useMeTagsQuery } from '@/lib/api/dashboardQueries';
+import { errorMessage, ME_TAGS_PAGE_SIZE, useMeGuildsQuery, useMeTagsQuery } from '@/lib/api/dashboardQueries';
 import { TagDirectoryVerificationStates, type MeTagsDirectoryFilter, type MeTagsSortBy, type Tag, type UserMe } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
 import { NsfwBadge, tagDirectoryItemPath } from '@/pages/tags/tagDirectory';
 
+import { Pagination, useStepBackFromEmptyPage } from '../admin/adminUi';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { ServerFilterChip } from '../servers/ServerFilterChip';
 import { TagDetailsModal } from './TagDetailsModal';
@@ -53,9 +53,12 @@ export function TagsPage() {
   const serverId = searchParams.get('server') || null;
   const filtered = !!debouncedQuery || directoryFilter.filter !== null || !!serverId;
 
-  const { data, isPending, isError, error, isPlaceholderData, fetchNextPage, hasNextPage, isFetchingNextPage, isRefetching, refetch } = useMeTagsQuery(debouncedQuery, sortBy, directoryFilter.filter, serverId);
-  const items = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
-  const count = data?.pages[0]?.count ?? 0;
+  // `?page=` is 1-based, left out for the first
+  const page = Math.max(0, (Number(searchParams.get('page')) || 1) - 1);
+
+  const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useMeTagsQuery(debouncedQuery, sortBy, directoryFilter.filter, serverId, page);
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const count = data?.count ?? 0;
 
   // server names for the picker, when the dashboard can see the caller's servers (it's fine if it can't)
   const { user } = useAuth();
@@ -88,6 +91,7 @@ export function TagsPage() {
     return () => writeTagListState(listStateRef.current);
   }, []);
 
+  // a new search, sort or filter starts back on the first page
   function updateParams(changes: Record<string, string | null>) {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
@@ -98,9 +102,19 @@ export function TagsPage() {
           next.delete(key);
         }
       }
+      if (!('page' in changes)) {
+        next.delete('page');
+      }
       return next;
     }, {replace: true, preventScrollReset: true});
   }
+
+  function setPage(value: number) {
+    updateParams({page: (value <= 0) ? null : String(value + 1)});
+    window.scrollTo({top: 0});
+  }
+  // deleting the last tag of the last page leaves an empty page behind
+  useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ME_TAGS_PAGE_SIZE});
 
   // `/dashboard/tags/:tagId` opens the tag's details over the list and `/dashboard/tags/:tagId/edit` its editor, both keeping
   // the list's search, sort and filter in the url
@@ -233,15 +247,7 @@ export function TagsPage() {
           <ul className={cn('grid grid-cols-1 gap-3 transition-opacity sm:grid-cols-2 xl:grid-cols-3', isPlaceholderData && 'opacity-60')}>
             {items.map((tag) => <TagCard key={tag.id} tag={tag} user={user} guildNames={guildNames} onOpen={openTag}/>)}
           </ul>
-          <div className='mt-4 flex flex-col items-center gap-2'>
-            <p className='text-sm text-subtle tabular-nums'>Showing {items.length.toLocaleString()} of {count.toLocaleString()}</p>
-            {(hasNextPage) ? (
-              <button type='button' className='btn btn-secondary' disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
-                {(isFetchingNextPage) ? <Spinner className='size-4'/> : null}
-                {(isFetchingNextPage) ? 'Loading…' : 'Load more'}
-              </button>
-            ) : null}
-          </div>
+          <Pagination page={page} count={count} pageSize={ME_TAGS_PAGE_SIZE} onChange={setPage} fetching={isFetching && isPlaceholderData}/>
         </>
       )}
 

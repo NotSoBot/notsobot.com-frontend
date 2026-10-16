@@ -342,7 +342,7 @@ export function createContentFlags(users: Array<AdminUser>): Array<ContentFlag> 
 }
 
 
-export function adminUserEntries(users: Array<AdminUser>, flags: Array<ContentFlag>): Array<AdminUserEntry> {
+export function adminUserEntries(users: Array<AdminUser>, flags: Array<ContentFlag>, reports: Array<Report>): Array<AdminUserEntry> {
   return users.map((user) => {
     const own = flags.filter((flag) => flag.user_id === user.id);
     const last = own.map((flag) => String(flag.created)).sort().pop() ?? null;
@@ -356,6 +356,7 @@ export function adminUserEntries(users: Array<AdminUser>, flags: Array<ContentFl
         reported: own.filter((flag) => flag.status === 3).length,
         total: own.length,
       },
+      reports: reports.filter((report) => report.target_id === user.id).length,
       user,
     };
   });

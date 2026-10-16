@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { Modal, openModalCount } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
@@ -8,8 +9,33 @@ import { cn } from '@/lib/utils';
 // Which of a page's items is open in its modal, and the ones either side of it for ← / →. The open item is kept
 // after it leaves the list (verifying it out of the review queue, a refetch), so the modal doesn't vanish under
 // you, and its neighbours are then whatever's around where it was.
-export function useOpenListItem<T>(items: Array<T>, getId: (item: T) => string) {
-  const [ openId, setOpenId ] = useState<string | null>(null);
+// With `basePath` the open item is in the url (`<basePath>/<id>`, the page's route has an optional `:itemId`), so it can
+// be linked. `openId` is then set before the item is found, a page fetches it by id when it isn't on the loaded page.
+export function useOpenListItem<T>(items: Array<T>, getId: (item: T) => string, basePath?: string) {
+  const [ stateId, setStateId ] = useState<string | null>(null);
+  const { itemId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const openId = (basePath) ? (itemId ?? null) : stateId;
+  // opened from the list (not a link), so closing it can go back instead of adding another history entry
+  const openedHere = (location.state as {itemOpenedHere?: boolean} | null)?.itemOpenedHere === true;
+
+  const setOpenId = (id: string | null) => {
+    if (!basePath) {
+      setStateId(id);
+    } else if (id) {
+      navigate({pathname: `${basePath}/${id}`, search: location.search}, {
+        preventScrollReset: true,
+        // stepping between items replaces, so Back still closes the modal in one go
+        replace: !!openId,
+        state: {itemOpenedHere: openedHere || !openId},
+      });
+    } else if (openedHere) {
+      navigate(-1);
+    } else {
+      navigate({pathname: basePath, search: location.search}, {replace: true, preventScrollReset: true});
+    }
+  };
   const last = useRef<{item: T, index: number} | null>(null);
 
   const index = (openId) ? items.findIndex((item) => getId(item) === openId) : -1;
@@ -25,6 +51,7 @@ export function useOpenListItem<T>(items: Array<T>, getId: (item: T) => string) 
   const next = (openItem) ? items[(index !== -1) ? at + 1 : at] : undefined;
 
   return {
+    openId,
     openItem,
     previousId: (previous) ? getId(previous) : null,
     nextId: (next) ? getId(next) : null,

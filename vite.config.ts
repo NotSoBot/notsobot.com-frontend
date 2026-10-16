@@ -37,6 +37,17 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       // nothing uploads source maps (no Sentry etc.), so don't publish the original source with the site
       sourcemap: false,
+      rollupOptions: {
+        output: {
+          // the hover logo effects ship as `effect.<hash>.webp` so their filenames don't give away the command names
+          assetFileNames: (asset) => {
+            if (asset.originalFileNames.some((name) => name.startsWith('src/assets/logos/effects/'))) {
+              return 'assets/effect.[hash][extname]';
+            }
+            return 'assets/[name]-[hash][extname]';
+          },
+        },
+      },
     },
   };
 });
