@@ -1,4 +1,4 @@
-import { AlarmClock, AudioLines, Crown, Flag, Inbox, LayoutDashboard, MessageSquareWarning, Server, Settings, ShieldCheck, Tags, type LucideIcon, Users } from 'lucide-react';
+import { AlarmClock, AudioLines, Blocks, Crown, Files, Flag, Inbox, LayoutDashboard, MessageSquareWarning, Server, Settings, ShieldCheck, Tags, type LucideIcon, Users } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
@@ -24,6 +24,7 @@ interface Section {
 // the account: Overview first, the rest alphabetical (export/delete your data is at the bottom of Settings)
 export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD, label: 'Overview', icon: LayoutDashboard, color: '#5865f2', end: true},
+  {to: Routes.DASHBOARD_APPLICATIONS, label: 'Applications', icon: Blocks, color: '#3ba55c'},
   {to: Routes.DASHBOARD_PREMIUM, label: 'Premium', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_SERVERS, label: 'Servers', icon: Server, color: '#faa81a'},
   {to: Routes.DASHBOARD_SETTINGS, label: 'Settings', icon: Settings, color: '#00b0f4'},
@@ -31,6 +32,7 @@ export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
 
 // things the user made with the bot, alphabetical
 export const CONTENT_SECTIONS: ReadonlyArray<Section> = [
+  {to: Routes.DASHBOARD_FILES, label: 'Files', icon: Files, color: '#00b0f4'},
   {to: Routes.DASHBOARD_REMINDERS, label: 'Reminders', icon: AlarmClock, color: '#faa81a'},
   {to: Routes.DASHBOARD_REPORTS, label: 'Reports', icon: MessageSquareWarning, color: '#ed4245'},
   {to: Routes.DASHBOARD_TAGS, label: 'Tags', icon: Tags, color: '#3ba55c'},
@@ -39,6 +41,7 @@ export const CONTENT_SECTIONS: ReadonlyArray<Section> = [
 
 // only shown to NotSoBot staff, owners and moderators (the routes are guarded by <RequireStaff/> too); alphabetical
 export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
+  {to: Routes.DASHBOARD_ADMIN_APPLICATIONS, label: 'Applications', icon: Blocks, color: '#3ba55c'},
   {to: Routes.DASHBOARD_ADMIN_FLAGS, label: 'Content Flags', icon: Flag, color: '#ed4245'},
   {to: Routes.DASHBOARD_ADMIN_ENTITLEMENTS, label: 'Entitlements', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_ADMIN_REPORTS, label: 'Reports', icon: Inbox, color: '#faa81a'},

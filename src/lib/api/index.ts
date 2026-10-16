@@ -2,6 +2,9 @@ import { ApiEndpoints, guildEndpoints, type GuildScope } from './endpoints';
 import { ApiRequestError, apiRequest } from './client';
 import { ApiErrorCodes, toTagDirectoryCategory } from './types';
 import type {
+  AdminApplication,
+  AdminApplicationPatch,
+  AdminApplicationsPage,
   AdminEntitlementsPage,
   AdminGuild,
   AdminGuildPatch,
@@ -22,6 +25,11 @@ import type {
   AdminUsersSortBy,
   AdminVoice,
   AdminVoicesPage,
+  Application,
+  ApplicationAccessItem,
+  ApplicationAccessPage,
+  ApplicationsPage,
+  ApplicationWithToken,
   Command,
   ContentFlag,
   ContentFlagMatches,
@@ -67,6 +75,8 @@ import type {
   UserSession,
   UserSettings,
   UserSettingsPatch,
+  UserFilesPage,
+  UserFilesSortBy,
   Voice,
   VoicePatch,
   VoicesPage,
@@ -361,6 +371,51 @@ export const api = {
 
   fetchMeEntitlements: (signal?: AbortSignal) => {
     return apiRequest<EntitlementsPage>(ApiEndpoints.USER_ME_ENTITLEMENTS, {signal});
+  },
+
+  fetchMeFiles: (params: {query?: string, sortBy?: UserFilesSortBy, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<UserFilesPage>(ApiEndpoints.USER_ME_FILES, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        sort_by: params.sortBy,
+        offset: params.offset,
+        limit: params.limit,
+      },
+    });
+  },
+
+  deleteMeFile: (fileId: string) => {
+    return apiRequest<void>(ApiEndpoints.USER_ME_FILE(fileId), {method: 'DELETE'});
+  },
+
+  // ids that aren't the caller's (or are already gone) are skipped
+  deleteMeFiles: (fileIds: Array<string>) => {
+    return apiRequest<{deleted: number}>(ApiEndpoints.USER_ME_FILES_DELETE, {method: 'POST', body: {file_ids: fileIds}});
+  },
+
+  fetchMeApplications: (signal?: AbortSignal) => {
+    return apiRequest<ApplicationsPage>(ApiEndpoints.USER_ME_APPLICATIONS, {signal});
+  },
+
+  postMeApplication: (name: string) => {
+    return apiRequest<ApplicationWithToken>(ApiEndpoints.USER_ME_APPLICATIONS, {method: 'POST', body: {name}});
+  },
+
+  patchMeApplication: (applicationId: string, name: string) => {
+    return apiRequest<Application>(ApiEndpoints.USER_ME_APPLICATION(applicationId), {method: 'PATCH', body: {name}});
+  },
+
+  deleteMeApplication: (applicationId: string) => {
+    return apiRequest<void>(ApiEndpoints.USER_ME_APPLICATION(applicationId), {method: 'DELETE'});
+  },
+
+  fetchMeApplicationToken: (applicationId: string) => {
+    return apiRequest<ApplicationWithToken>(ApiEndpoints.USER_ME_APPLICATION_TOKEN(applicationId));
+  },
+
+  resetMeApplicationToken: (applicationId: string) => {
+    return apiRequest<ApplicationWithToken>(ApiEndpoints.USER_ME_APPLICATION_TOKEN_RESET(applicationId), {method: 'POST'});
   },
 
   fetchMeVoices: (signal?: AbortSignal) => {
@@ -754,6 +809,52 @@ export const api = {
 
   patchAdminVoice: (voiceId: string, body: VoicePatch) => {
     return apiRequest<AdminVoice>(ApiEndpoints.ADMIN_VOICE(voiceId), {method: 'PATCH', body});
+  },
+
+  fetchAdminApplications: (params: {query?: string, userId?: string, disabled?: boolean | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<AdminApplicationsPage>(ApiEndpoints.ADMIN_APPLICATIONS, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        user_id: params.userId || undefined,
+        disabled: params.disabled ?? undefined,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  patchAdminApplication: (applicationId: string, body: AdminApplicationPatch) => {
+    return apiRequest<AdminApplication>(ApiEndpoints.ADMIN_APPLICATION(applicationId), {method: 'PATCH', body});
+  },
+
+  // revokes the old token; staff never see the new one
+  resetAdminApplicationToken: (applicationId: string) => {
+    return apiRequest<AdminApplication>(ApiEndpoints.ADMIN_APPLICATION_TOKEN_RESET(applicationId), {method: 'POST'});
+  },
+
+  deleteAdminApplication: (applicationId: string) => {
+    return apiRequest<void>(ApiEndpoints.ADMIN_APPLICATION(applicationId), {method: 'DELETE'});
+  },
+
+  fetchAdminApplicationAccess: (params: {query?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<ApplicationAccessPage>(ApiEndpoints.ADMIN_APPLICATION_ACCESS, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  grantAdminApplicationAccess: (userId: string) => {
+    return apiRequest<ApplicationAccessItem>(ApiEndpoints.ADMIN_APPLICATION_ACCESS_USER(userId), {method: 'PUT'});
+  },
+
+  // their applications stop working until it's given back, they aren't disabled
+  revokeAdminApplicationAccess: (userId: string) => {
+    return apiRequest<ApplicationAccessItem>(ApiEndpoints.ADMIN_APPLICATION_ACCESS_USER(userId), {method: 'DELETE'});
   },
 
   fetchAdminGuilds: (params: {

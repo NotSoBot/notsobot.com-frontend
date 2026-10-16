@@ -1,6 +1,7 @@
 // Fixture data for the dev-only dashboard mocks. Shapes follow notsobot.api's `to_dict()` output.
 
 import type {
+  AdminApplication,
   AdminEntitlement,
   AdminTagDirectoryItem,
   AdminUser,
@@ -16,10 +17,13 @@ import type {
   TagVariables,
   User,
   UserGuild,
+  UserFile,
   UserGuildSummary,
   UserMe,
   UserSettings,
 } from '@/lib/api/types';
+import deepfryPreview from '@/assets/logos/effects/deepfry.webp';
+import magikPreview from '@/assets/logos/effects/magik-animated.webp';
 import { TagDirectoryCategories } from '@/lib/api/types';
 
 
@@ -552,6 +556,24 @@ export function createVoices(users: Array<AdminUser>): Array<AdminVoice> {
 }
 
 
+const APPLICATION_NAMES = ['image bot', 'meme pipeline', 'staging', 'discord-to-twitter', 'my website', 'test'];
+
+// every API application (`/admin/applications`); the mock user owns the first two (one is the bot's own), the user with
+// API access (`createAdminUsers` index 5) a couple, and a few others ones made before API access existed
+export function createApplications(users: Array<AdminUser>): Array<AdminApplication> {
+  const owners = [mockUser, mockUser, users[5], users[5], users[2], users[8], users[3]];
+  return owners.map((owner, i) => ({
+    created: new Date(Date.now() - i * 17 * 24 * 3600000).toISOString(),
+    // NotSoBot's own, then a disabled one
+    flags: (i === 0) ? 1 : (i === 3) ? 2 : 0,
+    id: (1290000000000000000n + BigInt(owners.length - i) * 41943040n).toString(),
+    name: (i === 0) ? 'NotSoBot' : APPLICATION_NAMES[i % APPLICATION_NAMES.length],
+    owner_id: owner.id,
+    user: {avatar: owner.avatar, discriminator: owner.discriminator, id: owner.id, username: owner.username},
+  }));
+}
+
+
 // SKU ids from notsobot.api's `DiscordSkus`, keyed by the premium type they give
 const PREMIUM_SKUS: Record<number, string> = {
   2: '1182569865735831582',
@@ -612,4 +634,36 @@ export function createEntitlements(users: Array<AdminUser>): Array<AdminEntitlem
     });
   }
   return entitlements;
+}
+
+
+// the mock user's uploads on the file host (`/users/@me/files`), newest first. the previews are local so they load
+export function createFiles(): Array<UserFile> {
+  const hour = 3600000;
+  const rows: Array<[string, string, string, number, number, number, number, string | null, number | null]> = [
+    // [name, extension, mimetype, size, width, height, duration ms, local preview, temporary: hours until it expires]
+    ['magik', 'webp', 'image/webp', 2_480_113, 512, 512, 2400, magikPreview, null],
+    ['video0', 'mp4', 'video/mp4', 41_902_771, 1280, 720, 94_000, null, 20],
+    ['deepfry', 'webp', 'image/webp', 312_455, 512, 512, 0, deepfryPreview, null],
+    ['tts', 'mp3', 'audio/mpeg', 1_204_558, 0, 0, 31_000, null, null],
+    ['huge-gif-of-a-cat-spinning-very-fast-for-a-long-time', 'gif', 'image/gif', 87_334_002, 1920, 1080, 12_000, null, null],
+    ['output', 'txt', 'text/plain', 18_220, 0, 0, 0, null, 2],
+    ['screenshot', 'png', 'image/png', 1_002_118, 1920, 1080, 0, 'https://cdn.nsb.gg/missing-mock-file.png', null],
+  ];
+  const now = Date.now();
+  return Array.from({length: 31}, (_, i) => rows[i % rows.length]).map(([ name, extension, mimetype, size, width, height, duration, preview, expiresIn ], i) => {
+    const vanity = `mock${(1000 + i).toString(36)}`;
+    const filename = (i < rows.length) ? name : `${name}-${i}`;
+    return {
+      created: new Date(now - (i * 37 + 1) * hour).toISOString(),
+      expires_at: (expiresIn) ? new Date(now + expiresIn * hour).toISOString() : null,
+      filename: `${filename}.${extension}`,
+      filename_base: filename,
+      id: (1340000000000000000n - BigInt(i) * 4194304000n).toString(),
+      metadata: {duration, extension, framecount: (duration && mimetype.startsWith('image/')) ? 24 : 0, height, mimetype, size, width},
+      temporary: !!expiresIn,
+      urls: {cdn: preview ?? `https://cdn.nsb.gg/${vanity}.${extension}`, vanity: `https://nsb.gg/${vanity}.${extension}`},
+      vanity,
+    };
+  });
 }

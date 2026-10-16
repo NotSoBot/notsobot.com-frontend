@@ -1,9 +1,10 @@
-import { AlertTriangle, Check, Plus, Shield, type LucideIcon } from 'lucide-react';
-import { useEffect, useState, type ComponentProps } from 'react';
+import { AlertTriangle, Check, Eye, PencilLine, Plus, Shield, type LucideIcon } from 'lucide-react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router';
 
 import { useAuth } from '@/auth';
+import { Markdown } from '@/components/ui/Markdown';
 import { config, Routes, TAG_ADD_PARAM } from '@/config';
 import { TagDirectoryCategories, TagDirectoryVerificationStates, type Tag, type TagDirectoryCategory } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -43,6 +44,62 @@ export function categoryLabel(category: number): string {
 export function CategoryBadge({ category }: {category: number}) {
   // same height as the `VerificationBadge` next to it on cards
   return <span className='inline-flex shrink-0 items-center rounded bg-surface-3 px-2 py-0.5 text-xs text-fg'>{categoryLabel(category)}</span>;
+}
+
+
+// the listing description's textarea with a Write/Preview switch, spread the `Field` props into it
+export function DescriptionEditor({ value, onChange, className, ...props }: Omit<ComponentProps<'textarea'>, 'value' | 'onChange'> & {
+  value: string,
+  onChange: (value: string) => void,
+}) {
+  const [ preview, setPreview ] = useState(false);
+  // the preview keeps the textarea's height so the form doesn't jump around when switching
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const [ height, setHeight ] = useState<number | undefined>();
+  const tabClass = (active: boolean) => cn(
+    'inline-flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors',
+    (active) ? 'bg-surface-3 text-white' : 'text-muted hover:text-white',
+  );
+
+  return (
+    <div>
+      <div className='mb-1.5 flex items-center justify-between gap-3'>
+        <div role='tablist' aria-label='Description view' className='flex gap-1 rounded-md border border-line bg-deep p-0.5'>
+          <button type='button' role='tab' aria-selected={!preview} className={tabClass(!preview)} onClick={() => setPreview(false)}>
+            <PencilLine aria-hidden className='size-3.5'/>
+            Write
+          </button>
+          <button
+            type='button'
+            role='tab'
+            aria-selected={preview}
+            className={tabClass(preview)}
+            onClick={() => {
+              setHeight(textarea.current?.offsetHeight);
+              setPreview(true);
+            }}
+          >
+            <Eye aria-hidden className='size-3.5'/>
+            Preview
+          </button>
+        </div>
+        <span className='text-xs text-subtle'>Markdown supported</span>
+      </div>
+      <textarea
+        {...props}
+        ref={textarea}
+        hidden={preview}
+        className={className}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {(preview) ? (
+        <div className='rounded-md border border-line bg-deep px-3 py-2 text-sm leading-relaxed text-fg' style={{minHeight: height}}>
+          {(value.trim()) ? <Markdown text={value}/> : <p className='text-subtle italic'>Nothing to preview</p>}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 

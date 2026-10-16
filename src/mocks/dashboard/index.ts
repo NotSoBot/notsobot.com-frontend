@@ -35,12 +35,14 @@ import { toDate } from '@/lib/utils';
 
 import {
   adminUserEntries,
+  createApplications,
   createAdminDirectory,
   createAdminGuilds,
   createAdminUsers,
   createBlobs,
   createContentFlags,
   createEntitlements,
+  createFiles,
   createReminders,
   createReports,
   createGuilds,
@@ -66,9 +68,11 @@ const state = {
   adminUsers,
   adminDirectory: createAdminDirectory(adminUsers),
   contentFlags: createContentFlags(adminUsers),
+  files: createFiles(),
   reminders: createReminders(),
   reports: createReports(adminUsers),
   voices: createVoices(adminUsers),
+  applications: createApplications(adminUsers),
   entitlements: createEntitlements(adminUsers),
   // the mock user is a NotSoBot owner unless turned off (kept across reloads like guildsError)
   owner: sessionStorage.getItem('dashboardMocks:notOwner') !== '1',
@@ -1429,7 +1433,8 @@ route('PATCH', '/admin/users/(\\d+)', ([ , userId ], { body }) => {
 });
 
 // mirrors `DELETE /admin/users/<user_id>/tags`: the mock user's tags and every directory tag they own
-// mirrors `POST /admin/tags/<tag_id>/merge`: the tag's uses go onto `target_id`, its aliases point there, then it's deleted
+// mirrors `POST /admin/tags/<tag_id>/merge`: the tag's uses go onto `target_id`, its aliases point there, its directory
+// listing moves there when the target isn't listed, then it's deleted
 route('POST', '/admin/tags/(\\d+)/merge', ([ , tagId ], { body }) => {
   requireBotOwner();
   const find = (id: string) => {
@@ -1455,11 +1460,19 @@ route('POST', '/admin/tags/(\\d+)/merge', ([ , tagId ], { body }) => {
     throw new MockError(400, 50014, 'Cannot replace a tag with a Tag Alias, use the tag it points at');
   }
   const aliases = state.tags.filter((tag) => (tag.reference_tag as {id?: string} | null | undefined)?.id === source.tag.id);
+  const isListed = (id: string) => state.directory.has(id) || state.adminDirectory.some((item) => item.tag.id === id);
+  const directoryOutcome = () => {
+    if (!isListed(source.tag.id)) {
+      return null;
+    }
+    return (isListed(target.tag.id)) ? 'dropped' as const : 'moved' as const;
+  };
   const summary = {
     aliases: aliases.length,
     assets: source.tag.assets?.length ?? 0,
     blobs: {dropped: 0, moved: state.blobs.get(source.tag.id)?.size ?? 0},
-    directory: state.directory.has(source.tag.id) || state.adminDirectory.some((item) => item.tag.id === source.tag.id),
+    directory: directoryOutcome(),
+    directory_moves_target: directoryOutcome() === 'moved' && target.tag.server_id !== target.tag.user_id,
     use_records: source.tag.uses,
     uses: source.tag.uses,
     variables: {dropped: 0, moved: state.variables.get(source.tag.id)?.size ?? 0},
@@ -1471,6 +1484,13 @@ route('POST', '/admin/tags/(\\d+)/merge', ([ , tagId ], { body }) => {
   target.tag.uses += source.tag.uses;
   for (const alias of aliases) {
     alias.reference_tag = {...alias.reference_tag!, id: target.tag.id, name: target.tag.name, content: target.tag.content};
+  }
+  if (summary.directory === 'moved') {
+    const listing = state.directory.get(source.tag.id);
+    if (listing) {
+      state.directory.set(target.tag.id, {...listing, id: target.tag.id, tag: {...listing.tag, id: target.tag.id, name: target.tag.name}});
+    }
+    state.adminDirectory = state.adminDirectory.map((item) => (item.tag.id === source.tag.id) ? {...item, tag: target.tag, user: target.user} : item);
   }
   state.tags = state.tags.filter((tag) => tag.id !== source.tag.id);
   state.adminDirectory = state.adminDirectory.filter((item) => item.tag.id !== source.tag.id);
@@ -1981,6 +2001,45 @@ route('GET', '/users/@me/reports', (_match, { query }) => {
   return pageOf(matching, query);
 });
 
+// mirrors `views/me_files.py`
+route('GET', '/users/@me/files', (_match, { query }) => {
+  const search = (query.get('query') ?? '').toLowerCase();
+  const sortBy = query.get('sort_by') ?? 'newest';
+  const matching = state.files.filter((file) => !search || file.filename_base.toLowerCase().includes(search) || file.vanity.toLowerCase().includes(search));
+  const byId = (a: (typeof state.files)[number], b: (typeof state.files)[number]) => a.id.length - b.id.length || a.id.localeCompare(b.id);
+  matching.sort((a, b) => {
+    switch (sortBy) {
+      case 'oldest': return byId(a, b);
+      case 'largest': return b.metadata.size - a.metadata.size || byId(b, a);
+      case 'name': return a.filename_base.toLowerCase().localeCompare(b.filename_base.toLowerCase()) || byId(a, b);
+      default: return byId(b, a);
+    }
+  });
+  const sizeOf = (files: typeof state.files) => files.reduce((sum, file) => sum + file.metadata.size, 0);
+  return {
+    ...pageOf(matching, query),
+    size: sizeOf(matching),
+    total: {count: state.files.length, size: sizeOf(state.files)},
+  };
+});
+
+route('DELETE', '/users/@me/files/(\\d+)', ([ , fileId ]) => {
+  if (!state.files.some((file) => file.id === fileId)) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_FILE, 'Unknown File');
+  }
+  state.files = state.files.filter((file) => file.id !== fileId);
+});
+
+route('POST', '/users/@me/files/delete', (_match, { body }) => {
+  const fileIds = new Set((Array.isArray(body.file_ids)) ? body.file_ids.map(String) : []);
+  if (!fileIds.size || 100 < fileIds.size) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'file_ids needs 1 to 100 ids');
+  }
+  const before = state.files.length;
+  state.files = state.files.filter((file) => !fileIds.has(file.id));
+  return {deleted: before - state.files.length};
+});
+
 route('GET', '/users/@me/reminders', () => {
   return {count: state.reminders.length, items: state.reminders};
 });
@@ -2023,6 +2082,188 @@ route('PATCH', '/users/@me/reminders/(\\d+)', ([ , reminderId ], { body }) => {
 route('DELETE', '/users/@me/reminders/(\\d+)', ([ , reminderId ]) => {
   findReminder(reminderId);
   state.reminders = state.reminders.filter((other) => other.id !== reminderId);
+});
+
+// applications: mirrors `views/me_applications.py` and the applications part of `views/admin.py`
+const MAX_APPLICATIONS = 5;
+const API_ACCESS = 1 << 2;
+
+function mockHasApiAccess() {
+  return state.owner || (mockUser.flags & API_ACCESS) === API_ACCESS;
+}
+
+function findApplication(applicationId: string) {
+  const application = state.applications.find((other) => other.id === applicationId);
+  if (!application) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_APPLICATION, 'Unknown Application');
+  }
+  return application;
+}
+
+function findMeApplication(applicationId: string) {
+  const application = findApplication(applicationId);
+  if (application.owner_id !== mockUser.id) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_APPLICATION, 'Unknown Application');
+  }
+  return application;
+}
+
+function requireMockApiAccess() {
+  if (!mockHasApiAccess()) {
+    throw new MockError(403, ApiErrorCodes.MISSING_ACCESS, 'Missing API Access');
+  }
+}
+
+function applicationName(body: Record<string, unknown>) {
+  const name = (typeof body.name === 'string') ? body.name.replace(/[\r\n]+/g, ' ').trim() : '';
+  if (name.length < 3 || 32 < name.length) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'name must be 3-32 characters', {field: 'name'});
+  }
+  return name;
+}
+
+function mockToken(application: {id: string}) {
+  return `${btoa(JSON.stringify({alg: 'HS512'}))}.${btoa(JSON.stringify({id: application.id}))}.${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+
+// the dashboard shape leaves out the owner
+function meApplication({ user: _user, ...application }: (typeof state.applications)[number]) {
+  return application;
+}
+
+function requireNotNotSoBot(application: {flags: number}) {
+  if (application.flags & 1) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'NotSoBot\'s own applications can only be changed in the database');
+  }
+}
+
+route('GET', '/users/@me/applications', () => {
+  const items = state.applications.filter((application) => application.owner_id === mockUser.id).map(meApplication);
+  return {can_create: mockHasApiAccess(), count: items.length, items, limit: MAX_APPLICATIONS};
+});
+
+route('POST', '/users/@me/applications', (_match, { body }) => {
+  requireMockApiAccess();
+  const name = applicationName(body);
+  if (MAX_APPLICATIONS <= state.applications.filter((application) => application.owner_id === mockUser.id).length) {
+    throw new MockError(400, ApiErrorCodes.MAX_APPLICATIONS, `Exceeded Max Applications (${MAX_APPLICATIONS})`, {limit: MAX_APPLICATIONS});
+  }
+  const application = {
+    created: new Date().toISOString(),
+    flags: 0,
+    id: (BigInt(Date.now() - 1420070400000) << 22n).toString(),
+    name,
+    owner_id: mockUser.id,
+    user: {avatar: mockUser.avatar, discriminator: mockUser.discriminator, id: mockUser.id, username: mockUser.username},
+  };
+  state.applications.unshift(application);
+  return {...meApplication(application), token: mockToken(application)};
+});
+
+route('PATCH', '/users/@me/applications/(\\d+)', ([ , applicationId ], { body }) => {
+  const application = findMeApplication(applicationId);
+  application.name = applicationName(body);
+  return meApplication(application);
+});
+
+route('DELETE', '/users/@me/applications/(\\d+)', ([ , applicationId ]) => {
+  findMeApplication(applicationId);
+  state.applications = state.applications.filter((other) => other.id !== applicationId);
+});
+
+route('GET', '/users/@me/applications/(\\d+)/token', ([ , applicationId ]) => {
+  requireMockApiAccess();
+  const application = findMeApplication(applicationId);
+  return {...meApplication(application), token: mockToken(application)};
+});
+
+route('POST', '/users/@me/applications/(\\d+)/token-reset', ([ , applicationId ]) => {
+  requireMockApiAccess();
+  const application = findMeApplication(applicationId);
+  return {...meApplication(application), token: mockToken(application)};
+});
+
+route('GET', '/admin/applications', (_match, { query }) => {
+  requireBotOwner();
+  const text = (query.get('query') || '').trim().toLowerCase();
+  const userId = query.get('user_id');
+  const disabled = query.get('disabled');
+  const matching = state.applications
+    .filter((application) => !userId || application.owner_id === userId)
+    .filter((application) => disabled === null || ((application.flags & 2) === 2) === (disabled === 'true'))
+    .filter((application) => !text || application.name.toLowerCase().includes(text) || !!application.user?.username.toLowerCase().includes(text)
+      || application.id === text || application.owner_id === text);
+  return pageOf(matching, query);
+});
+
+route('PATCH', '/admin/applications/(\\d+)', ([ , applicationId ], { body }) => {
+  requireBotOwner();
+  const application = findApplication(applicationId);
+  if (typeof body.disabled === 'boolean') {
+    requireNotNotSoBot(application);
+    application.flags = (body.disabled) ? (application.flags | 2) : (application.flags & ~2);
+  }
+  if (body.name !== undefined) {
+    application.name = applicationName(body);
+  }
+  return application;
+});
+
+route('POST', '/admin/applications/(\\d+)/token-reset', ([ , applicationId ]) => {
+  requireBotOwner();
+  const application = findApplication(applicationId);
+  requireNotNotSoBot(application);
+  return application;
+});
+
+route('DELETE', '/admin/applications/(\\d+)', ([ , applicationId ]) => {
+  requireBotOwner();
+  requireNotNotSoBot(findApplication(applicationId));
+  state.applications = state.applications.filter((other) => other.id !== applicationId);
+});
+
+function applicationAccessItem(user: (typeof state.adminUsers)[number]) {
+  return {
+    applications: state.applications.filter((application) => application.owner_id === user.id).length,
+    user: {avatar: user.avatar, discriminator: user.discriminator, flags: user.flags, id: user.id, username: user.username},
+  };
+}
+
+route('GET', '/admin/applications/access', (_match, { query }) => {
+  requireBotOwner();
+  const text = (query.get('query') || '').trim().toLowerCase();
+  const matching = state.adminUsers
+    .filter((user) => (user.flags & API_ACCESS) === API_ACCESS)
+    .filter((user) => !text || user.username.toLowerCase().includes(text) || user.id === text)
+    .sort((a, b) => a.username.localeCompare(b.username))
+    .map(applicationAccessItem);
+  return pageOf(matching, query);
+});
+
+route('PUT', '/admin/applications/access/(\\d+)', ([ , userId ]) => {
+  requireBotOwner();
+  const user = state.adminUsers.find((other) => other.id === userId);
+  if (!user) {
+    throw new MockError(404, 10008, 'Unknown User');
+  }
+  if (user.blocked) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Blocked users can\'t have API access');
+  }
+  user.flags |= API_ACCESS;
+  return applicationAccessItem(user);
+});
+
+route('DELETE', '/admin/applications/access/(\\d+)', ([ , userId ]) => {
+  requireBotOwner();
+  const user = state.adminUsers.find((other) => other.id === userId);
+  if (!user) {
+    throw new MockError(404, 10008, 'Unknown User');
+  }
+  if (user.flags & 1) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Bot owners always have API access');
+  }
+  user.flags &= ~API_ACCESS;
+  return applicationAccessItem(user);
 });
 
 // the dashboard shape leaves out the platform id and the owner

@@ -56,6 +56,26 @@ Also: fix the existing `PATCH /users/<user_id>/settings` so a *user* token can o
 | DELETE | `/users/@me/tags/<tag_id>/directory/edit-request/assets/<asset_id>` | Takes it out of the proposed media (an upload's file is deleted, the listing's own files stay). Drafts only. |
 | PUT | `/users/@me/tags/<tag_id>/directory/edit-request/thumbnail` | Same as the listing's thumbnail upload, proposes it as the replacement (`thumbnail_mode` `1`). Drafts only. |
 
+## Applications
+
+API applications (`Application`, a token for `Authorization: Bot <token>`). Everyone sees their own, can rename and delete
+them; creating one and seeing or resetting a token needs API access: the `API_ACCESS` user flag (`flags & 4`), which
+owners hand out from `/admin/applications/access` or the user's flags (owners always have it). Without it those routes are `403` `20004`
+(`MISSING_ACCESS`). An application's token stops working (`401`) while it has the `DISABLED` flag (`flags & 2`, set by
+staff), its owner is blocked, or its owner doesn't have API access, so taking access away pauses every application they
+have and giving it back resumes them. `NOTSOBOT` (`flags & 1`) is the bot's own and is database-only.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/users/@me/applications` | `{can_create, count, limit, items: Application[]}`, newest first. `can_create` is whether the caller has API access, `limit` is `MAX_APPLICATIONS_AMOUNT` (5). `Application` is `{id, name, flags, owner_id, created}` (`created` from the snowflake); the token is never in the list. |
+| POST | `/users/@me/applications` | Body `{name}` (3–32 chars, trimmed, newlines become spaces). Needs API access. Over the limit is `400` code `30001` (`MAX_APPLICATIONS`). Returns the application **with `token`**. |
+| PATCH | `/users/@me/applications/<application_id>` | Body `{name}`, same rules. Only the caller's own; anything else is `404` code `10001` (`UNKNOWN_APPLICATION`). Returns the application. |
+| DELETE | `/users/@me/applications/<application_id>` | `204`. Same ownership rule. |
+| GET | `/users/@me/applications/<application_id>/token` | Needs API access. The application with `token`. |
+| POST | `/users/@me/applications/<application_id>/token-reset` | Needs API access. New salt, so every older token stops working. Returns the application with the new `token`. |
+
+The older `/applications` routes are still there for the bot and scripts; `POST /applications` uses the same API access check.
+
 ## Voices
 
 Voices cloned with the bot's `voice clone` command. Only the name can be changed from the dashboard for now; cloning,
@@ -69,6 +89,17 @@ adding audio and deleting stay with the bot's `voice` commands (they talk to Ele
 | GET | `/users/@me/entitlements` | `{count, items: Entitlement[]}`, the caller's premium entitlements, newest first (capped at 100), read only. `Entitlement` is `{id, provider, sku_id, premium_type, type, active, deleted, consumed, starts_at, ends_at, created_at, updated_at, guild_id, granted_by}`: `provider` is `discord` (a Discord subscription) or `manual` (premium an owner gave from `/admin/users`; replaced or removed grants are kept with `deleted: true`). `premium_type` is the `UserPremiumTypes` the sku gives (`null` for an unknown sku), `active` is `Entitlement.is_valid` (not deleted or consumed, and inside `starts_at`/`ends_at`). `granted_by` is the staff id for manual ones, `null` otherwise. Discord's raw payload is left out. `PREMIUM_FREE` has no entitlement. |
 | GET | `/users/@me/voices` | `{count, items: Voice[]}`, newest first (capped at 100; non-owners can only have `MAX_VOICE_CLONE_AMOUNT`). `Voice` is `{id, name, platform_type, created}`: `platform_type` is `VoiceCloneTypes` (`0` ElevenLabs), `created` is an ISO string from the snowflake. The ElevenLabs id is left out. |
 | PATCH | `/users/@me/voices/<voice_id>` | Body `{name}` (1–128 chars, trimmed, newlines become spaces). Only the caller's own voices; anything else is `404` code `10003` (`UNKNOWN_VOICE`). Returns the voice. |
+
+## Files
+
+Files the bot uploaded to the file host (`nsb.gg`) for the caller, when a result was over Discord's limit or their
+`file_upload_threshold` says to always upload. They can only be listed and deleted from the dashboard.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/users/@me/files` | Query: `query?` (file name or vanity, case-insensitive), `sort_by?` (`newest` default, `oldest`, `largest`, `name`), `offset?`, `limit?` (1–100, default 50). Returns `{count, items: File[], size, total: {count, size}}`, the caller's files only; expired temporary files are left out. `count`/`size` are what the search matched (all files without one), `total` is every file the caller has; sizes are summed per file in bytes, so the same result uploaded twice counts twice. `File` is `File.to_dict()` without `user`, plus `created` (ISO string from the snowflake): `{id, vanity, filename, filename_base, filename_safe, filename_safe_base, metadata: {duration, extension, framecount, height, mimetype, size, width}, temporary, expires_at, urls: {cdn, vanity}, created}`. |
+| POST | `/users/@me/files/delete` | Body `{file_ids}` (1–100 ids), the table's bulk delete. Each file is deleted like the single `DELETE`; ids that aren't the caller's, or are already gone, are skipped rather than failing the request. Returns `{deleted}`. |
+| DELETE | `/users/@me/files/<file_id>` | `204`. Deletes the file, and its stored object when no other file of the caller's shares it (same as the bot's `DELETE /files/<file_id>`). Someone else's file, or an expired one, is `404` code `10002` (`UNKNOWN_FILE`). |
 
 ## Servers
 
@@ -132,7 +163,8 @@ is out of scope for v1; the dashboard shows IDs with mentions-style formatting a
 Every route here needs a user token whose user has the `OWNER` (`flags & 1`) or `MODERATOR` (`flags & 2`) flag; anyone
 else gets `403`. The dashboard only shows the **Admin** nav group (`/dashboard/admin/tags`, `/dashboard/admin/tags/directory`, `/dashboard/admin/users`,
 `/dashboard/admin/flags`, `/dashboard/admin/entitlements`, `/dashboard/admin/reports`, `/dashboard/admin/servers`,
-`/dashboard/admin/voices`) to staff, and `<RequireStaff/>` sends everyone else back to `/dashboard`.
+`/dashboard/admin/voices`, `/dashboard/admin/applications`) to staff, and `<RequireStaff/>` sends everyone else back to `/dashboard`.
+For applications, the bot's own (`NOTSOBOT`) can only be renamed, and only by owners (disabling, resetting or deleting it is `400`); moderators can't touch another staff member's applications (`403`), and only owners can give or take API access.
 Moderators can do everything in the panel except edit user profiles (`flags`/`premium_type`), unblock users or servers, and delete a server's data, and can't block other moderators.
 Lists page by `limit` (default 25) and `offset` and return `{count, items}`. Bigint ids are strings; timestamps
 are ISO strings (the site also accepts epoch numbers).
@@ -158,6 +190,13 @@ are ISO strings (the site also accepts epoch numbers).
 | PATCH | `/admin/reports/<report_id>` | Body `{status?, notes?}` (`notes` max 2000, empty/`null` clears it). Any patch sets `reviewed_at`/`reviewed_by` to now/the caller. Returns the same item shape; unknown id is `404` code `10017`. |
 | GET | `/admin/voices` | Every cloned voice, newest first. Query: `limit`, `offset`, `query` (voice name or owner username, case-insensitive; a bare id also matches the voice id or owner id), `user_id`. Items: the `Voice` shape from `/users/@me/voices` plus `platform_id` (the ElevenLabs voice id) and `user: {id, username, discriminator, avatar} \| null` (the owner). |
 | PATCH | `/admin/voices/<voice_id>` | Body `{name}`, same rules as `PATCH /users/@me/voices/<voice_id>`, for any voice. Returns the same item shape; unknown id is `404` code `10003`. |
+| GET | `/admin/applications` | Every API application, newest first. Query: `limit`, `offset`, `query` (application name or owner username, case-insensitive; a bare id also matches the application id or owner id), `user_id`, `disabled` (bool). Items: the `Application` shape from `/users/@me/applications` plus `user: {id, username, discriminator, avatar} \| null` (the owner). Staff never get a token. |
+| PATCH | `/admin/applications/<application_id>` | Body `{name?, disabled?}`. Returns the same item shape; unknown id is `404` code `10001`. |
+| POST | `/admin/applications/<application_id>/token-reset` | Revokes the current token (new salt); the new one isn't returned, the owner gets it from their dashboard. Returns the item. |
+| DELETE | `/admin/applications/<application_id>` | `204`. |
+| GET | `/admin/applications/access` | Users with `API_ACCESS` (owners have it implicitly and aren't listed), by username. Query: `limit`, `offset`, `query` (username, or a bare user id). Items: `{user: {id, username, discriminator, avatar, flags}, applications}` (how many they have). |
+| PUT | `/admin/applications/access/<user_id>` | **Owner only** (`403` for moderators). Gives the user `API_ACCESS` and publishes `USER_UPDATE`. `404` for an unknown user, `400` for bots and blocked users. Returns the access item. |
+| DELETE | `/admin/applications/access/<user_id>` | **Owner only**. Takes `API_ACCESS` away and publishes `USER_UPDATE`. Their applications aren't changed, their tokens just stop working until access is given back (`DISABLED` is only ever set by staff, per application). `400` for owners. Returns the access item. |
 | GET | `/admin/guilds` | Every server NotSoBot knows: ones with a `guilds` row plus ones the bot is in (`bot_guilds`) that never saved settings. Query: `limit`, `offset`, `query` (name, case-insensitive; a bare id also matches the server id), `in_bot` (bool: only servers the bot is in right now / only ones it isn't), `blocked` (bool), `sort_by` (`newest` (default) \| `oldest` \| `name`). Items: `{id, name, icon, blocked, blocked_reason, bot: {shard_id, updated} \| null, counts: {tags, content_flags, reports}}`; `bot` is `null` when the bot isn't in it, `name` is `null` for a server with no `guilds` row, `counts` are the same as the detail's (without `reminders`). |
 | GET | `/admin/guilds/<guild_id>` | The `/users/@me/guilds/<guild_id>` shape for any server (`editable` all true, `owner: false`, `permissions: "0"`), plus `bot` (as above) and `counts: {tags, reminders, content_flags, reports}` (tags made in it, reminders set in it (a count only: staff can't read people's reminders), every content flag from it including blocked users', reports as `GET /admin/reports?guild_id=`). A server the bot is in without a `guilds` row gets one created from Discord; neither is `404` code `10012`. |
 | PATCH | `/admin/guilds/<guild_id>` | The `PATCH /users/@me/guilds/<guild_id>` body plus `blocked` and `blocked_reason` (max 2000, only kept while blocked). Unblocking is **owner only** (`403`). Publishes `GUILD_SETTINGS_UPDATE` when something changed. Returns the `GET` shape. |

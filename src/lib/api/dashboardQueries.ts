@@ -11,6 +11,9 @@ import type { GuildScope } from './endpoints';
 import { api } from './index';
 import { queryKeys } from './queries';
 import type {
+  AdminApplication,
+  AdminApplicationPatch,
+  AdminApplicationsPage,
   AdminGuildPatch,
   AdminGuildsSortBy,
   AdminTagBlob,
@@ -26,6 +29,9 @@ import type {
   AdminUsersSortBy,
   AdminVoice,
   AdminVoicesPage,
+  Application,
+  ApplicationsPage,
+  ApplicationWithToken,
   ContentFlag,
   ContentFlagMatches,
   ContentFlagPatch,
@@ -51,6 +57,8 @@ import type {
   TagStorageScope,
   TagStorageType,
   TagVariables,
+  UserFilesPage,
+  UserFilesSortBy,
   UserGuildPatch,
   UserSettings,
   UserSettingsPatch,
@@ -136,6 +144,8 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
         return `Listings can have up to ${TAG_DIRECTORY_ASSETS_MAX} images, videos or audio files.`;
       case ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ASSET:
         return 'That file was already removed.';
+      case ApiErrorCodes.UNKNOWN_FILE:
+        return 'That file was already deleted.';
       case ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_EDIT_REQUEST:
         return 'That change request doesn’t exist anymore.';
       case ApiErrorCodes.TAG_DIRECTORY_EDIT_REQUEST_REQUIRES_VERIFIED:
@@ -151,6 +161,10 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
       case ApiErrorCodes.INVALID_FILE_TYPE:
       case ApiErrorCodes.UNSUPPORTED_UPLOAD_TYPE:
         return 'That file type isn’t supported. Use an image, video or audio file.';
+      case ApiErrorCodes.UNKNOWN_APPLICATION:
+        return 'That application doesn’t exist anymore.';
+      case ApiErrorCodes.MAX_APPLICATIONS:
+        return 'You’ve reached the limit of applications you can have. Delete one first.';
       case ApiErrorCodes.UNKNOWN_VOICE:
         return 'That voice doesn’t exist anymore. It may have been deleted with the bot.';
       case ApiErrorCodes.UNKNOWN_REMINDER:
@@ -529,6 +543,80 @@ export function usePutMeTagBlobsMutation(tagId: string, scope: TagStorageScope) 
 }
 
 
+/* applications */
+
+export interface ApplicationRename {
+  applicationId: string,
+  name: string,
+}
+
+export function useMeApplicationsQuery() {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meApplications(token),
+    queryFn: ({ signal }) => api.fetchMeApplications(signal),
+  });
+}
+
+
+// the list never has tokens, so one coming back from here is dropped before it goes in the cache
+function withoutToken({ token: _token, ...application }: ApplicationWithToken): Application {
+  return application;
+}
+
+function useMeApplicationsCache() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const key = queryKeys.meApplications(token);
+  return (update: (page: ApplicationsPage) => ApplicationsPage) => {
+    queryClient.setQueryData<ApplicationsPage>(key, (page) => (page) ? update(page) : page);
+  };
+}
+
+export function useCreateMeApplicationMutation() {
+  const updateCache = useMeApplicationsCache();
+  return useMutation({
+    mutationFn: (name: string) => api.postMeApplication(name),
+    onSuccess: (application) => {
+      updateCache((page) => ({...page, count: page.count + 1, items: [withoutToken(application), ...page.items]}));
+    },
+  });
+}
+
+export function usePatchMeApplicationMutation() {
+  const updateCache = useMeApplicationsCache();
+  return useMutation<Application, Error, ApplicationRename>({
+    mutationFn: ({ applicationId, name }) => api.patchMeApplication(applicationId, name),
+    onSuccess: (application) => {
+      updateCache((page) => ({...page, items: page.items.map((other) => (other.id === application.id) ? application : other)}));
+    },
+  });
+}
+
+export function useDeleteMeApplicationMutation() {
+  const updateCache = useMeApplicationsCache();
+  return useMutation({
+    mutationFn: (applicationId: string) => api.deleteMeApplication(applicationId),
+    onSuccess: (_result, applicationId) => {
+      updateCache((page) => ({...page, count: Math.max(0, page.count - 1), items: page.items.filter((other) => other.id !== applicationId)}));
+    },
+  });
+}
+
+// a mutation rather than a query so the token is only ever held by the dialog showing it, never cached
+export function useRevealMeApplicationTokenMutation() {
+  return useMutation({
+    mutationFn: (applicationId: string) => api.fetchMeApplicationToken(applicationId),
+  });
+}
+
+export function useResetMeApplicationTokenMutation() {
+  return useMutation({
+    mutationFn: (applicationId: string) => api.resetMeApplicationToken(applicationId),
+  });
+}
+
+
 /* voices */
 
 export interface VoiceRename {
@@ -632,6 +720,66 @@ export function usePatchMeVoiceMutation() {
       queryClient.setQueryData<VoicesPage>(key, (page) => {
         return (page) ? {...page, items: page.items.map((other) => (other.id === voice.id) ? voice : other)} : page;
       });
+    },
+  });
+}
+
+
+/* files */
+
+export const ME_FILES_PAGE_SIZE = 25;
+
+export interface MeFilesFilters {
+  query: string,
+  sortBy: UserFilesSortBy,
+  page: number,
+}
+
+export function useMeFilesQuery(filters: MeFilesFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meFiles(token, filters),
+    queryFn: ({ signal }) => api.fetchMeFiles({
+      query: filters.query,
+      sortBy: filters.sortBy,
+      offset: filters.page * ME_FILES_PAGE_SIZE,
+      limit: ME_FILES_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+// one file, or several from the table's bulk delete (the API caps a batch at 100, a page is 25)
+export function useDeleteMeFilesMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (fileIds: Array<string>) => {
+      if (fileIds.length === 1) {
+        await api.deleteMeFile(fileIds[0]);
+        return {deleted: 1};
+      }
+      return api.deleteMeFiles(fileIds);
+    },
+    onSuccess: (_result, fileIds) => {
+      // drop them from every loaded page right away, then refetch so the pages fill back in
+      const removed = new Set(fileIds);
+      queryClient.setQueriesData<UserFilesPage>({queryKey: queryKeys.meFiles(token)}, (page) => {
+        if (!page) {
+          return page;
+        }
+        const gone = page.items.filter((other) => removed.has(other.id));
+        const count = gone.length;
+        const size = gone.reduce((sum, file) => sum + file.metadata.size, 0);
+        return {
+          count: Math.max(0, page.count - count),
+          items: page.items.filter((other) => !removed.has(other.id)),
+          size: Math.max(0, page.size - size),
+          total: {count: Math.max(0, page.total.count - count), size: Math.max(0, page.total.size - size)},
+        };
+      });
+      void queryClient.invalidateQueries({queryKey: queryKeys.meFiles(token)});
     },
   });
 }
@@ -1389,6 +1537,134 @@ export function usePatchAdminVoiceMutation() {
       void queryClient.invalidateQueries({queryKey: queryKeys.meVoices(token)});
     },
     onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+  });
+}
+
+
+export interface AdminApplicationsFilters {
+  query: string,
+  userId: string,
+  disabled: boolean | null,
+  page: number,
+}
+
+export function useAdminApplicationsQuery(filters: AdminApplicationsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminApplications(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminApplications({
+      query: filters.query,
+      userId: filters.userId,
+      disabled: filters.disabled,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+// every admin applications mutation refreshes both lists (access counts include applications), plus the caller's own
+// list in case it was one of theirs
+function useInvalidateAdminApplications() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return () => Promise.all([
+    queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'applications']}),
+    queryClient.invalidateQueries({queryKey: queryKeys.meApplications(token)}),
+  ]);
+}
+
+function useAdminApplicationsCache() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return (update: (items: Array<AdminApplication>) => Array<AdminApplication>) => {
+    queryClient.setQueriesData<AdminApplicationsPage>({queryKey: [...queryKeys.admin(token), 'applications', 'list']}, (page) => {
+      return (page) ? {...page, items: update(page.items)} : page;
+    });
+  };
+}
+
+export function usePatchAdminApplicationMutation() {
+  const updateCache = useAdminApplicationsCache();
+  const invalidate = useInvalidateAdminApplications();
+  return useMutation({
+    mutationFn: ({ applicationId, patch }: {applicationId: string, patch: AdminApplicationPatch}) => api.patchAdminApplication(applicationId, patch),
+    onSuccess: (application) => updateCache((items) => items.map((other) => (other.id === application.id) ? application : other)),
+    onSettled: invalidate,
+  });
+}
+
+// the rename dialog's shape, for the shared `RenameApplicationDialog`
+export function useRenameAdminApplicationMutation() {
+  const mutation = usePatchAdminApplicationMutation();
+  return useMutation<Application, Error, ApplicationRename>({
+    mutationFn: ({ applicationId, name }) => mutation.mutateAsync({applicationId, patch: {name}}),
+  });
+}
+
+export function useResetAdminApplicationTokenMutation() {
+  const invalidate = useInvalidateAdminApplications();
+  return useMutation({
+    mutationFn: (applicationId: string) => api.resetAdminApplicationToken(applicationId),
+    onSettled: invalidate,
+  });
+}
+
+export function useDeleteAdminApplicationMutation() {
+  const updateCache = useAdminApplicationsCache();
+  const invalidate = useInvalidateAdminApplications();
+  return useMutation({
+    mutationFn: (applicationId: string) => api.deleteAdminApplication(applicationId),
+    onSuccess: (_result, applicationId) => updateCache((items) => items.filter((other) => other.id !== applicationId)),
+    onSettled: invalidate,
+  });
+}
+
+
+export interface AdminApplicationAccessFilters {
+  query: string,
+  page: number,
+}
+
+export function useAdminApplicationAccessQuery(filters: AdminApplicationAccessFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminApplicationAccess(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminApplicationAccess({
+      query: filters.query,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+// the flag is on the user too, so the users list and the caller themselves (if it's them) are refreshed
+function useInvalidateApplicationAccess() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidateAdminApplications();
+  return () => Promise.all([
+    invalidate(),
+    queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'users']}),
+    queryClient.invalidateQueries({queryKey: queryKeys.me(token)}),
+  ]);
+}
+
+export function useGrantApplicationAccessMutation() {
+  const invalidate = useInvalidateApplicationAccess();
+  return useMutation({
+    mutationFn: (userId: string) => api.grantAdminApplicationAccess(userId),
+    onSettled: invalidate,
+  });
+}
+
+export function useRevokeApplicationAccessMutation() {
+  const invalidate = useInvalidateApplicationAccess();
+  return useMutation({
+    mutationFn: (userId: string) => api.revokeAdminApplicationAccess(userId),
+    onSettled: invalidate,
   });
 }
 

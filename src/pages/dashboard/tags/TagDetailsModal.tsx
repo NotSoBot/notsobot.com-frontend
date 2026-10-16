@@ -3,6 +3,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { useAuth } from '@/auth';
+import { stripMarkdown } from '@/components/ui/Markdown';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import type { Tag } from '@/lib/api';
@@ -185,7 +186,7 @@ function DirectorySection({ tag }: {tag: Tag}) {
               <VerificationBadge verified={directory.verified}/>
               {(directory.title) ? <span className='text-sm text-white'>{directory.title}</span> : null}
             </div>
-            {(directory.description) ? <p className='line-clamp-3 text-sm whitespace-pre-wrap text-muted'>{directory.description}</p> : null}
+            {(directory.description) ? <p className='line-clamp-3 text-sm whitespace-pre-wrap text-muted'>{stripMarkdown(directory.description)}</p> : null}
             {(directory.assets.length) ? <MediaSection assets={directory.assets} nsfw={tag.nsfw} tagName={tag.name}/> : null}
           </>
         ) : (

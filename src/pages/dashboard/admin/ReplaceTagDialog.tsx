@@ -146,6 +146,14 @@ function MergeSummary({ summary }: {summary: AdminTagMergeSummary}) {
     <>{plural(summary.use_records, 'use history record')}</>,
     <>{plural(summary.aliases, 'alias', 'aliases')} pointed at it</>,
   ];
+  if (summary.directory === 'moved') {
+    rows.push(
+      <>
+        Its directory listing (media, verification and edit requests included)
+        {(summary.directory_moves_target) ? <span className='text-warning'>; it moves to its owner’s personal tags, an alias keeps its name where it is</span> : null}
+      </>,
+    );
+  }
   if (summary.assets) {
     rows.push(<>{plural(summary.assets, 'archived asset')}, links to them in its content follow</>);
   }
@@ -172,8 +180,8 @@ function MergeSummary({ summary }: {summary: AdminTagMergeSummary}) {
         <ul className='list-disc space-y-1 pl-5 text-sm text-fg'>
           {rows.map((row, i) => <li key={i}>{row}</li>)}
         </ul>
-        {(summary.directory) ? (
-          <p className='mt-2 text-sm text-warning'>Its directory listing is deleted with it, the listing doesn’t move.</p>
+        {(summary.directory === 'dropped') ? (
+          <p className='mt-2 text-sm text-warning'>Its directory listing is deleted with it, the target keeps its own.</p>
         ) : null}
       </div>
     </div>

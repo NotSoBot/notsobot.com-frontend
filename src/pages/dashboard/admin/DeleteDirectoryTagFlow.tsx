@@ -1,6 +1,7 @@
 import { Ban, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 
+import { Markdown } from '@/components/ui/Markdown';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
@@ -141,7 +142,7 @@ export function DeleteDirectoryTagFlow({ item, onClose }: {item: AdminTagDirecto
               <span className='text-fg'>{user?.username ?? tag.user_id ?? 'unknown'}</span>
               {(user) ? <span className='font-mono text-xs text-subtle'> ({user.id})</span> : null}
             </p>
-            {(item.description) ? <p className='mt-2 text-sm whitespace-pre-wrap break-words text-muted'>{item.description}</p> : null}
+            {(item.description) ? <Markdown text={item.description} className='mt-2 text-sm text-muted'/> : null}
             <pre className='mt-2 max-h-48 overflow-auto rounded border border-line bg-surface p-2 font-mono text-xs whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none' {...selectAllScope}>
               {content || <span className='text-subtle italic'>(empty)</span>}
             </pre>

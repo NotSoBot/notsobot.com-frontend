@@ -2,6 +2,7 @@ import { Search, TriangleAlert } from 'lucide-react';
 import { useCallback, useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
+import { stripMarkdown } from '@/components/ui/Markdown';
 import { Modal } from '@/components/ui/Modal';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Spinner } from '@/components/ui/Spinner';
@@ -288,7 +289,7 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
           </div>
         </div>
 
-        {(item.description) ? <p className='mb-3 line-clamp-2 text-sm text-muted'>{item.description}</p> : null}
+        {(item.description) ? <p className='mb-3 line-clamp-2 text-sm text-muted'>{stripMarkdown(item.description)}</p> : null}
 
         <div className='mt-auto mb-3 flex items-center justify-between text-xs text-subtle'>
           <div className='flex items-center gap-3'>

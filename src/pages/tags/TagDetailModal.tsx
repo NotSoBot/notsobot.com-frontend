@@ -2,6 +2,7 @@ import { AlertTriangle, BarChart3, Calendar, ChevronLeft, ChevronRight, Hash, Se
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
+import { Markdown } from '@/components/ui/Markdown';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { TagDirectoryVerificationStates, type TagDirectoryItem } from '@/lib/api';
@@ -214,7 +215,7 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
               {(item.description) ? (
                 <section>
                   <h3 className='section-label mb-2'>Description</h3>
-                  <p className='whitespace-pre-wrap text-white'>{item.description}</p>
+                  <Markdown text={item.description} className='text-white'/>
                 </section>
               ) : null}
 

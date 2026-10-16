@@ -27,7 +27,7 @@ import {
   useRequestMeTagDirectoryVerificationMutation,
 } from '@/lib/api/dashboardQueries';
 import { formatDate, formatDateTime } from '@/lib/utils';
-import { CategorySelect, tagDirectoryItemPath, VerificationBadge, verificationInfo, verificationRequirement, VerificationWarning } from '@/pages/tags/tagDirectory';
+import { CategorySelect, DescriptionEditor, tagDirectoryItemPath, VerificationBadge, verificationInfo, verificationRequirement, VerificationWarning } from '@/pages/tags/tagDirectory';
 import { MediaSection, ThumbnailManager } from '@/pages/tags/TagMedia';
 
 import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar, Toggle } from '../ui';
@@ -136,13 +136,13 @@ function ListingFields({ title, description, category, contentPublic, onTitle, o
         counter={<CharCounter length={description.length} max={TAG_DIRECTORY_DESCRIPTION_MAX}/>}
       >
         {(props) => (
-          <textarea
+          <DescriptionEditor
             {...props}
             className='input min-h-32 resize-y leading-relaxed'
             maxLength={TAG_DIRECTORY_DESCRIPTION_MAX}
             value={description}
             disabled={disabled}
-            onChange={(event) => onDescription(event.target.value)}
+            onChange={onDescription}
           />
         )}
       </Field>

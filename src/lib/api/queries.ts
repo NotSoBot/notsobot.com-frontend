@@ -22,10 +22,12 @@ export const queryKeys = {
   meTagBlobs: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'blobs', scope] as const,
   meTagDirectory: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'directory'] as const,
   meTagServers: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'servers'] as const,
+  meApplications: (token: string | null) => ['users', '@me', token, 'applications'] as const,
   meEntitlements: (token: string | null) => ['users', '@me', token, 'entitlements'] as const,
   meReminders: (token: string | null) => ['users', '@me', token, 'reminders'] as const,
   meReports: (token: string | null, filters: object) => ['users', '@me', token, 'reports', filters] as const,
   meVoices: (token: string | null) => ['users', '@me', token, 'voices'] as const,
+  meFiles: (token: string | null, filters?: object) => ['users', '@me', token, 'files', ...((filters) ? [filters] : [])] as const,
   meGuilds: (token: string | null) => ['users', '@me', token, 'guilds'] as const,
   meGuild: (token: string | null, guildId: string) => ['users', '@me', token, 'guilds', guildId] as const,
   // admin (owner only); under the session too so logging out drops it
@@ -38,6 +40,8 @@ export const queryKeys = {
   adminContentFlags: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'content-flags', filters] as const,
   adminEntitlements: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'entitlements', filters] as const,
   adminReports: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'reports', filters] as const,
+  adminApplications: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'applications', 'list', filters] as const,
+  adminApplicationAccess: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'applications', 'access', filters] as const,
   adminVoices: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'voices', filters] as const,
   // a server's list rows and its detail are both under `guilds`, so one invalidation refreshes either after an edit
   adminGuilds: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'guilds', 'list', filters] as const,

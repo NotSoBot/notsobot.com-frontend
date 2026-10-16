@@ -1,6 +1,7 @@
 import { Check, Clock, Music, Pencil, ShieldCheck, ShieldX, Trash2, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
+import { Markdown, stripMarkdown } from '@/components/ui/Markdown';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
@@ -29,7 +30,7 @@ import {
 } from '@/lib/api/dashboardQueries';
 import { cn, formatDate, formatMemory, NO_AUTOFILL } from '@/lib/utils';
 import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
-import { CategoryBadge, categoryOptionFromParam, CategorySelect, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge, verificationRequirement } from '@/pages/tags/tagDirectory';
+import { CategoryBadge, categoryOptionFromParam, CategorySelect, DescriptionEditor, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge, verificationRequirement } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
 import { AdminTagModal, useOpenListItem } from './AdminTagModal';
@@ -218,7 +219,7 @@ function DirectoryTagCard({ item, onOpen }: {item: AdminTagDirectoryItem, onOpen
         </div>
       </div>
       {(item.description) ? (
-        <p className='mb-3 line-clamp-2 text-sm break-words text-muted'>{item.description}</p>
+        <p className='mb-3 line-clamp-2 text-sm break-words text-muted'>{stripMarkdown(item.description)}</p>
       ) : (
         <p className='mb-3 text-sm text-subtle italic'>No description</p>
       )}
@@ -417,13 +418,13 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
           </Field>
           <Field label='Description' counter={<CharCounter length={listingDraft.description.length} max={DESCRIPTION_MAX}/>}>
             {(props) => (
-              <textarea
+              <DescriptionEditor
                 {...props}
                 className='input resize-y leading-relaxed'
                 rows={Math.min(12, Math.max(3, listingDraft.description.split('\n').length + 1))}
                 value={listingDraft.description}
                 disabled={listingMutation.isPending}
-                onChange={(event) => setListingDraft({...listingDraft, description: event.target.value})}
+                onChange={(value) => setListingDraft({...listingDraft, description: value})}
               />
             )}
           </Field>
@@ -456,7 +457,7 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
       ) : (
         <div className='mt-3 flex items-start justify-between gap-2'>
           {(item.description) ? (
-            <p className='min-w-0 text-sm whitespace-pre-wrap break-words text-muted'>{item.description}</p>
+            <Markdown text={item.description} className='text-sm text-muted'/>
           ) : (
             <p className='text-sm text-subtle italic'>No description</p>
           )}

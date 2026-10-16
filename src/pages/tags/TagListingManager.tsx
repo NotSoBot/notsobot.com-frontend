@@ -35,7 +35,7 @@ import { TagAssetsPanel } from '@/pages/dashboard/admin/TagAssetsPanel';
 import { GuildIcon } from '@/pages/dashboard/servers/GuildIcon';
 import { CharCounter, Field, InlineError, Toggle } from '@/pages/dashboard/ui';
 
-import { CategorySelect, verificationRequirement, VerificationWarning } from './tagDirectory';
+import { CategorySelect, DescriptionEditor, verificationRequirement, VerificationWarning } from './tagDirectory';
 
 
 // The listing's owner and NotSoBot staff can manage a directory tag right from the public directory. Owners go through
@@ -617,13 +617,13 @@ export function ListingEditForm({ item, access, media, onDone }: {item: TagDirec
         counter={<CharCounter length={description.length} max={TAG_DIRECTORY_DESCRIPTION_MAX}/>}
       >
         {(props) => (
-          <textarea
+          <DescriptionEditor
             {...props}
             className='input min-h-32 resize-y leading-relaxed'
             maxLength={TAG_DIRECTORY_DESCRIPTION_MAX}
             value={description}
             disabled={listingFrozen || saving}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={setDescription}
           />
         )}
       </Field>

@@ -15,6 +15,7 @@ import { UserCell } from './adminUi';
 // flags owners can hand out from the dashboard; OWNER itself is database-only (the API ignores changes to it)
 const EDITABLE_FLAGS: Array<{flag: number, label: string, description: string}> = [
   {flag: UserFlags.MODERATOR, label: 'Moderator', description: 'Can use the admin panel: review tags, content flags and reports, and block users.'},
+  {flag: UserFlags.API_ACCESS, label: 'API access', description: 'Can create API applications. Their applications’ tokens only work while they have it.'},
 ];
 
 const PREMIUM_TYPES = Object.values(UserPremiumTypes);

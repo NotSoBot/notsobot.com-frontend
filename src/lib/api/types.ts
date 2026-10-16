@@ -363,6 +363,7 @@ export interface TagDirectoryPage {
 
 // notsobot.api `ApiErrorCodes` the dashboard reacts to
 export const ApiErrorCodes = {
+  UNKNOWN_APPLICATION: 10001,
   UNKNOWN_JOB: 10006,
   UNKNOWN_TAG: 10009,
   UNKNOWN_TAG_DIRECTORY_ITEM: 10011,
@@ -374,8 +375,10 @@ export const ApiErrorCodes = {
   UNKNOWN_SERVER: 10012,
   UNKNOWN_REPORT: 10017,
   UNKNOWN_REMINDER: 10007,
+  UNKNOWN_FILE: 10002,
   UNKNOWN_VOICE: 10003,
   MISSING_ACCESS: 20004,
+  MAX_APPLICATIONS: 30001,
   TEXT_BLOCKED_GUIDELINES: 40030,
   INVALID_FILE_TYPE: 40001,
   FILE_TOO_LARGE: 40004,
@@ -517,6 +520,37 @@ export interface ReminderPatch {
   move_to_dms?: boolean,
 }
 
+// `ApplicationFlags` bits on `Application.flags`
+export const ApplicationFlags = {
+  // the bot's own application, only changed in the database
+  NOTSOBOT: 1 << 0,
+  // staff turned it off, its token doesn't work (it doesn't either while the owner has no API access)
+  DISABLED: 1 << 1,
+} as const;
+
+// an API application, for calling notsobot.api with `Authorization: Bot <token>`
+export interface Application {
+  created: ApiTimestamp,
+  flags: number,
+  id: string,
+  name: string,
+  owner_id: string,
+}
+
+// creating one, revealing its token or resetting it answers with the token
+export interface ApplicationWithToken extends Application {
+  token: string,
+}
+
+export interface ApplicationsPage {
+  // whether the caller has API access (`UserFlags.API_ACCESS`, owners always do)
+  can_create: boolean,
+  count: number,
+  items: Array<Application>,
+  // most applications one user can have
+  limit: number,
+}
+
 // a voice cloned with the bot's `voice clone` command
 export interface Voice {
   created: ApiTimestamp,
@@ -534,6 +568,45 @@ export interface VoicesPage {
 export interface VoicePatch {
   name: string,
 }
+
+
+// a file the bot uploaded to the file host (nsb.gg) for the user, `File.to_dict()` without the owner
+export interface UserFile {
+  created: ApiTimestamp,
+  // set on temporary uploads, which stop working (and get cleaned up) after it
+  expires_at: string | null,
+  // with the extension, `filename_base` is without it
+  filename: string,
+  filename_base: string,
+  id: string,
+  metadata: {
+    // ms, 0 for images and other files
+    duration: number,
+    extension: string,
+    framecount: number,
+    height: number,
+    mimetype: string,
+    size: number,
+    width: number,
+  },
+  temporary: boolean,
+  urls: {
+    cdn: string,
+    vanity: string,
+  },
+  vanity: string,
+}
+
+export interface UserFilesPage {
+  // what the search matched (everything without one)
+  count: number,
+  items: Array<UserFile>,
+  size: number,
+  // every file the user has, whatever the search
+  total: {count: number, size: number},
+}
+
+export type UserFilesSortBy = 'newest' | 'oldest' | 'largest' | 'name';
 
 
 // `TagVariableStorageTypes` / `TagBlobStorageTypes` (same values)
@@ -741,6 +814,8 @@ export const TAG_DIRECTORY_ASSET_SIZE_MAX = 10 * 1024 * 1024;
 export const UserFlags = {
   OWNER: 1 << 0,
   MODERATOR: 1 << 1,
+  // can create API applications, and their tokens only work while they have it (owners always do)
+  API_ACCESS: 1 << 2,
 } as const;
 
 // bigint ids come back as strings, timestamps as ISO strings (be tolerant of epoch numbers too)
@@ -856,8 +931,11 @@ export interface AdminTagMergeSummary {
   aliases: number,
   assets: number,
   blobs: {dropped: number, moved: number},
-  // the source's directory listing, deleted with it
-  directory: boolean,
+  // the source's directory listing: `moved` onto the target, `dropped` (deleted with it) when the target has its own,
+  // null when the source isn't listed
+  directory: 'dropped' | 'moved' | null,
+  // the target takes the listing over from a server, so it moves to its owner's personal tags (an alias keeps its name there)
+  directory_moves_target: boolean,
   // rows of use history
   use_records: number,
   uses: number,
@@ -1066,6 +1144,33 @@ export interface AdminVoice extends Voice {
 export interface AdminVoicesPage {
   count: number,
   items: Array<AdminVoice>,
+}
+
+
+// `/admin/applications`: every API application, with its owner (staff never get the token)
+export interface AdminApplication extends Application {
+  user: AdminUserRef | null,
+}
+
+export interface AdminApplicationsPage {
+  count: number,
+  items: Array<AdminApplication>,
+}
+
+export interface AdminApplicationPatch {
+  disabled?: boolean,
+  name?: string,
+}
+
+// `/admin/applications/access`: a user with `UserFlags.API_ACCESS` and how many applications they have
+export interface ApplicationAccessItem {
+  applications: number,
+  user: AdminUserRef & {flags: number},
+}
+
+export interface ApplicationAccessPage {
+  count: number,
+  items: Array<ApplicationAccessItem>,
 }
 
 
