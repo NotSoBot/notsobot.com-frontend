@@ -1,12 +1,12 @@
 import { AtSign, Hash, Server, Shield } from 'lucide-react';
-import { generatePath } from 'react-router';
 
 import { Routes } from '@/config';
 import type { GuildEditableArea } from '@/lib/api';
 
 
+// the server opens as a modal over the server list
 export function dashboardServerPath(guildId: string): string {
-  return generatePath(Routes.DASHBOARD_SERVER, {guildId});
+  return `${Routes.DASHBOARD_SERVERS}?${new URLSearchParams({server: guildId})}`;
 }
 
 

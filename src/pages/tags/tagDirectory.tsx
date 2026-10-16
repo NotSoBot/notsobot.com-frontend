@@ -15,18 +15,24 @@ export function tagDirectoryItemPath(id: string): string {
 }
 
 
-// `param` is what the directory puts in its URL; `Other` goes last instead of first
+// `param` is what the directory puts in its URL; alphabetical, except `Other` goes last
 export const TAG_DIRECTORY_CATEGORY_OPTIONS: Array<{param: string, label: string, value: TagDirectoryCategory}> = [
-  {param: 'fun', label: 'Fun', value: TagDirectoryCategories.FUN},
+  {param: 'ai', label: 'AI', value: TagDirectoryCategories.AI},
+  {param: 'clips', label: 'Clips', value: TagDirectoryCategories.CLIPS},
+  {param: 'filters', label: 'Filters', value: TagDirectoryCategories.FILTERS},
   {param: 'games', label: 'Games', value: TagDirectoryCategories.GAMES},
-  {param: 'images', label: 'Images', value: TagDirectoryCategories.IMAGES},
   {param: 'memes', label: 'Memes', value: TagDirectoryCategories.MEMES},
   {param: 'utility', label: 'Utility', value: TagDirectoryCategories.UTILITY},
-  {param: 'ai', label: 'AI', value: TagDirectoryCategories.AI},
-  {param: 'text', label: 'Text', value: TagDirectoryCategories.TEXT},
-  {param: 'audio', label: 'Audio', value: TagDirectoryCategories.AUDIO},
   {param: 'other', label: 'Other', value: TagDirectoryCategories.OTHER},
 ];
+
+// links made before images/audio were merged into filters keep working
+const LEGACY_CATEGORY_PARAMS: Record<string, string> = {audio: 'filters', images: 'filters'};
+
+export function categoryOptionFromParam(param: string | null) {
+  const value = (param && LEGACY_CATEGORY_PARAMS[param]) || param;
+  return TAG_DIRECTORY_CATEGORY_OPTIONS.find((option) => option.param === value) ?? null;
+}
 
 export function categoryLabel(category: number): string {
   return TAG_DIRECTORY_CATEGORY_OPTIONS.find((option) => option.value === category)?.label ?? 'Other';
@@ -49,6 +55,18 @@ export function CategorySelect({ value, onChange, ...props }: Omit<ComponentProp
       {TAG_DIRECTORY_CATEGORY_OPTIONS.map((option) => <option key={option.param} value={option.value}>{option.label}</option>)}
     </select>
   );
+}
+
+
+// mirrors the api's `check_can_verify_tag_directory`, null when the listing can be verified
+export function verificationRequirement(listing: {description: string | null, category: number | null}): string | null {
+  if (!listing.description?.trim()) {
+    return 'Add a description before it can be verified.';
+  }
+  if (!listing.category || listing.category === TagDirectoryCategories.OTHER) {
+    return 'Pick a category other than Other before it can be verified.';
+  }
+  return null;
 }
 
 

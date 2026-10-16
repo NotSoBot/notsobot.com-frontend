@@ -1,20 +1,21 @@
-import { ArrowLeft, BookOpen, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpen, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { isStaff, useAuth } from '@/auth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { Routes } from '@/config';
 import { ApiErrorCodes, ApiRequestError, type Tag, type TagStorageScope } from '@/lib/api';
 import { errorMessage, useDeleteMeTagMutation, useMeGuildsQuery, useMeTagDirectoryQuery, useMeTagQuery, usePatchMeTagMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
-import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, ReadOnlyNote, SaveBar, Skeleton, Toggle, UnsavedChangesGuard } from '../ui';
+import { CharCounter, Field, InlineError, Panel, PanelSkeleton, ReadOnlyNote, SaveBar, Skeleton, Toggle, UnsavedChangesGuard } from '../ui';
 import { CodeEditor } from './CodeEditor';
 import { TagBlobsEditor } from './TagBlobsEditor';
 import { TagDirectoryPanel } from './TagDirectoryPanel';
-import { dashboardTagPath, TAG_CONTENT_MAX, TAG_NAME_MAX, TagBadges, tagLocation, TagLocationLabel } from './tagMeta';
+import { dashboardTagEditPath, TAG_CONTENT_MAX, TAG_NAME_MAX, TagBadges, tagLocation, TagLocationChip, tagServerPath } from './tagMeta';
 import { StorageScopeForm } from './StorageScopeForm';
 import { TagVariablesEditor } from './TagVariablesEditor';
 
@@ -28,44 +29,36 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id'];
 
 
-export function TagEditorPage() {
-  const { tagId = '' } = useParams();
+const TITLE_ID = 'dashboard-tag-editor-title';
+
+
+// One of your tags' editor over the tag list (`/dashboard/tags/:tagId/edit`). Closing it, or going back to the tag's
+// details (`onBack`), with unsaved edits asks first (`UnsavedChangesGuard`, the url leaves the editor's path).
+export function TagEditorModal({ tagId, onBack, onClose }: {tagId: string, onBack: (id: string) => void, onClose: () => void}) {
   const { data: tag, isPending, isError, error, refetch, isRefetching } = useMeTagQuery(tagId);
+  const notFound = error instanceof ApiRequestError && (error.status === 404 || error.code === ApiErrorCodes.UNKNOWN_TAG);
 
-  if (isPending) {
-    return <TagEditorSkeleton/>;
-  }
-
-  if (isError && !tag) {
-    const notFound = error instanceof ApiRequestError && (error.status === 404 || error.code === ApiErrorCodes.UNKNOWN_TAG);
-    return (
-      <>
-        <BackLink/>
-        {(notFound) ? (
-          <ErrorPanel title='Tag not found' message='It may have been deleted, or it belongs to someone else.'/>
-        ) : (
-          <ErrorPanel title='Couldn’t load this tag' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
-        )}
-      </>
-    );
-  }
-
-  // keyed so switching tags starts with a clean form
-  return <TagEditor key={tag.id} tag={tag}/>;
-}
-
-
-function BackLink() {
   return (
-    <Link to={Routes.DASHBOARD_TAGS} className='mb-4 inline-flex items-center gap-1.5 rounded text-sm text-muted transition-colors hover:text-white'>
-      <ArrowLeft aria-hidden className='size-4'/>
-      All tags
-    </Link>
+    <Modal labelledBy={TITLE_ID} onClose={onClose}>
+      {(tag) ? (
+        // keyed so switching tags starts with a clean form
+        <TagEditor key={tag.id} tag={tag} onBack={onBack}/>
+      ) : (isPending) ? (
+        <TagEditorSkeleton/>
+      ) : (
+        <div className='px-6 py-16 text-center'>
+          <AlertTriangle className='mx-auto mb-4 size-14 text-danger'/>
+          <h2 id={TITLE_ID} className='mb-3 text-2xl font-bold text-white'>{(notFound) ? 'Tag not found' : 'Couldn’t load this tag'}</h2>
+          <p className='mb-6 text-muted'>{(notFound) ? 'It may have been deleted, or it belongs to someone else.' : errorMessage(error)}</p>
+          {(isError && !notFound) ? <button type='button' className='btn btn-secondary' disabled={isRefetching} onClick={() => refetch()}>Retry</button> : null}
+        </div>
+      )}
+    </Modal>
   );
 }
 
 
-function TagEditor({ tag }: {tag: Tag}) {
+function TagEditor({ tag, onBack }: {tag: Tag, onBack: (id: string) => void}) {
   const { user } = useAuth();
   const [ searchParams, setSearchParams ] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -116,82 +109,91 @@ function TagEditor({ tag }: {tag: Tag}) {
   const { data: directory } = useMeTagDirectoryQuery(tag.id);
   const { data: guilds } = useMeGuildsQuery();
   const guildNames = useMemo(() => new Map((guilds ?? []).map((guild) => [guild.id, guild.name])), [guilds]);
+  const location = tagLocation(tag, user, guildNames);
 
   return (
     <>
-      <BackLink/>
-      <header className='mb-5'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <h1 className='min-w-0 text-2xl font-bold break-all text-white sm:text-3xl'>{tag.name}</h1>
+      <header className='rounded-t-xl border-b border-line bg-surface px-6 pt-6 sm:pr-14'>
+        <p className='section-label pr-8 sm:pr-0'>Editing</p>
+        <div className='mt-1 flex flex-wrap items-center gap-2 pr-8 sm:pr-0'>
+          <h2 id={TITLE_ID} className='min-w-0 text-2xl font-bold break-all text-white'>{tag.name}</h2>
           <TagBadges tag={tag}/>
-          {(directory !== undefined && !tag.reference_tag) ? (
-            <button type='button' className='btn btn-secondary btn-sm ml-auto' onClick={() => setTab('directory')}>
-              {(directory) ? <BookOpen className='size-3.5'/> : <Upload className='size-3.5'/>}
-              {(directory) ? 'Directory listing' : 'Publish to directory'}
+          <div className='flex flex-wrap gap-2 sm:ml-auto'>
+            <button type='button' className='btn btn-ghost btn-sm' onClick={() => onBack(tag.id)}>
+              <ArrowLeft className='size-3.5'/>
+              Back to tag
             </button>
-          ) : null}
+            {(directory !== undefined && !tag.reference_tag) ? (
+              <button type='button' className='btn btn-secondary btn-sm' onClick={() => setTab('directory')}>
+                {(directory) ? <BookOpen className='size-3.5'/> : <Upload className='size-3.5'/>}
+                {(directory) ? 'Directory listing' : 'Publish to directory'}
+              </button>
+            ) : null}
+          </div>
         </div>
-        <p className='mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-subtle'>
+        <div className='mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-subtle'>
+          <TagLocationChip location={location} to={tagServerPath(location)}/>
           <span className='tabular-nums'>{tag.uses.toLocaleString()} uses</span>
           <span title={formatDateTime(tag.created)}>Created {formatDate(tag.created)}</span>
           {(tag.edited) ? <span title={formatDateTime(tag.edited)}>Edited {formatDate(tag.edited)}</span> : null}
           {(tag.last_used) ? <span title={formatDateTime(tag.last_used)}>Last used {formatDate(tag.last_used)}</span> : null}
-          <TagLocationLabel location={tagLocation(tag, user, guildNames)} className='flex min-w-0 items-center gap-1.5'/>
-        </p>
+        </div>
+
+        <div role='tablist' aria-label='Tag sections' onKeyDown={onTabKeyDown} className='-mb-px mt-4 flex gap-1 overflow-x-auto'>
+          {TABS.map((item) => {
+            const dirty = {content: contentDirty, variables: variablesDirty, blobs: blobsDirty, directory: directoryDirty}[item.id];
+            return (
+              <button
+                key={item.id}
+                id={`${tabsId}-${item.id}`}
+                type='button'
+                role='tab'
+                aria-selected={tab === item.id}
+                aria-controls={`${tabsId}-${item.id}-panel`}
+                tabIndex={(tab === item.id) ? 0 : -1}
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  'flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors',
+                  (tab === item.id) ? 'border-brand text-white' : 'border-transparent text-muted hover:text-white',
+                )}
+              >
+                {item.label}
+                {(dirty) ? <span aria-label='(unsaved changes)' className='size-1.5 rounded-full bg-warning'/> : null}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
-      <div role='tablist' aria-label='Tag sections' onKeyDown={onTabKeyDown} className='mb-5 flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)]'>
-        {TABS.map((item) => {
-          const dirty = {content: contentDirty, variables: variablesDirty, blobs: blobsDirty, directory: directoryDirty}[item.id];
-          return (
-            <button
-              key={item.id}
-              id={`${tabsId}-${item.id}`}
-              type='button'
-              role='tab'
-              aria-selected={tab === item.id}
-              aria-controls={`${tabsId}-${item.id}-panel`}
-              tabIndex={(tab === item.id) ? 0 : -1}
-              onClick={() => setTab(item.id)}
-              className={cn(
-                'flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors',
-                (tab === item.id) ? 'border-brand text-white' : 'border-transparent text-muted hover:text-white',
-              )}
-            >
-              {item.label}
-              {(dirty) ? <span aria-label='(unsaved changes)' className='size-1.5 rounded-full bg-warning'/> : null}
-            </button>
-          );
-        })}
-      </div>
+      <div className='p-4 sm:p-6'>
+        {/* panels stay mounted so unsaved edits survive switching tabs */}
+        <div id={`${tabsId}-content-panel`} role='tabpanel' aria-labelledby={`${tabsId}-content`} hidden={tab !== 'content'}>
+          <TagContentForm tag={tag} readOnly={readOnly} onDirtyChange={setContentDirty}/>
+        </div>
+        <div id={`${tabsId}-variables-panel`} role='tabpanel' aria-labelledby={`${tabsId}-variables`} hidden={tab !== 'variables'} className='space-y-4'>
+          {(tag.reference_tag) ? <AliasStorageNote tag={tag} kind='variables'/> : (
+            <>
+              <StorageScopeForm scope={scope} onChange={setScope}/>
+              {(tab === 'variables' || variablesDirty) ? (
+                <TagVariablesEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setVariablesDirty}/>
+              ) : null}
+            </>
+          )}
+        </div>
+        <div id={`${tabsId}-blobs-panel`} role='tabpanel' aria-labelledby={`${tabsId}-blobs`} hidden={tab !== 'blobs'} className='space-y-4'>
+          {(tag.reference_tag) ? <AliasStorageNote tag={tag} kind='blobs'/> : (
+            <>
+              <StorageScopeForm scope={scope} onChange={setScope}/>
+              {(tab === 'blobs' || blobsDirty) ? (
+                <TagBlobsEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setBlobsDirty}/>
+              ) : null}
+            </>
+          )}
+        </div>
 
-      {/* panels stay mounted so unsaved edits survive switching tabs */}
-      <div id={`${tabsId}-content-panel`} role='tabpanel' aria-labelledby={`${tabsId}-content`} hidden={tab !== 'content'}>
-        <TagContentForm tag={tag} readOnly={readOnly} onDirtyChange={setContentDirty}/>
-      </div>
-      <div id={`${tabsId}-variables-panel`} role='tabpanel' aria-labelledby={`${tabsId}-variables`} hidden={tab !== 'variables'} className='space-y-4'>
-        {(tag.reference_tag) ? <AliasStorageNote tag={tag} kind='variables'/> : (
-          <>
-            <StorageScopeForm scope={scope} onChange={setScope}/>
-            {(tab === 'variables' || variablesDirty) ? (
-              <TagVariablesEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setVariablesDirty}/>
-            ) : null}
-          </>
-        )}
-      </div>
-      <div id={`${tabsId}-blobs-panel`} role='tabpanel' aria-labelledby={`${tabsId}-blobs`} hidden={tab !== 'blobs'} className='space-y-4'>
-        {(tag.reference_tag) ? <AliasStorageNote tag={tag} kind='blobs'/> : (
-          <>
-            <StorageScopeForm scope={scope} onChange={setScope}/>
-            {(tab === 'blobs' || blobsDirty) ? (
-              <TagBlobsEditor tag={tag} scope={scope} readOnly={readOnly} onDirtyChange={setBlobsDirty}/>
-            ) : null}
-          </>
-        )}
-      </div>
-
-      <div id={`${tabsId}-directory-panel`} role='tabpanel' aria-labelledby={`${tabsId}-directory`} hidden={tab !== 'directory'}>
-        {(tab === 'directory' || directoryDirty) ? <TagDirectoryPanel tag={tag} onDirtyChange={setDirectoryDirty}/> : null}
+        <div id={`${tabsId}-directory-panel`} role='tabpanel' aria-labelledby={`${tabsId}-directory`} hidden={tab !== 'directory'}>
+          {(tab === 'directory' || directoryDirty) ? <TagDirectoryPanel tag={tag} onDirtyChange={setDirectoryDirty}/> : null}
+        </div>
       </div>
 
       <UnsavedChangesGuard when={contentDirty || variablesDirty || blobsDirty || directoryDirty}/>
@@ -210,7 +212,7 @@ function AliasStorageNote({ tag, kind }: {tag: Tag, kind: 'variables' | 'blobs'}
     <ReadOnlyNote>
       This tag is an alias of “{parent.name}”. Alias tags use their parent tag’s {kind}, so there’s nothing to edit here.
       {(canOpenParent) ? (
-        <> <Link to={`${dashboardTagPath(parent.id)}?tab=${kind}`} className='font-medium text-brand hover:underline'>Edit them on “{parent.name}”</Link></>
+        <> <Link to={`${dashboardTagEditPath(parent.id)}?tab=${kind}`} className='font-medium text-brand hover:underline'>Edit them on “{parent.name}”</Link></>
       ) : null}
     </ReadOnlyNote>
   );
@@ -290,7 +292,7 @@ function TagContentForm({ tag, readOnly, onDirtyChange }: {tag: Tag, readOnly: b
       onSuccess: () => {
         toast(`Deleted “${tag.name}”`);
         // replace: the tag's page doesn't exist anymore, Back shouldn't return to it
-        navigate(Routes.DASHBOARD_TAGS, {replace: true, state: {skipUnsavedGuard: true}});
+        navigate(Routes.DASHBOARD_TAGS, {replace: true, preventScrollReset: true, state: {skipUnsavedGuard: true}});
       },
     });
   };
@@ -399,12 +401,14 @@ function TagContentForm({ tag, readOnly, onDirtyChange }: {tag: Tag, readOnly: b
 
 function TagEditorSkeleton() {
   return (
-    <div aria-busy='true' aria-label='Loading tag'>
-      <Skeleton className='mb-4 h-4 w-20'/>
-      <Skeleton className='h-8 w-48'/>
-      <Skeleton className='mt-2 mb-5 h-4 w-72 max-w-full bg-surface-2'/>
-      <Skeleton className='mb-5 h-9 w-64 bg-surface-2'/>
-      <PanelSkeleton rows={4}/>
+    <div aria-busy='true'>
+      <h2 id={TITLE_ID} className='sr-only'>Loading tag</h2>
+      <div className='border-b border-line px-6 pt-6 pb-4'>
+        <Skeleton className='h-8 w-48'/>
+        <Skeleton className='mt-3 h-4 w-72 max-w-full bg-surface-2'/>
+        <Skeleton className='mt-5 h-7 w-64 bg-surface-2'/>
+      </div>
+      <div className='p-6'><PanelSkeleton rows={4}/></div>
     </div>
   );
 }

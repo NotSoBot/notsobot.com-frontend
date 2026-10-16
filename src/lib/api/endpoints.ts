@@ -7,6 +7,7 @@ export const ApiEndpoints = Object.freeze({
   HELP_DISCORD_BOT: '/help/discord/bot',
   HELP_DISCORD_SERVER: '/help/discord/server',
   INFO_DISCORD: '/info/discord',
+  JOB: (jobId: string) => `/jobs/${jobId}`,
   TAGS_DIRECTORY: '/tags/directory',
   USER_ME: '/users/@me',
   USER_ME_SESSIONS: '/users/@me/sessions',
@@ -21,6 +22,8 @@ export const ApiEndpoints = Object.freeze({
   USER_ME_TAG_SERVERS: (tagId: string) => `/users/@me/tags/${tagId}/servers`,
   USER_ME_TAG_DIRECTORY: (tagId: string) => `/users/@me/tags/${tagId}/directory`,
   USER_ME_TAG_DIRECTORY_VERIFY: (tagId: string) => `/users/@me/tags/${tagId}/directory/verify`,
+  USER_ME_TAG_DIRECTORY_ASSETS: (tagId: string) => `/users/@me/tags/${tagId}/directory/assets`,
+  USER_ME_TAG_DIRECTORY_ASSET: (tagId: string, assetId: string) => `/users/@me/tags/${tagId}/directory/assets/${assetId}`,
   USER_ME_TAG_ADD: (tagId: string) => `/users/@me/tags/${tagId}/add`,
   USER_ME_ENTITLEMENTS: '/users/@me/entitlements',
   USER_ME_REMINDERS: '/users/@me/reminders',
@@ -30,15 +33,6 @@ export const ApiEndpoints = Object.freeze({
   USER_ME_VOICE: (voiceId: string) => `/users/@me/voices/${voiceId}`,
   USER_ME_GUILDS: '/users/@me/guilds',
   USER_ME_GUILD: (guildId: string) => `/users/@me/guilds/${guildId}`,
-  USER_ME_GUILD_PREFIXES: (guildId: string) => `/users/@me/guilds/${guildId}/prefixes`,
-  USER_ME_GUILD_PREFIXES_DELETE: (guildId: string) => `/users/@me/guilds/${guildId}/prefixes/delete`,
-  USER_ME_GUILD_LIST: (guildId: string, list: string, id: string, type: string) => `/users/@me/guilds/${guildId}/${list}/${id}/${type}`,
-  USER_ME_GUILD_COMMAND_LIST: (guildId: string, command: string, list: string, id: string, type: string) => {
-    return `/users/@me/guilds/${guildId}/commands/${encodeURIComponent(command)}/${list}/${id}/${type}`;
-  },
-  USER_ME_GUILD_LOGGERS_DELETE: (guildId: string) => `/users/@me/guilds/${guildId}/loggers/delete`,
-  USER_ME_GUILD_DATA_EXPORT: (guildId: string) => `/users/@me/guilds/${guildId}/data/export`,
-  USER_ME_GUILD_DATA_DELETE: (guildId: string) => `/users/@me/guilds/${guildId}/data/delete`,
   // planned, not built yet (the dashboard treats 404/405 as "not available yet")
   USER_ME_DATA_EXPORT: '/users/@me/data/export',
 
@@ -58,10 +52,32 @@ export const ApiEndpoints = Object.freeze({
   ADMIN_ENTITLEMENTS: '/admin/entitlements',
   ADMIN_CONTENT_FLAG: (flagId: string) => `/admin/content-flags/${flagId}`,
   ADMIN_CONTENT_FLAG_MATCHES: (flagId: string) => `/admin/content-flags/${flagId}/matches`,
+  ADMIN_CONTENT_FLAG_MEDIA: (flagId: string) => `/admin/content-flags/${flagId}/media`,
   ADMIN_CONTENT_FLAG_PROMPT: (flagId: string) => `/admin/content-flags/${flagId}/prompt`,
   ADMIN_CONTENT_FLAG_TRANSLATE: (flagId: string) => `/admin/content-flags/${flagId}/translate`,
   ADMIN_REPORTS: '/admin/reports',
   ADMIN_REPORT: (reportId: string) => `/admin/reports/${reportId}`,
   ADMIN_VOICES: '/admin/voices',
   ADMIN_VOICE: (voiceId: string) => `/admin/voices/${voiceId}`,
+  ADMIN_GUILDS: '/admin/guilds',
+  ADMIN_GUILD: (guildId: string) => `/admin/guilds/${guildId}`,
 });
+
+
+// a server's settings routes, the same under `/users/@me/guilds` (servers you're in, checked against your Discord
+// permissions) and `/admin/guilds` (staff, any server)
+export type GuildScope = 'me' | 'admin';
+
+export function guildEndpoints(scope: GuildScope, guildId: string) {
+  const base = (scope === 'admin') ? ApiEndpoints.ADMIN_GUILD(guildId) : ApiEndpoints.USER_ME_GUILD(guildId);
+  return {
+    GUILD: base,
+    PREFIXES: `${base}/prefixes`,
+    PREFIXES_DELETE: `${base}/prefixes/delete`,
+    LIST: (list: string, id: string, type: string) => `${base}/${list}/${id}/${type}`,
+    COMMAND_LIST: (command: string, list: string, id: string, type: string) => `${base}/commands/${encodeURIComponent(command)}/${list}/${id}/${type}`,
+    LOGGERS_DELETE: `${base}/loggers/delete`,
+    DATA_EXPORT: `${base}/data/export`,
+    DATA_DELETE: `${base}/data/delete`,
+  };
+}

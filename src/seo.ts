@@ -35,7 +35,8 @@ export const PAGES: Readonly<Record<keyof typeof Routes, PageMeta>> = Object.fre
   },
   DASHBOARD: {title: 'Dashboard', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_TAGS: {title: 'Your Tags', description: DASHBOARD_DESCRIPTION},
-  DASHBOARD_TAG: {title: 'Edit Tag', description: DASHBOARD_DESCRIPTION},
+  DASHBOARD_TAG: {title: 'Tag', description: DASHBOARD_DESCRIPTION},
+  DASHBOARD_TAG_EDIT: {title: 'Edit Tag', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_SERVERS: {title: 'Servers', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_SERVER: {title: 'Server', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_SETTINGS: {title: 'Settings', description: DASHBOARD_DESCRIPTION},
@@ -49,6 +50,7 @@ export const PAGES: Readonly<Record<keyof typeof Routes, PageMeta>> = Object.fre
   DASHBOARD_ADMIN_ENTITLEMENTS: {title: 'Entitlements', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_FLAGS: {title: 'Content Flags', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_REPORTS: {title: 'Reports', description: ADMIN_DESCRIPTION},
+  DASHBOARD_ADMIN_SERVERS: {title: 'Servers', description: ADMIN_DESCRIPTION},
   DASHBOARD_ADMIN_VOICES: {title: 'Voices', description: ADMIN_DESCRIPTION},
   FAQ: {
     title: 'FAQ',

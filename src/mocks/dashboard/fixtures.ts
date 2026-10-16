@@ -11,6 +11,7 @@ import type {
   Report,
   Tag,
   TagBlobs,
+  TagDirectoryAsset,
   TagDirectoryCategory,
   TagVariables,
   User,
@@ -19,6 +20,7 @@ import type {
   UserMe,
   UserSettings,
 } from '@/lib/api/types';
+import { TagDirectoryCategories } from '@/lib/api/types';
 
 
 export const MOCK_TOKEN = 'dashboard-mock-token';
@@ -112,6 +114,10 @@ export function createTags(): Array<Tag> {
   ];
   // an alias has no content of its own and shares its parent's variables and blobs
   tags.push(tag('1290000000000000095', 'count', '', {reference_tag: tags[0], uses: 41}));
+  // and an alias of someone else's directory tag (directory tags live under their owner's id)
+  const author: User = {...owner, id: '1200000000000000042', username: 'tagauthor'};
+  const washing = tag('1290000000000000500', 'wash', '', {is_on_directory: true, server_id: author.id, user: author, uses: 9000});
+  tags.push(tag('1290000000000000094', 'washing', '', {reference_tag: washing, uses: 1}));
   const words = ['hello', 'ping', 'weather', 'roll', 'meme', 'shrug', 'flip', 'lenny', 'hug', 'pat', 'dance', 'wave', 'tableflip',
     'unflip', 'thonk', 'yeet', 'bonk', 'poll', 'remind', 'math', 'echo', 'avatar', 'banner', 'emoji', 'say', 'time', 'zalgo', 'owo'];
   words.forEach((word, i) => {
@@ -206,6 +212,39 @@ export function createGuilds(): Array<MockGuild> {
 }
 
 
+// every server NotSoBot knows (`/admin/guilds`): the mock user's (sharing their detail objects, so edits show on both
+// sides) plus servers they aren't in, some the bot left, some blocked, and a few the bot is in that never saved settings
+export interface MockAdminGuild {
+  entry: MockGuild,
+  bot: {shard_id: number, updated: string} | null,
+  // false: only in `bot_guilds`, no `guilds` row (no name until it's opened)
+  saved: boolean,
+}
+
+const ADMIN_GUILD_NAMES = ['Pixel Plaza', 'The Lounge', 'Speedrunners United', 'Anime Corner', 'Study Hall', 'Meme Factory', 'Cozy Campfire',
+  'Retro Arcade', 'Night Owls', 'Dev Den', 'Music Makers', 'Book Club', 'Garden Gnomes', 'Space Cadets', 'Tea Time', 'Ocean Breeze',
+  'Map Makers', 'Puzzle Hunters', 'Chess Club', 'Film Buffs', 'Pet Pals', 'Bread Bakers', 'Cloud Watchers', 'Late Night Radio'];
+
+export function createAdminGuilds(guilds: Array<MockGuild>): Array<MockAdminGuild> {
+  const updated = new Date(Date.now() - 3600000 * 5).toISOString();
+  const extras = ADMIN_GUILD_NAMES.map((name, i): MockAdminGuild => {
+    const id = (1150000000000000000n + BigInt(i) * 4194304n * 997n).toString();
+    const entry = guild(id, name, null, 0n);
+    if (i % 6 === 2) {
+      entry.detail.blocked = true;
+      entry.detail.blocked_reason = (i % 12 === 2) ? 'Raiding other servers with the bot' : null;
+    }
+    // every 4th one the bot left; unsaved ones only come from `bot_guilds`, so the bot is always in those
+    const left = i % 4 === 3;
+    return {entry, bot: (left) ? null : {shard_id: i % 8, updated}, saved: left || i % 7 !== 5};
+  });
+  return [
+    ...guilds.map((entry, i) => ({entry, bot: {shard_id: i, updated}, saved: true})),
+    ...extras,
+  ];
+}
+
+
 export function guildEditable(summary: UserGuildSummary): UserGuild['editable'] {
   const permissions = BigInt(summary.permissions);
   const admin = summary.owner || !!(permissions & ADMINISTRATOR);
@@ -224,7 +263,9 @@ export function createAdminUsers(): Array<AdminUser> {
   return ADMIN_NAMES.map((name, i) => ({
     avatar: null,
     blocked: i % 11 === 4,
-    blocked_reason: (i % 11 === 4) ? 'Repeated unsafe uploads' : null,
+    blocked_reason: (i === 15)
+      ? 'Repeatedly uploaded unsafe images through tags after two warnings in the support server, then made alt accounts to keep doing it. See the mod log thread from March for the full history and the screenshots.'
+      : (i % 11 === 4) ? 'Repeated unsafe uploads' : null,
     discriminator: (i % 7 === 3) ? String(1000 + i * 37).padStart(4, '0') : '0',
     flags: (i === 0) ? 1 : (i === 5) ? 4 : 0,
     id: (400000000000000000n + BigInt(i) * 7919n).toString(),
@@ -330,6 +371,28 @@ const DIRECTORY_SAMPLES: Array<[string, string, string]> = [
   ['spam', 'Totally normal tag', ('@everyone free nitro https://not-a-scam.invalid\n').repeat(40)],
 ];
 
+const CATEGORY_VALUES: Array<TagDirectoryCategory> = Object.values(TagDirectoryCategories);
+
+// placeholder listing media (inline svgs, so there's nothing to host), `TagDirectoryAssets.to_dict()` shaped
+export function sampleDirectoryAssets(directoryId: string, name: string, count: number): Array<TagDirectoryAsset> {
+  return Array.from({length: count}, (_, i) => {
+    const id = `${directoryId}${i}`;
+    const hue = (Number(BigInt(directoryId) % 360n) + i * 70) % 360;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">` +
+      `<rect width="640" height="360" fill="hsl(${hue} 45% 28%)"/><circle cx="520" cy="80" r="140" fill="hsl(${hue} 55% 38%)"/>` +
+      `<text x="40" y="200" font-family="sans-serif" font-size="64" font-weight="700" fill="#fff">.${name}</text>` +
+      `<text x="40" y="250" font-family="sans-serif" font-size="28" fill="#ffffffb0">example ${i + 1}</text></svg>`;
+    return {
+      filename: `${id}.svg`,
+      filename_base: id,
+      id,
+      metadata: {duration: 0, extension: 'svg', framecount: 1, height: 360, mimetype: 'image/svg+xml', size: svg.length, width: 640},
+      position: i,
+      urls: {cdn: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`},
+    };
+  });
+}
+
 export function createAdminDirectory(users: Array<AdminUser>): Array<AdminTagDirectoryItem> {
   const items: Array<AdminTagDirectoryItem> = [];
   for (let i = 0; i < 34; i++) {
@@ -337,17 +400,14 @@ export function createAdminDirectory(users: Array<AdminUser>): Array<AdminTagDir
     const user = users[(i * 3) % users.length];
     const id = (1280000000000000000n + BigInt(i) * 101n).toString();
     const created = new Date(Date.now() - (i + 1) * 86400000).toISOString();
+    const verified = [1, 1, 0, 2, 1, 0, 2][i % 7];
+    const tagName = (i < DIRECTORY_SAMPLES.length) ? name : `${name}${i}`;
+    // most verified listings have media (public), a few pending ones too (only staff and the owner see those)
+    const assetCount = (verified === 2) ? [0, 1, 3][i % 3] : (verified === 1 && i % 5 === 2) ? 2 : 0;
     items.push({
       // every category shows up, `Other` included
-      category: (i % 9) as TagDirectoryCategory,
-      assets: (i % 5 === 2) ? [{
-        filename: 'preview.png',
-        filename_base: 'preview',
-        id: `asset-${i}`,
-        metadata: {duration: 0, extension: 'png', framecount: 1, height: 256, mimetype: 'image/png', size: 48213, width: 512},
-        position: 0,
-        urls: {cdn: `https://cdn.invalid/tags/${id}/preview.png`},
-      }] : [],
+      category: CATEGORY_VALUES[i % CATEGORY_VALUES.length],
+      assets: sampleDirectoryAssets(id, tagName, assetCount),
       created,
       description: (i % 4 === 3) ? '' : `${title} tag. Example description that explains what this tag does and how to use it.`,
       edited: null,
@@ -360,7 +420,7 @@ export function createAdminDirectory(users: Array<AdminUser>): Array<AdminTagDir
         guild_id: null,
         id,
         locked: i % 2 === 1,
-        name: (i < DIRECTORY_SAMPLES.length) ? name : `${name}${i}`,
+        name: tagName,
         nsfw: i % 8 === 5,
         server_id: user.id,
         user_id: user.id,
@@ -368,7 +428,7 @@ export function createAdminDirectory(users: Array<AdminUser>): Array<AdminTagDir
       },
       title: (i < DIRECTORY_SAMPLES.length) ? title : `${title} ${i}`,
       user: (i === 7) ? null : {avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username},
-      verified: [1, 1, 0, 2, 1, 0, 2][i % 7],
+      verified,
     });
   }
   return items;

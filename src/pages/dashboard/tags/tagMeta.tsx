@@ -1,8 +1,10 @@
 import { Globe, Lock, MessageCircle, Server, User, Users, type LucideIcon } from 'lucide-react';
-import { generatePath } from 'react-router';
+import { generatePath, Link } from 'react-router';
 
 import { Routes } from '@/config';
-import { TagStorageTypes, type Tag, type TagStorageType, type UserMe } from '@/lib/api';
+import { TagDirectoryVerificationStates, TagStorageTypes, type Tag, type TagStorageType, type UserMe } from '@/lib/api';
+
+import { dashboardServerPath } from '../servers/guildMeta';
 
 
 // same limits as the bot / notsobot.api (`PatchTag`, `PutTagVariableSingle`, `MAX_TAG_*`)
@@ -14,8 +16,13 @@ export const TAG_VARIABLES_PER_STORAGE = 5;
 export const TAG_BLOB_MAX_BYTES = 256 * 1024;
 
 
+// the tag's details and its editor, both modals over the tag list
 export function dashboardTagPath(tagId: string): string {
   return generatePath(Routes.DASHBOARD_TAG, {tagId});
+}
+
+export function dashboardTagEditPath(tagId: string): string {
+  return generatePath(Routes.DASHBOARD_TAG_EDIT, {tagId});
 }
 
 
@@ -60,6 +67,11 @@ export function tagLocation(
   return {kind: 'group_dm', icon: Users, label: 'Group DM', id: serverId, named: false};
 }
 
+// the server's modal on the dashboard, for servers in the caller's list (the named ones)
+export function tagServerPath(location: TagLocation): string | undefined {
+  return (location.kind === 'server' && location.named && location.id) ? dashboardServerPath(location.id) : undefined;
+}
+
 // "Cool Gamers Club (1100…)", "your DM with NotSoBot", "a group DM (1300…)"
 export function describeTagLocation(location: TagLocation): string {
   switch (location.kind) {
@@ -79,6 +91,76 @@ export function TagLocationLabel({ location, className }: {location: TagLocation
       <Icon aria-hidden className='size-3.5 shrink-0'/>
       <span className={(location.named) ? 'truncate text-fg' : 'shrink-0'}>{location.label}</span>
       {(location.id) ? <span className='min-w-0 truncate font-mono text-subtle'>{location.id}</span> : null}
+    </span>
+  );
+}
+
+
+// the tag list cards' location: a chip with the name up front and the id trailing behind it, truncated first.
+// With `to` it's a link (sitting above the card's stretched button so it stays clickable)
+export function TagLocationChip({ location, to }: {location: TagLocation, to?: string}) {
+  const Icon = location.icon;
+  const content = (
+    <>
+      <Icon aria-hidden className='size-3.5 shrink-0 text-muted transition-colors group-hover/location:text-brand'/>
+      <span className='min-w-0 shrink truncate font-medium text-fg'>{location.label}</span>
+      {(location.id) ? (
+        <>
+          <span aria-hidden className='h-3 w-px shrink-0 bg-line-strong'/>
+          <span className='min-w-0 shrink-[2] truncate font-mono text-[11px] text-subtle'>{location.id}</span>
+        </>
+      ) : null}
+    </>
+  );
+  const className = 'inline-flex max-w-full min-w-0 items-center gap-1.5 self-start rounded-md border border-line bg-surface-2 px-2 py-1 text-xs';
+  const title = (location.id) ? `${location.label} · ${location.id}` : location.label;
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className={`group/location relative z-10 ${className} transition-colors hover:border-brand hover:bg-surface-3`}
+        title={`Open ${location.label} on the dashboard · ${location.id}`}
+      >
+        {content}
+      </Link>
+    );
+  }
+  return <span className={className} title={title}>{content}</span>;
+}
+
+
+// the tag's states, stacked top-right on the tag list's cards (NSFW sits by the name and aliases get a subtitle instead)
+type StatusTag = Pick<Tag, 'directory' | 'is_command' | 'is_on_directory' | 'locked'>;
+
+export function TagStatusBadges({ tag }: {tag: StatusTag}) {
+  return (
+    <>
+      <DirectoryStatusBadge tag={tag}/>
+      {(tag.is_command) ? <span className='rounded bg-brand/20 px-1.5 py-0.5 text-[11px] font-medium text-[#a5acff]'>Command</span> : null}
+      {(tag.locked) ? (
+        <span className='inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning'>
+          <Lock aria-hidden className='size-3'/> Locked
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+
+// the listing's verification state when the list sent it (`tag.directory`), otherwise just whether it's a directory tag
+function DirectoryStatusBadge({ tag }: {tag: StatusTag}) {
+  if (tag.directory === undefined) {
+    return (tag.is_on_directory) ? <span className='rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success'>Directory</span> : null;
+  }
+  if (!tag.directory) {
+    return null;
+  }
+  const [ label, className ] = (tag.directory.verified === TagDirectoryVerificationStates.VERIFIED) ? ['Verified', 'bg-success/15 text-success']
+    : (tag.directory.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) ? ['Pending', 'bg-warning/15 text-warning']
+    : ['Unverified', 'bg-surface-3 text-muted'];
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${className}`} title={`Tag directory: ${label.toLowerCase()}`}>
+      Directory · {label}
     </span>
   );
 }

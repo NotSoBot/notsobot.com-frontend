@@ -4,7 +4,7 @@ import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import type { GuildListKind, UserGuild } from '@/lib/api';
-import { errorField, errorMessage, useMeGuildMutation, type GuildAction } from '@/lib/api/dashboardQueries';
+import { errorField, errorMessage, useGuildMutation, type GuildAction } from '@/lib/api/dashboardQueries';
 import { useCommandsQuery } from '@/lib/api/queries';
 import { formatDate } from '@/lib/utils';
 
@@ -23,7 +23,7 @@ import {
 // Runs one server edit at a time per section, tracking which row is busy and reporting the result.
 function useGuildEdit(guildId: string) {
   const toast = useToast();
-  const mutation = useMeGuildMutation(guildId);
+  const mutation = useGuildMutation(guildId);
   const [ busyKey, setBusyKey ] = useState<string | null>(null);
 
   const [ failedField, setFailedField ] = useState<string | null>(null);

@@ -40,6 +40,7 @@ export const ADMIN_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD_ADMIN_FLAGS, label: 'Content Flags', icon: Flag, color: '#ed4245'},
   {to: Routes.DASHBOARD_ADMIN_ENTITLEMENTS, label: 'Entitlements', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_ADMIN_REPORTS, label: 'Reports', icon: Inbox, color: '#faa81a'},
+  {to: Routes.DASHBOARD_ADMIN_SERVERS, label: 'Servers', icon: Server, color: '#faa81a'},
   {to: Routes.DASHBOARD_ADMIN_TAGS, label: 'Tag Directory', icon: ShieldCheck, color: '#3ba55c'},
   {to: Routes.DASHBOARD_ADMIN_ALL_TAGS, label: 'Tags', icon: Tags, color: '#00b0f4'},
   {to: Routes.DASHBOARD_ADMIN_USERS, label: 'Users', icon: Users, color: '#5865f2'},
@@ -54,7 +55,12 @@ export function DashboardLayout() {
     <ToastProvider>
       <div className='container-page py-6 sm:py-8'>
         <div className='grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8'>
-          <aside aria-label='Dashboard' className='lg:sticky lg:top-24 lg:self-start'>
+          {/* sticky, so on desktop it scrolls on its own once it's taller than the window; otherwise its bottom (the admin
+              links) could only be reached by scrolling the page all the way down */}
+          <aside
+            aria-label='Dashboard'
+            className='lg:sticky lg:top-24 lg:-mr-2 lg:max-h-[calc(100dvh-7rem)] lg:self-start lg:overflow-y-auto lg:pr-2 lg:pb-2 lg:[scrollbar-width:thin]'
+          >
             {(user) ? (
               <div className='mb-4 hidden items-center gap-3 px-1 lg:flex'>
                 <img src={userAvatarUrl(user, 64)} alt='' className='size-10 rounded-full bg-surface-3'/>

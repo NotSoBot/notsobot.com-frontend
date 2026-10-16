@@ -189,17 +189,22 @@ export interface TagDirectoryFilters {
 // `TagDirectoryCategories`, a listing has exactly one (`OTHER` by default)
 export const TagDirectoryCategories = {
   OTHER: 0,
-  FUN: 1,
-  GAMES: 2,
-  IMAGES: 3,
-  MEMES: 4,
-  UTILITY: 5,
-  AI: 6,
-  TEXT: 7,
-  AUDIO: 8,
+  AI: 1,
+  CLIPS: 2,
+  FILTERS: 3,
+  GAMES: 4,
+  MEMES: 5,
+  UTILITY: 6,
 } as const;
 
 export type TagDirectoryCategory = typeof TagDirectoryCategories[keyof typeof TagDirectoryCategories];
+
+const TAG_DIRECTORY_CATEGORY_VALUES: ReadonlySet<number> = new Set(Object.values(TagDirectoryCategories));
+
+// a category the frontend doesn't know (retired, or added to the api first) is treated as `OTHER`
+export function toTagDirectoryCategory(value: unknown): TagDirectoryCategory {
+  return (typeof value === 'number' && TAG_DIRECTORY_CATEGORY_VALUES.has(value)) ? value as TagDirectoryCategory : TagDirectoryCategories.OTHER;
+}
 
 export const TagDirectoryVerificationStates = {
   NOT_VERIFIED: 0,
@@ -249,6 +254,8 @@ export interface DirectoryTag {
 }
 
 export interface TagDirectoryItem {
+  // in order, the first is the cover. Public responses only have them once the listing is verified,
+  // the owner's (`/users/@me/tags/:id/directory`) and staff's have them at every stage
   assets: Array<TagDirectoryAsset>,
   category: TagDirectoryCategory,
   // the owner shows `tag.content` publicly, it's '' otherwise
@@ -263,7 +270,15 @@ export interface TagDirectoryItem {
   verified: number,
 }
 
-// `GET /users/@me/tags/:id/servers` (owner) and `/admin/tags/:id/servers` (staff): where the tag has been added
+// `GET /users/@me/tags/:id/servers` (owner): how widely the tag has been added, counts only, which servers is staff only
+export interface TagServerCounts {
+  // every alias of the tag, a server can have it under more than one name
+  alias_count: number,
+  // servers, DMs and personal tags alike, the same as the listing's
+  server_count: number,
+}
+
+// `GET /admin/tags/:id/servers` (staff): where the tag has been added
 export interface TagServer {
   // when the server first added the tag
   added: string,
@@ -274,10 +289,9 @@ export interface TagServer {
   names: Array<string>,
 }
 
-export interface TagServers {
+export interface TagServers extends TagServerCounts {
   // DMs, personal tags and servers NotSoBot has no record of, only counted
   other_count: number,
-  server_count: number,
   servers: Array<TagServer>,
   // more servers than the API lists (it caps the list, newest first)
   truncated: boolean,
@@ -293,15 +307,20 @@ export interface TagDirectoryPage {
 
 // notsobot.api `ApiErrorCodes` the dashboard reacts to
 export const ApiErrorCodes = {
+  UNKNOWN_JOB: 10006,
   UNKNOWN_TAG: 10009,
   UNKNOWN_TAG_DIRECTORY_ITEM: 10011,
   UNKNOWN_TAG_ASSET: 10019,
+  UNKNOWN_TAG_DIRECTORY_ASSET: 10020,
   UNKNOWN_SERVER: 10012,
   UNKNOWN_REPORT: 10017,
   UNKNOWN_REMINDER: 10007,
   UNKNOWN_VOICE: 10003,
   MISSING_ACCESS: 20004,
   TEXT_BLOCKED_GUIDELINES: 40030,
+  INVALID_FILE_TYPE: 40001,
+  FILE_TOO_LARGE: 40004,
+  UNSUPPORTED_UPLOAD_TYPE: 40005,
   SAFETY_SCAN_FAILED: 60004,
   INVALID_FORM_BODY: 50001,
   TAG_LOCKED: 50011,
@@ -313,13 +332,19 @@ export const ApiErrorCodes = {
   TAG_DIRECTORY_ALREADY_VERIFIED: 50020,
   TAG_DIRECTORY_ALREADY_UNVERIFIED: 50021,
   TAG_DIRECTORY_CANNOT_UNVERIFY_VERIFIED: 50022,
+  TAG_DIRECTORY_VERIFICATION_REQUIRES_DESCRIPTION: 50032,
+  TAG_DIRECTORY_VERIFICATION_REQUIRES_CATEGORY: 50033,
+  TAG_DIRECTORY_ASSETS_REQUIRE_PENDING: 50034,
   MAX_TAG_DIRECTORY: 30013,
+  MAX_TAG_DIRECTORY_ASSETS: 30018,
   // the session's Discord grant was revoked/expired (not the site session itself)
   DISCORD_OAUTH_ERROR: 60001,
   DISCORD_OAUTH_SCOPE_MISMATCH: 60002,
   DISCORD_FETCH_FAILED: 60003,
   EXTERNAL_SERVICE_TIMEOUT: 60008,
   DISCORD_RATELIMITED: 60011,
+  // our own rate limits (`app_limiter`), e.g. one listing upload per 2 seconds
+  RATELIMITED: 30016,
   DISCORD_API_ERROR: 60012,
 } as const;
 
@@ -376,6 +401,8 @@ export interface Tag {
   server_id: string | null,
   user: User,
   uses: number,
+  // only on `GET /users/@me/tags` items: the tag's directory listing, if it has one
+  directory?: {title: string, verified: number} | null,
 }
 
 export interface TagsPage {
@@ -384,6 +411,9 @@ export interface TagsPage {
 }
 
 export type MeTagsSortBy = 'newest' | 'oldest' | 'uses' | 'name' | 'last_used';
+
+// `listed`: only tags listed on the tag directory (`verified` narrows it to one `TagDirectoryVerificationStates`), false: only the rest
+export type MeTagsDirectoryFilter = {listed: true, verified: number | null} | {listed: false} | null;
 
 export interface TagPatch {
   name?: string,
@@ -572,6 +602,45 @@ export interface UserGuildPatch {
 export type GuildListKind = 'allowlist' | 'blocklist';
 
 
+// `/admin/guilds`: a server NotSoBot knows, from its `guilds` row and/or `bot_guilds`
+export interface AdminGuildBot {
+  shard_id: number,
+  // when the bot last reported it (a shard's full sync or the join)
+  updated: ApiTimestamp | null,
+}
+
+export interface AdminGuildSummary {
+  blocked: boolean,
+  blocked_reason: string | null,
+  // null when the bot isn't in it
+  bot: AdminGuildBot | null,
+  icon: string | null,
+  id: string,
+  // null when the bot is in it but it was never saved (no settings yet)
+  name: string | null,
+}
+
+export interface AdminGuildsPage {
+  count: number,
+  items: Array<AdminGuildSummary>,
+}
+
+export type AdminGuildsSortBy = 'newest' | 'oldest' | 'name';
+
+// `/admin/guilds/<id>`: the `UserGuild` shape (every area editable) plus where the bot is and what's linked to it
+export interface AdminGuild extends UserGuild {
+  bot: AdminGuildBot | null,
+  counts: {content_flags: number, reminders: number, reports: number, tags: number},
+}
+
+// unblocking is owner only
+export interface AdminGuildPatch extends UserGuildPatch {
+  blocked?: boolean,
+  blocked_reason?: string | null,
+}
+
+
+
 // title/description/category of a tag's directory listing (images aren't editable from the dashboard yet)
 export interface TagDirectoryListingInput {
   title?: string,
@@ -582,6 +651,9 @@ export interface TagDirectoryListingInput {
 
 export const TAG_DIRECTORY_TITLE_MAX = 128;
 export const TAG_DIRECTORY_DESCRIPTION_MAX = 2000;
+// `MAX_TAG_DIRECTORY_ASSETS_AMOUNT`/`MAX_TAG_DIRECTORY_ASSET_SIZE`, the first asset is the listing's cover
+export const TAG_DIRECTORY_ASSETS_MAX = 6;
+export const TAG_DIRECTORY_ASSET_SIZE_MAX = 10 * 1024 * 1024;
 
 
 // --- Admin (`/admin/...`, owners and moderators, see docs/dashboard-api.md) ---
@@ -808,6 +880,23 @@ export interface ContentFlagMatches {
   sha256: ContentFlagMatchCounts | null,
   pdq: ContentFlagMatchCounts | null,
   pdq_distance: number,
+}
+
+// `GET /jobs/<id>`, also what endpoints that start a job return (only the fields the dashboard reads). `status` is rq's
+// ('queued', 'started', 'finished', 'failed', ...), a failed job has `result.error`
+export interface JobResponse {
+  id: string,
+  status: string,
+  result: {
+    error: string | null,
+    error_code: number | null,
+    response: {
+      file: {value: string | null, metadata: {mimetype: string}},
+      // content flag media jobs only: the flag's `frames_flagged` (at most 8) as base64 jpegs, extracted like the
+      // scanner did, with where each one is in the media (seconds, null if unknown). Empty for single frame media
+      flagged_frames?: Array<{frame: number, mimetype: string, timestamp: number | null, value: string}>,
+    } | null,
+  },
 }
 
 // what users send with the bot's `/report` command

@@ -76,8 +76,16 @@ const routes: Array<RouteObject> = [
             handle: PAGES.DASHBOARD,
             children: [
               {index: true, lazy: async () => ({Component: (await import('@/pages/dashboard/OverviewPage')).OverviewPage})},
-              {path: Routes.DASHBOARD_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/tags/TagsPage')).TagsPage}), handle: PAGES.DASHBOARD_TAGS},
-              {path: Routes.DASHBOARD_TAG, lazy: async () => ({Component: (await import('@/pages/dashboard/tags/TagEditorPage')).TagEditorPage}), handle: PAGES.DASHBOARD_TAG},
+              // a tag's details and editor open over the list (`TagsPage` reads the child match), so the list stays mounted under them
+              {
+                path: Routes.DASHBOARD_TAGS,
+                lazy: async () => ({Component: (await import('@/pages/dashboard/tags/TagsPage')).TagsPage}),
+                handle: PAGES.DASHBOARD_TAGS,
+                children: [
+                  {path: Routes.DASHBOARD_TAG, element: null, handle: PAGES.DASHBOARD_TAG},
+                  {path: Routes.DASHBOARD_TAG_EDIT, element: null, handle: PAGES.DASHBOARD_TAG_EDIT},
+                ],
+              },
               {path: Routes.DASHBOARD_SERVERS, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServersPage')).ServersPage}), handle: PAGES.DASHBOARD_SERVERS},
               {path: Routes.DASHBOARD_SERVER, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServerDetailPage')).ServerDetailPage}), handle: PAGES.DASHBOARD_SERVER},
               {path: Routes.DASHBOARD_PREMIUM, lazy: async () => ({Component: (await import('@/pages/dashboard/PremiumPage')).PremiumPage}), handle: PAGES.DASHBOARD_PREMIUM},
@@ -96,6 +104,7 @@ const routes: Array<RouteObject> = [
                   {path: Routes.DASHBOARD_ADMIN_ENTITLEMENTS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminEntitlementsPage')).AdminEntitlementsPage}), handle: PAGES.DASHBOARD_ADMIN_ENTITLEMENTS},
                   {path: Routes.DASHBOARD_ADMIN_FLAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminContentFlagsPage')).AdminContentFlagsPage}), handle: PAGES.DASHBOARD_ADMIN_FLAGS},
                   {path: Routes.DASHBOARD_ADMIN_REPORTS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminReportsPage')).AdminReportsPage}), handle: PAGES.DASHBOARD_ADMIN_REPORTS},
+                  {path: Routes.DASHBOARD_ADMIN_SERVERS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminServersPage')).AdminServersPage}), handle: PAGES.DASHBOARD_ADMIN_SERVERS},
                   {path: Routes.DASHBOARD_ADMIN_VOICES, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminVoicesPage')).AdminVoicesPage}), handle: PAGES.DASHBOARD_ADMIN_VOICES},
                 ],
               },

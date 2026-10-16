@@ -1,5 +1,5 @@
-import { Ban, Pencil, ShieldCheck, Tags, Trash2, Users } from 'lucide-react';
-import { useState } from 'react';
+import { Ban, ChevronDown, Pencil, ShieldCheck, Tags, Trash2, Users } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
 import { isOwner, useAuth } from '@/auth';
@@ -148,7 +148,7 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
   const [ blocking, setBlocking ] = useState(false);
   const [ deletingTags, setDeletingTags ] = useState(false);
   const [ editing, setEditing ] = useState(false);
-  const hasChips = owner || moderator || !!user.premium_type;
+  const hasChips = owner || moderator || !!user.premium_type || user.blocked;
   return (
     <tr className={cn('align-middle hover:bg-surface-2', user.blocked && 'bg-danger/[0.04]')}>
       <td className={cn('px-4 py-3', user.blocked && 'shadow-[inset_3px_0_0_var(--color-danger)]')}>
@@ -158,33 +158,46 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
         <div className='flex flex-col items-start gap-2'>
           {(hasChips) ? (
             <div className='flex flex-wrap gap-1'>
+              {(user.blocked) ? (
+                <Chip tone='danger' className='gap-1'>
+                  <Ban className='size-3'/>
+                  Blocked
+                </Chip>
+              ) : null}
               {(owner) ? <Chip tone='brand'>Owner</Chip> : null}
               {(moderator) ? <Chip tone='brand'>Moderator</Chip> : null}
               {(user.premium_type) ? <Chip>{premiumLabel(user.premium_type)}</Chip> : null}
             </div>
           ) : null}
-          {(user.blocked) ? (
-            <BlockedNotice reason={user.blocked_reason} onUnblock={(canBlock) ? () => setBlocking(true) : undefined}/>
-          ) : null}
-          <div className='-ml-3 flex flex-wrap gap-1'>
-            {(canBlock && !user.blocked) ? (
-              <button type='button' className='btn btn-sm btn-ghost text-danger' onClick={() => setBlocking(true)}>
-                <Ban className='size-4'/>
-                Block
-              </button>
-            ) : null}
+          {(user.blocked) ? <BlockReason reason={user.blocked_reason}/> : null}
+          {/* owners get two rows, plain actions on the left and destructive ones on the right so the colours line up from
+            row to row; moderators have no Edit, so theirs fit on one */}
+          <div className={cn('-ml-3 gap-1', (viewerIsOwner) ? 'grid grid-flow-dense grid-cols-[auto_auto] justify-start' : 'flex flex-wrap')}>
             {(viewerIsOwner) ? (
-              <button type='button' className='btn btn-sm btn-ghost' onClick={() => setEditing(true)}>
+              <button type='button' className='btn btn-sm btn-ghost col-start-1 justify-start' onClick={() => setEditing(true)}>
                 <Pencil className='size-4'/>
                 Edit
               </button>
             ) : null}
-            <Link to={adminTagsPath(`user:${user.id}`)} className='btn btn-sm btn-ghost' title='Show this user’s tags'>
+            <Link to={adminTagsPath(`user:${user.id}`)} className='btn btn-sm btn-ghost col-start-1 justify-start' title='Show this user’s tags'>
               <Tags className='size-4'/>
               Tags
             </Link>
             {(canBlock) ? (
-              <button type='button' className='btn btn-sm btn-ghost text-danger' onClick={() => setDeletingTags(true)}>
+              (user.blocked) ? (
+                <button type='button' className='btn btn-sm btn-ghost col-start-2 justify-start' onClick={() => setBlocking(true)}>
+                  <ShieldCheck className='size-4'/>
+                  Unblock
+                </button>
+              ) : (
+                <button type='button' className='btn btn-sm btn-ghost col-start-2 justify-start text-danger' onClick={() => setBlocking(true)}>
+                  <Ban className='size-4'/>
+                  Block
+                </button>
+              )
+            ) : null}
+            {(canBlock) ? (
+              <button type='button' className='btn btn-sm btn-ghost col-start-2 justify-start text-danger' onClick={() => setDeletingTags(true)}>
                 <Trash2 className='size-4'/>
                 Delete tags
               </button>
@@ -241,27 +254,51 @@ function UserRow({ entry }: {entry: AdminUserEntry}) {
 }
 
 
-// the block, its reason and the way to undo it in one place, so a blocked row reads as blocked before anything else
-// `onUnblock` is left out when the viewer isn't allowed to unblock this user
-function BlockedNotice({ reason, onUnblock }: {reason: string | null, onUnblock?: () => void}) {
+// one line of the block reason under the chips; when it doesn't fit, clicking it shows the whole thing
+function BlockReason({ reason }: {reason: string | null}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [ expanded, setExpanded ] = useState(false);
+  const [ overflowing, setOverflowing ] = useState(false);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || expanded) {
+      return;
+    }
+    const measure = () => setOverflowing(element.scrollWidth > element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [reason, expanded]);
+
+  if (!reason) {
+    return <p className='w-72 text-xs text-subtle italic'>No block reason given</p>;
+  }
+  // always the same button (just disabled when the reason fits), so the measured element never gets swapped out
+  const expandable = overflowing || expanded;
   return (
-    <div className='w-full max-w-80 rounded-md border border-danger/30 bg-danger/10 px-3 py-2'>
-      <div className='flex items-center gap-1.5'>
-        <Ban className='size-3.5 shrink-0 text-[#ff8a8c]'/>
-        <span className='text-xs font-semibold text-[#ff8a8c]'>Blocked</span>
-        {(onUnblock) ? (
-          <button type='button' className='btn btn-sm btn-ghost -my-1 -mr-2 ml-auto px-2 py-1' onClick={onUnblock}>
-            <ShieldCheck className='size-3.5'/>
-            Unblock
-          </button>
-        ) : null}
-      </div>
-      {(reason) ? (
-        <p className='mt-1 line-clamp-2 text-xs break-words text-muted' title={reason}>{reason}</p>
-      ) : (
-        <p className='mt-1 text-xs text-subtle italic'>No reason given</p>
-      )}
-    </div>
+    <button
+      type='button'
+      className='group flex w-72 items-start gap-1 rounded text-left disabled:cursor-text'
+      onClick={() => setExpanded(!expanded)}
+      disabled={!expandable}
+      aria-expanded={(expandable) ? expanded : undefined}
+      title={(!expandable) ? undefined : (expanded) ? 'Show less' : 'Show the full reason'}
+    >
+      <span
+        ref={ref}
+        className={cn(
+          'block min-w-0 flex-1 text-xs text-muted select-text group-enabled:group-hover:text-fg',
+          (expanded) ? 'break-words whitespace-pre-wrap' : 'truncate',
+        )}
+      >
+        {reason}
+      </span>
+      {(expandable) ? (
+        <ChevronDown className={cn('mt-px size-3.5 shrink-0 text-subtle transition-transform group-hover:text-fg', expanded && 'rotate-180')}/>
+      ) : null}
+    </button>
   );
 }
 

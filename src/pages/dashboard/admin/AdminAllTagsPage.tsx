@@ -7,12 +7,15 @@ import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminTagItem, AdminTagsSortBy } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagsQuery } from '@/lib/api/dashboardQueries';
-import { cn } from '@/lib/utils';
-import { tagLocation, type TagLocation, type TagLocationKind } from '@/pages/dashboard/tags/tagMeta';
+import { cn, formatDate } from '@/lib/utils';
+import { tagLocation, TagLocationChip, TagStatusBadges, type TagLocation, type TagLocationKind } from '@/pages/dashboard/tags/tagMeta';
 import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 
+import { ServerFilterChip } from '../servers/ServerFilterChip';
+
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { Chip, CopyableValue, CopyButton, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { AdminTagModal, useOpenListItem } from './AdminTagModal';
+import { adminServerPath, Chip, CopyableValue, CopyButton, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { TagStoragePanel } from './TagStoragePanel';
 
 
@@ -27,6 +30,8 @@ const SORTS: Array<{value: AdminTagsSortBy, label: string}> = [
 // `id:<id>`, `user:<id>` or a bare id, the content toggle doesn't change those
 const ID_SEARCH = /^((id|tag|user|owner):\s*)?\d+$/i;
 
+const TITLE_ID = 'admin-tag-modal-title';
+
 
 export function AdminAllTagsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
@@ -35,15 +40,19 @@ export function AdminAllTagsPage() {
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'newest';
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
+  // `?server=<id>`: only tags made in that server (the admin server modal's "Tags")
+  const serverId = (/^\d+$/.test(searchParams.get('server') || '')) ? searchParams.get('server')! : '';
 
   const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useAdminTagsQuery({
     query: debouncedQuery,
+    serverId,
     searchContent,
     sortBy,
     nsfw: (hideNsfw) ? false : null,
     page,
   });
   const items = data?.items ?? [];
+  const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (item) => item.tag.id);
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
   const pagination = {
     page,
@@ -83,6 +92,8 @@ export function AdminAllTagsPage() {
         </div>
       </div>
 
+      {(serverId) ? <ServerFilterChip guildId={serverId} name={null} to={adminServerPath(serverId)} onClear={() => update({server: null})}/> : null}
+
       {(isPending || steppingBack) ? (
         <ListSkeleton/>
       ) : (isError && !items.length) ? (
@@ -94,18 +105,89 @@ export function AdminAllTagsPage() {
               No tag names match that search.{' '}
               <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => update({content: '1'})}>Search content too</button>
             </>
-          ) : (debouncedQuery || hideNsfw) ? 'Try a different search or filter.' : null}
+          ) : (debouncedQuery || hideNsfw || serverId) ? 'Try a different search or filter.' : null}
         </EmptyState>
       ) : (
         <>
           <Pagination {...pagination} className='mt-0 mb-4'/>
-          <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
-            {items.map((item) => <TagCard key={item.tag.id} item={item} onSearch={(value) => update({q: value})}/>)}
+          <ul className={cn('grid grid-cols-1 gap-3 transition-opacity sm:grid-cols-2 xl:grid-cols-3', isPlaceholderData && 'opacity-60')}>
+            {items.map((item) => <TagCard key={item.tag.id} item={item} onOpen={open}/>)}
           </ul>
           <Pagination {...pagination}/>
         </>
       )}
+
+      {(openItem) ? (
+        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close}>
+          <TagDetails
+            key={openItem.tag.id}
+            item={openItem}
+            onSearch={(value) => {
+              close();
+              update({q: value});
+            }}
+          />
+        </AdminTagModal>
+      ) : null}
     </>
+  );
+}
+
+
+function itemLocation(item: AdminTagItem): TagLocation {
+  const ownerId = item.user?.id ?? item.tag.user_id ?? null;
+  return tagLocation({server_id: item.tag.server_id, guild_id: item.tag.guild_id ?? null}, (ownerId) ? {id: ownerId, channel_id: item.user?.channel_id ?? null} : null);
+}
+
+
+// the dashboard's own tag card (`TagsPage`) plus the owner: just enough to spot the tag, the rest is in `TagDetails` a click away
+function TagCard({ item, onOpen }: {item: AdminTagItem, onOpen: (id: string) => void}) {
+  const { tag, directory } = item;
+  const reference = tag.reference_tag as {id: string, name: string} | null | undefined;
+  const location = itemLocation(item);
+  // staff wording, and directory tags live under their owner's id so that id isn't shown
+  const chipLocation = (location.kind === 'personal')
+    ? {...location, icon: BookMarked, label: LOCATION_LABELS.personal, id: null}
+    : {...location, label: LOCATION_LABELS[location.kind]};
+
+  return (
+    <li className='group relative flex min-w-0 flex-col rounded-lg border border-line bg-surface p-4 transition-colors hover:border-brand'>
+      <div className='mb-3 flex items-start justify-between gap-3'>
+        <div className='min-w-0 flex-1'>
+          <div className='flex items-center gap-2'>
+            <h2 className='truncate font-medium text-white transition-colors group-hover:text-brand'>
+              {/* stretched: the whole card opens the tag */}
+              <button
+                type='button'
+                className='cursor-pointer text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-brand'
+                onClick={() => onOpen(tag.id)}
+              >
+                {tag.name}
+              </button>
+            </h2>
+            {(tag.nsfw) ? <NsfwBadge/> : null}
+          </div>
+          {(reference) ? (
+            <p className='mt-0.5 flex min-w-0 items-center gap-1 text-sm text-muted'>
+              <span className='shrink-0'>Alias of</span>
+              <span className='min-w-0 truncate'>{reference.name}</span>
+            </p>
+          ) : null}
+        </div>
+        <div className='flex shrink-0 flex-col items-end gap-1.5'>
+          <TagStatusBadges tag={{directory, is_on_directory: !!directory, is_command: !!tag.is_command, locked: tag.locked}}/>
+        </div>
+      </div>
+      {/* pinned above the footer, so it sits in the same spot on every card whether or not there's an alias line */}
+      <div className='mt-auto mb-3 flex min-w-0 flex-col gap-2'>
+        <UserCell user={item.user} fallbackId={item.user?.id ?? tag.user_id ?? null} size='sm'/>
+        <TagLocationChip location={chipLocation}/>
+      </div>
+      <div className='flex items-center justify-between gap-3 border-t border-line pt-3 text-xs text-subtle'>
+        <span className='tabular-nums'>{(tag.uses ?? 0).toLocaleString()} uses</span>
+        <span>{(tag.edited) ? `Edited ${formatDate(tag.edited)}` : `Created ${formatDate(tag.created)}`}</span>
+      </div>
+    </li>
   );
 }
 
@@ -113,7 +195,7 @@ export function AdminAllTagsPage() {
 const CONTENT_PREVIEW_LINES = 6;
 const CONTENT_PREVIEW_CHARS = 400;
 
-function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: string) => void}) {
+function TagDetails({ item, onSearch }: {item: AdminTagItem, onSearch: (query: string) => void}) {
   const { tag, directory } = item;
   const [ expanded, setExpanded ] = useState(false);
   const ownerId = item.user?.id ?? tag.user_id ?? null;
@@ -121,7 +203,7 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
   // aliases have no content of their own, they show their source's
   const content = (reference) ? (reference.content ?? '') : (tag.content ?? '');
   const long = CONTENT_PREVIEW_LINES < content.split('\n').length || CONTENT_PREVIEW_CHARS < content.length;
-  const location = tagLocation({server_id: tag.server_id, guild_id: tag.guild_id ?? null}, (ownerId) ? {id: ownerId, channel_id: item.user?.channel_id ?? null} : null);
+  const location = itemLocation(item);
   const directoryLink = (directory) ? (
     <Link
       to={`${Routes.DASHBOARD_ADMIN_TAGS}?${new URLSearchParams({q: `id:${tag.id}`, status: 'all'}).toString()}`}
@@ -134,11 +216,11 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
   ) : null;
 
   return (
-    <li className='card overflow-hidden'>
-      <div className='flex flex-col items-start gap-2 px-4 pt-4 pb-3 sm:flex-row sm:justify-between sm:gap-4'>
+    <div>
+      <div className='flex flex-col items-start gap-2 rounded-t-xl px-4 pt-4 pb-3 pr-14 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:pt-5 sm:pr-14'>
         <div className='w-full min-w-0 sm:flex-1'>
           <div className='flex flex-wrap items-center gap-2'>
-            <h2 className='min-w-0 truncate font-mono text-base font-semibold text-code'>{tag.name}</h2>
+            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-lg font-semibold text-code'>{tag.name}</h2>
             {(tag.nsfw) ? <NsfwBadge/> : null}
             {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
             {(tag.is_command) ? <Chip tone='brand'>Command</Chip> : null}
@@ -157,7 +239,7 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
         <LocationChip location={location} extra={(location.kind === 'personal') ? directoryLink : null}/>
       </div>
 
-      <div className='flex flex-wrap items-center gap-x-6 gap-y-3 border-y border-line bg-surface-2 px-4 py-2.5'>
+      <div className='flex flex-wrap items-center gap-x-6 gap-y-3 border-y border-line bg-surface-2 px-4 py-2.5 sm:px-6'>
         <div className='flex min-w-0 items-center gap-1'>
           <UserCell user={item.user} fallbackId={ownerId} size='sm'/>
           {(ownerId) ? (
@@ -175,7 +257,7 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
         </dl>
       </div>
 
-      <div className='px-4 pt-3 pb-4'>
+      <div className='px-4 pt-3 pb-5 sm:px-6'>
         <div className='mb-1.5 flex min-h-8 items-center justify-between gap-2'>
           <h3 className='section-label'>
             {(reference) ? 'Source content' : 'Content'}{' '}
@@ -194,7 +276,7 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
         <pre
           className={cn(
             'overflow-x-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg',
-            long && !expanded && 'max-h-36 overflow-y-hidden',
+            long && !expanded && 'max-h-72 overflow-y-hidden',
             'focus:border-line-strong focus:outline-none',
           )}
           {...selectAllScope}
@@ -203,7 +285,7 @@ function TagCard({ item, onSearch }: {item: AdminTagItem, onSearch: (query: stri
         </pre>
         <TagStoragePanel tagId={tag.id} className='mt-3'/>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -243,12 +325,13 @@ function Stat({ label, children }: {label: string, children: ReactNode}) {
 
 function ListSkeleton() {
   return (
-    <ul aria-hidden className='space-y-3'>
-      {Array.from({length: 5}, (_, i) => (
-        <li key={i} className='card p-4'>
-          <Skeleton className='h-5 w-40'/>
-          <Skeleton className='mt-3 h-8 w-56 bg-surface-2'/>
-          <Skeleton className='mt-3 h-16 w-full bg-surface-2'/>
+    <ul aria-hidden className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+      {Array.from({length: 9}, (_, i) => (
+        <li key={i} className='rounded-lg border border-line bg-surface p-4'>
+          <Skeleton className='h-4 w-32'/>
+          <Skeleton className='mt-4 h-6 w-40 bg-surface-2'/>
+          <Skeleton className='mt-3 h-3 w-1/2 bg-surface-2'/>
+          <Skeleton className='mt-6 h-3 w-full bg-surface-2'/>
         </li>
       ))}
     </ul>

@@ -16,6 +16,8 @@ import { config } from '@/config';
 import {
   ApiErrorCodes,
   CONTENT_FLAG_TEXT_MIMETYPE,
+  TAG_DIRECTORY_ASSET_SIZE_MAX,
+  TAG_DIRECTORY_ASSETS_MAX,
   TagDirectoryCategories,
   TagDirectoryVerificationStates,
   type AdminTagDirectoryItem,
@@ -30,6 +32,7 @@ import { toDate } from '@/lib/utils';
 import {
   adminUserEntries,
   createAdminDirectory,
+  createAdminGuilds,
   createAdminUsers,
   createBlobs,
   createContentFlags,
@@ -46,10 +49,12 @@ import {
   guildEditable,
   MOCK_TOKEN,
   mockUser,
+  sampleDirectoryAssets,
 } from './fixtures';
 
 
 const adminUsers = createAdminUsers();
+const guilds = createGuilds();
 
 const state = {
   settings: createSettings(),
@@ -65,7 +70,8 @@ const state = {
   tags: createTags(),
   variables: createVariables(),
   blobs: createBlobs(),
-  guilds: createGuilds(),
+  guilds,
+  adminGuilds: createAdminGuilds(guilds),
   directory: new Map<string, TagDirectoryItem>(),
   // kept in sessionStorage so it survives the reload needed to see it
   guildsError: (sessionStorage.getItem('dashboardMocks:guildsError') || null) as GuildsError,
@@ -182,10 +188,27 @@ route('GET', '/users/@me/tags', (_match, { query }) => {
     name: (a, b) => a.name.localeCompare(b.name) || newest(b, a),
     last_used: (a, b) => (b.last_used ? Date.parse(b.last_used) : -Infinity) - (a.last_used ? Date.parse(a.last_used) : -Infinity) || newest(a, b),
   };
+  const directory = query.get('directory');
+  const verified = query.get('directory_verified');
+  const serverId = query.get('server_id');
   const matching = state.tags
+    .filter((tag) => !serverId || tag.server_id === serverId)
     .filter((tag) => !needle || tag.name.includes(needle) || tag.content.toLowerCase().includes(needle))
+    .filter((tag) => {
+      const listing = state.directory.get(tag.id);
+      if (verified !== null) {
+        return listing?.verified === Number(verified);
+      }
+      return directory === null || !!listing === (directory === 'true');
+    })
     .sort(sorters[query.get('sort_by') || 'newest'] ?? newest);
-  const items = matching.filter((tag) => !before || BigInt(tag.id) < BigInt(before)).slice(offset, offset + limit);
+  const items = matching
+    .filter((tag) => !before || BigInt(tag.id) < BigInt(before))
+    .slice(offset, offset + limit)
+    .map((tag) => {
+      const listing = state.directory.get(tag.id);
+      return {...tag, directory: (listing) ? {title: listing.title, verified: listing.verified} : null};
+    });
   return {count: matching.length, items};
 });
 
@@ -261,8 +284,12 @@ state.tags.filter((tag) => tag.server_id === mockUser.id).slice(0, 2).forEach((t
   state.directory.set(tag.id, directoryItem(tag, {
     title: (i === 0) ? 'Says hello back' : 'Pong, but slower',
     description: (i === 0) ? 'Replies with a friendly hello. Pass text to add it after the greeting.' : '',
-    category: (i === 0) ? TagDirectoryCategories.FUN : TagDirectoryCategories.UTILITY,
+    category: (i === 0) ? TagDirectoryCategories.GAMES : TagDirectoryCategories.UTILITY,
   }, (i === 0) ? TagDirectoryVerificationStates.NOT_VERIFIED : TagDirectoryVerificationStates.PENDING_VERIFICATION));
+});
+// the one under review already has a file, so the media editor has something to move around
+[...state.directory.values()].filter((item) => item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION).forEach((item) => {
+  item.assets = sampleDirectoryAssets(item.id, item.tag.name, 1);
 });
 
 function directoryFields(body: Record<string, unknown>) {
@@ -286,9 +313,22 @@ function directoryFields(body: Record<string, unknown>) {
   return fields;
 }
 
+// mirrors `check_can_verify_tag_directory`
+function checkCanVerify(description: string | null, category: number | null) {
+  if (!description?.trim()) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_VERIFICATION_REQUIRES_DESCRIPTION, 'A description is required for verification');
+  }
+  if (!category || category === TagDirectoryCategories.OTHER) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_VERIFICATION_REQUIRES_CATEGORY, 'A category is required for verification');
+  }
+}
+
 function editDirectory(item: TagDirectoryItem, fields: DirectoryFields) {
   if ((fields.title !== undefined || fields.description !== undefined || fields.category !== undefined) && item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION) {
     throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_PENDING_VERIFICATION, 'Cannot edit a tag that is currently undergoing verification');
+  }
+  if ((fields.description !== undefined || fields.category !== undefined) && item.verified === TagDirectoryVerificationStates.VERIFIED) {
+    checkCanVerify(fields.description ?? item.description, fields.category ?? item.category);
   }
   // showing/hiding the content is allowed while under review, the listing's text isn't
   if (fields.content_public !== undefined) {
@@ -346,6 +386,79 @@ route('PATCH', '/users/@me/tags/(\\d+)/directory', ([ , tagId ], { body }) => {
   return editDirectory(item, directoryFields(body));
 });
 
+// mirrors `utilities/tools/tag_assets.py`: the owner changes the listing's media only while it's pending, each call answers
+// with the listing. Uploads are served from an object url so they show up.
+function findOwnPendingListing(tagId: string): TagDirectoryItem {
+  findTag(tagId);
+  const item = state.directory.get(tagId);
+  if (!item) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM, 'Unknown Tag Directory Item');
+  }
+  if (item.verified !== TagDirectoryVerificationStates.PENDING_VERIFICATION) {
+    throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_ASSETS_REQUIRE_PENDING, 'Assets can only be changed while the listing is pending verification');
+  }
+  return item;
+}
+
+function findListingAsset(item: TagDirectoryItem, assetId: string) {
+  const asset = item.assets.find((other) => other.id === assetId);
+  if (!asset) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ASSET, 'Unknown Tag Directory Asset');
+  }
+  return asset;
+}
+
+function renumberAssets(item: TagDirectoryItem) {
+  item.assets = item.assets.map((asset, position) => ({...asset, position}));
+}
+
+route('POST', '/users/@me/tags/(\\d+)/directory/assets', ([ , tagId ], { body }) => {
+  const item = findOwnPendingListing(tagId);
+  if (TAG_DIRECTORY_ASSETS_MAX <= item.assets.length) {
+    throw new MockError(400, ApiErrorCodes.MAX_TAG_DIRECTORY_ASSETS, `Tag directory listing has reached the asset limit (${TAG_DIRECTORY_ASSETS_MAX})`, {limit: TAG_DIRECTORY_ASSETS_MAX});
+  }
+  const file = (body.file instanceof File) ? body.file : null;
+  if (!file || !/^(image|video|audio)\//.test(file.type)) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FILE_TYPE, 'File must be an image, video, or audio', {mimetype: file?.type});
+  }
+  if (TAG_DIRECTORY_ASSET_SIZE_MAX < file.size) {
+    throw new MockError(400, ApiErrorCodes.FILE_TOO_LARGE, 'File too large');
+  }
+  const extension = (/\.([a-z0-9]{1,12})$/i.exec(file.name)?.[1] ?? 'bin').toLowerCase();
+  const id = String(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+  item.assets.push({
+    filename: `${id}.${extension}`,
+    filename_base: id,
+    id,
+    metadata: {duration: 0, extension, framecount: 1, height: 0, mimetype: file.type, size: file.size, width: 0},
+    position: item.assets.length,
+    urls: {cdn: URL.createObjectURL(file)},
+  });
+  return item;
+});
+
+route('PATCH', '/users/@me/tags/(\\d+)/directory/assets/(\\d+)', ([ , tagId, assetId ], { body }) => {
+  const item = findOwnPendingListing(tagId);
+  const asset = findListingAsset(item, assetId);
+  const position = Number(body.position);
+  if (!Number.isInteger(position) || position < 0 || TAG_DIRECTORY_ASSETS_MAX <= position) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'Invalid Form Body', {field: 'position'});
+  }
+  const rest = item.assets.filter((other) => other.id !== assetId);
+  rest.splice(Math.min(position, rest.length), 0, asset);
+  item.assets = rest;
+  renumberAssets(item);
+  return item;
+});
+
+route('DELETE', '/users/@me/tags/(\\d+)/directory/assets/(\\d+)', ([ , tagId, assetId ]) => {
+  const item = findOwnPendingListing(tagId);
+  findListingAsset(item, assetId);
+  item.assets = item.assets.filter((other) => other.id !== assetId);
+  renumberAssets(item);
+  return item;
+});
+
 // mirrors `request_tag_directory_verification`/`cancel_tag_directory_verification`, the tag is locked while pending
 route('POST', '/users/@me/tags/(\\d+)/directory/verify', ([ , tagId ]) => {
   const tag = findTag(tagId);
@@ -359,6 +472,7 @@ route('POST', '/users/@me/tags/(\\d+)/directory/verify', ([ , tagId ]) => {
   if (item.verified === TagDirectoryVerificationStates.VERIFIED) {
     throw new MockError(400, ApiErrorCodes.TAG_DIRECTORY_ALREADY_VERIFIED, 'Already Verified');
   }
+  checkCanVerify(item.description, item.category);
   item.verified = TagDirectoryVerificationStates.PENDING_VERIFICATION;
   tag.locked = true;
   return item;
@@ -506,6 +620,20 @@ function requireOwner(guildId: string) {
   return entry;
 }
 
+// `/admin/guilds/<id>/...` reuse the routes below: any server, every area editable (staff only)
+function findAdminGuild(guildId: string) {
+  requireBotOwner();
+  const item = state.adminGuilds.find((other) => other.entry.summary.id === guildId);
+  if (!item) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_SERVER, 'Unknown Server');
+  }
+  return item;
+}
+
+function scopedGuild(scope: string, guildId: string, area: keyof ReturnType<typeof guildEditable>) {
+  return (scope === 'admin') ? findAdminGuild(guildId).entry : requireEditable(guildId, area);
+}
+
 route('GET', '/users/@me/guilds', () => {
   throwGuildsError();
   return state.guilds.map((entry) => entry.summary);
@@ -533,8 +661,8 @@ route('PATCH', '/users/@me/guilds/(\\d+)', ([ , guildId ], { body }) => {
   return guildDetail(guildId);
 });
 
-route('PUT', '/users/@me/guilds/(\\d+)/prefixes', ([ , guildId ], { body }) => {
-  const { detail } = requireEditable(guildId, 'prefixes');
+route('PUT', '/(users/@me|admin)/guilds/(\\d+)/prefixes', ([ , scope, guildId ], { body }) => {
+  const { detail } = scopedGuild(scope, guildId, 'prefixes');
   const prefix = String(body.prefix || '').trim();
   if (!prefix || 128 < prefix.length) {
     throw new MockError(400, 50001, 'Prefix must be between 1 and 128 characters');
@@ -548,14 +676,14 @@ route('PUT', '/users/@me/guilds/(\\d+)/prefixes', ([ , guildId ], { body }) => {
   return detail.prefixes;
 });
 
-route('POST', '/users/@me/guilds/(\\d+)/prefixes/delete', ([ , guildId ], { body }) => {
-  const { detail } = requireEditable(guildId, 'prefixes');
+route('POST', '/(users/@me|admin)/guilds/(\\d+)/prefixes/delete', ([ , scope, guildId ], { body }) => {
+  const { detail } = scopedGuild(scope, guildId, 'prefixes');
   detail.prefixes = detail.prefixes.filter((item) => item.prefix !== body.prefix);
   return detail.prefixes;
 });
 
-route('(PUT|DELETE)', '/users/@me/guilds/(\\d+)/(allowlist|blocklist)/(\\d+)/(channel|role|user)', ([ , guildId, list, id, type ], { method }) => {
-  const { detail } = requireEditable(guildId, list as 'allowlist' | 'blocklist');
+route('(PUT|DELETE)', '/(users/@me|admin)/guilds/(\\d+)/(allowlist|blocklist)/(\\d+)/(channel|role|user)', ([ , scope, guildId, list, id, type ], { method }) => {
+  const { detail } = scopedGuild(scope, guildId, list as 'allowlist' | 'blocklist');
   const key = list as 'allowlist' | 'blocklist';
   detail[key] = detail[key].filter((item) => !(item.id === id && item.type === type));
   if (method === 'PUT') {
@@ -564,8 +692,8 @@ route('(PUT|DELETE)', '/users/@me/guilds/(\\d+)/(allowlist|blocklist)/(\\d+)/(ch
   return undefined;
 });
 
-route('(PUT|DELETE)', '/users/@me/guilds/(\\d+)/commands/([^/]+)/(allowlist|blocklist)/(\\d+)/(channel|guild|role|user)', ([ , guildId, rawCommand, list, id, type ], { method }) => {
-  const { detail } = requireEditable(guildId, 'commands');
+route('(PUT|DELETE)', '/(users/@me|admin)/guilds/(\\d+)/commands/([^/]+)/(allowlist|blocklist)/(\\d+)/(channel|guild|role|user)', ([ , scope, guildId, rawCommand, list, id, type ], { method }) => {
+  const { detail } = scopedGuild(scope, guildId, 'commands');
   const command = decodeURIComponent(rawCommand);
   if (command === 'notacommand') {
     throw new MockError(404, 10011, 'Unknown Command');
@@ -600,15 +728,15 @@ route('PUT', '/users/@me/guilds/(\\d+)/loggers', ([ , guildId ], { body }) => {
   return detail.loggers;
 });
 
-route('POST', '/users/@me/guilds/(\\d+)/loggers/delete', ([ , guildId ], { body }) => {
-  const { detail } = requireEditable(guildId, 'loggers');
+route('POST', '/(users/@me|admin)/guilds/(\\d+)/loggers/delete', ([ , scope, guildId ], { body }) => {
+  const { detail } = scopedGuild(scope, guildId, 'loggers');
   detail.loggers = detail.loggers.filter((item) => !(item.channel_id === String(body.channel_id) && item.type === Number(body.type)));
   return undefined;
 });
 
 
-route('GET', '/users/@me/guilds/(\\d+)/data/export', ([ , guildId ]) => {
-  const { detail } = requireOwner(guildId);
+route('GET', '/(users/@me|admin)/guilds/(\\d+)/data/export', ([ , scope, guildId ]) => {
+  const { detail } = (scope === 'admin') ? findAdminGuild(guildId).entry : requireOwner(guildId);
   // loggers never carry webhook urls here, same as the real api
   const tags = state.tags.filter((tag) => tag.server_id === guildId).map((tag) => ({
     ...tag,
@@ -627,8 +755,8 @@ route('GET', '/users/@me/guilds/(\\d+)/data/export', ([ , guildId ]) => {
   };
 });
 
-route('POST', '/users/@me/guilds/(\\d+)/data/delete', ([ , guildId ]) => {
-  const { detail } = requireOwner(guildId);
+route('POST', '/(users/@me|admin)/guilds/(\\d+)/data/delete', ([ , scope, guildId ]) => {
+  const { detail } = (scope === 'admin') ? findAdminGuild(guildId).entry : requireOwner(guildId);
   const before = state.tags.length;
   state.tags = state.tags.filter((tag) => tag.server_id !== guildId);
   Object.assign(detail, {
@@ -763,6 +891,7 @@ route('GET', '/admin/tags', (_match, { query }) => {
   const search = query.get('query') || '';
   const searchContent = parseBool(query.get('search_content')) === true;
   const nsfw = parseBool(query.get('nsfw'));
+  const serverId = query.get('server_id');
   const ref = (user: {id: string, username: string, discriminator: string, avatar: string | null}) => ({avatar: user.avatar, discriminator: user.discriminator, id: user.id, username: user.username});
   const items = [
     ...state.tags.map((tag) => ({
@@ -777,6 +906,7 @@ route('GET', '/admin/tags', (_match, { query }) => {
     })),
   ]
     .filter((item) => nsfw === null || item.tag.nsfw === nsfw)
+    .filter((item) => !serverId || item.tag.server_id === serverId)
     .filter((item) => {
       // a bare id also matches the server id here
       if (/^\d+$/.test(search.trim()) && item.tag.server_id === search.trim()) {
@@ -798,6 +928,14 @@ route('GET', '/admin/tags', (_match, { query }) => {
 
 route('PATCH', '/admin/tags/directory/(\\d+)', ([ , tagId ], { body }) => {
   requireBotOwner();
+  // checked against the listing as it'll be after this request, same as the api
+  const current = state.directory.get(tagId) ?? state.adminDirectory.find((other) => other.id === tagId);
+  if (current) {
+    const verified = (body.verified !== undefined) ? Number(body.verified) : current.verified;
+    if (verified === TagDirectoryVerificationStates.VERIFIED && (body.verified !== undefined || typeof body.description === 'string' || body.category !== undefined)) {
+      checkCanVerify((typeof body.description === 'string') ? body.description : current.description, (body.category !== undefined) ? Number(body.category) : current.category);
+    }
+  }
   // the mock user's own listing: apply the same edits to `state.directory` and its source tag
   const own = state.directory.get(tagId);
   if (own) {
@@ -902,7 +1040,7 @@ route('GET', '/admin/tags/(\\d+)/blobs', ([ , tagId ], { query }) => {
   return adminStoragePage(entries, query);
 });
 
-// mirror `GET /users/@me/tags/<tag_id>/servers` and `/admin/tags/<tag_id>/servers`: made-up servers that added the tag,
+// mirror `/admin/tags/<tag_id>/servers` (and the counts of `GET /users/@me/tags/<tag_id>/servers`): made-up servers that added the tag,
 // as many as the listing's `server_count` (a few of them are only counted, like DMs)
 const MOCK_SERVER_WORDS = ['Pixel', 'Meme', 'Cozy', 'Gamer', 'Art', 'Late Night', 'Study', 'Anime', 'Retro', 'Chill', 'Bot Testing', 'Music'];
 
@@ -921,12 +1059,14 @@ function tagServers(tagId: string) {
       names: (i % 5 === 2) ? [name, `${name}2`] : [name],
     };
   });
-  return {other_count: otherCount, server_count: total, servers, truncated: false};
+  const aliasCount = otherCount + servers.reduce((sum, server) => sum + server.names.length, 0);
+  return {alias_count: aliasCount, other_count: otherCount, server_count: total, servers, truncated: false};
 }
 
 route('GET', '/users/@me/tags/(\\d+)/servers', ([ , tagId ]) => {
   findTag(tagId);
-  return tagServers(tagId);
+  const { alias_count, server_count } = tagServers(tagId);
+  return {alias_count, server_count};
 });
 
 route('GET', '/admin/tags/(\\d+)/servers', ([ , tagId ]) => {
@@ -1154,6 +1294,63 @@ route('GET', '/admin/content-flags/(\\d+)/matches', ([ , flagId ]) => {
   };
 });
 
+// a placeholder image instead of the source media, so its sha256 never matches (shows the "not the same file" warning)
+// the media viewer's jobs: queued when started, then started on the first `GET /jobs/<id>` and finished on the second,
+// which hands over the file once and deletes the job (like the api)
+const mediaJobs = new Map<string, {flagId: string, polls: number}>();
+
+function mockJobResponse(id: string, status: string, response: unknown = null) {
+  return {id, position: 0, status, user_id: null, result: {error: null, error_code: null, response, took: 0}};
+}
+
+route('POST', '/admin/content-flags/(\\d+)/media', ([ , flagId ]) => {
+  requireBotOwner();
+  const flag = state.contentFlags.find((other) => other.id === flagId);
+  if (!flag) {
+    throw new MockError(404, 10000, 'Unknown Content Flag');
+  }
+  if (['unsafe_child_safety', 'review_child_safety'].includes(flag.category ?? '') || (flag.flagged ?? []).includes('child_safety') || (flag.flagged_for_review ?? []).includes('child_safety')) {
+    throw new MockError(403, ApiErrorCodes.MISSING_ACCESS, 'Media flagged for child safety can\'t be viewed');
+  }
+  if (!flag.source_url) {
+    throw new MockError(404, 40008, 'Content flag has no source url');
+  }
+  const jobId = crypto.randomUUID();
+  mediaJobs.set(jobId, {flagId, polls: 0});
+  return mockJobResponse(jobId, 'queued');
+});
+
+// a placeholder image instead of the source media, so its sha256 never matches (shows the "not the same file" warning)
+route('GET', '/jobs/([0-9a-f-]+)', ([ , jobId ]) => {
+  const job = mediaJobs.get(jobId);
+  if (!job) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_JOB, 'Unknown Job');
+  }
+  job.polls += 1;
+  if (job.polls < 2) {
+    return mockJobResponse(jobId, 'started');
+  }
+  mediaJobs.delete(jobId);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#5865f2"/>` +
+    `<text x="320" y="190" font-family="sans-serif" font-size="32" fill="#fff" text-anchor="middle">mock media #${job.flagId}</text></svg>`;
+  // the api only extracts frames for multi-frame media
+  const flag = state.contentFlags.find((other) => other.id === job.flagId);
+  const flaggedFrames = ((flag && 1 < (flag.frames ?? 0)) ? (flag.frames_flagged ?? []) : []).slice(0, 8).map((frame) => ({
+    frame,
+    mimetype: 'image/svg+xml',
+    timestamp: frame * 2,
+    value: btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#eb459e"/>` +
+      `<text x="320" y="190" font-family="sans-serif" font-size="32" fill="#fff" text-anchor="middle">frame ${frame}</text></svg>`),
+  }));
+  return mockJobResponse(jobId, 'finished', {file: {value: btoa(svg), metadata: {mimetype: 'image/svg+xml'}}, flagged_frames: flaggedFrames});
+});
+
+route('DELETE', '/jobs/([0-9a-f-]+)', ([ , jobId ]) => {
+  if (!mediaJobs.delete(jobId)) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_JOB, 'Unknown Job');
+  }
+});
+
 route('PATCH', '/admin/content-flags/(\\d+)', ([ , flagId ], { body }) => {
   requireBotOwner();
   const flag = state.contentFlags.find((other) => other.id === flagId);
@@ -1226,7 +1423,9 @@ route('GET', '/admin/reports', (_match, { query }) => {
   const status = query.get('status');
   const userId = query.get('user_id');
   const targetId = query.get('target_id');
+  const guildId = query.get('guild_id');
   const matching = state.reports
+    .filter((report) => !guildId || reportInGuild(report, guildId))
     .filter((report) => type === null || type === '' || report.type === Number(type))
     .filter((report) => status === null || status === '' || report.status === Number(status))
     .filter((report) => !userId || report.user.id === userId)
@@ -1254,6 +1453,91 @@ route('PATCH', '/admin/reports/(\\d+)', ([ , reportId ], { body }) => {
   report.reviewed_at = new Date().toISOString();
   report.reviewed_by = mockUser.id;
   return report;
+});
+
+
+// sent from the server, or a server report about it (same as the api's `guild_id` filter)
+function reportInGuild(report: {guild_id: string | null, target_id: string | null, type: number}, guildId: string) {
+  return report.guild_id === guildId || (report.type === 2 && report.target_id === guildId);
+}
+
+
+/* admin servers */
+
+function adminGuildDetail(guildId: string) {
+  const item = findAdminGuild(guildId);
+  // opening one the bot never saved creates its row from Discord, like the api
+  item.saved = true;
+  const { entry } = item;
+  return {
+    ...entry.detail,
+    bot: item.bot,
+    counts: {
+      content_flags: state.contentFlags.filter((flag) => flag.guild_id === guildId).length,
+      reminders: state.reminders.filter((reminder) => reminder.guild_id === guildId).length,
+      reports: state.reports.filter((report) => reportInGuild(report, guildId)).length,
+      tags: state.tags.filter((tag) => tag.server_id === guildId).length,
+    },
+    editable: {allowlist: true, blocklist: true, commands: true, loggers: true, prefixes: true, settings: true},
+    owner: false,
+    permissions: '0',
+  };
+}
+
+route('GET', '/admin/guilds', (_match, { query }) => {
+  requireBotOwner();
+  const search = (query.get('query') || '').trim().toLowerCase();
+  const inBot = parseBool(query.get('in_bot'));
+  const blocked = parseBool(query.get('blocked'));
+  const byId = (a: string, b: string) => (BigInt(a) > BigInt(b)) ? 1 : (BigInt(a) < BigInt(b)) ? -1 : 0;
+  const items = state.adminGuilds
+    .map(({ entry, bot, saved }) => ({
+      blocked: entry.detail.blocked,
+      blocked_reason: entry.detail.blocked_reason,
+      bot,
+      icon: (saved) ? entry.detail.icon : null,
+      id: entry.detail.id,
+      name: (saved) ? entry.detail.name : null,
+    }))
+    .filter((item) => !search || (item.name ?? '').toLowerCase().includes(search) || item.id === search)
+    .filter((item) => inBot === null || !!item.bot === inBot)
+    .filter((item) => blocked === null || item.blocked === blocked);
+  const sortBy = query.get('sort_by');
+  items.sort((a, b) => {
+    if (sortBy === 'name') {
+      return (a.name === null) ? 1 : (b.name === null) ? -1 : a.name.localeCompare(b.name) || byId(a.id, b.id);
+    }
+    return (sortBy === 'oldest') ? byId(a.id, b.id) : byId(b.id, a.id);
+  });
+  return pageOf(items, query);
+});
+
+route('GET', '/admin/guilds/(\\d+)', ([ , guildId ]) => adminGuildDetail(guildId));
+
+route('PATCH', '/admin/guilds/(\\d+)', ([ , guildId ], { body }) => {
+  const { detail } = findAdminGuild(guildId).entry;
+  const settingsKeys = ['ml_diffusion_model', 'ml_llm_model', 'ml_llm_personality', 'response_display'] as const;
+  for (const key of settingsKeys) {
+    if (key in body) {
+      (detail.settings as unknown as Record<string, unknown>)[key] = body[key];
+    }
+  }
+  if ('locale' in body) {
+    detail.locale = (body.locale as string | null) || null;
+  }
+  if ('timezone' in body) {
+    detail.timezone = (body.timezone as string | null) || null;
+  }
+  if (typeof body.blocked === 'boolean' && body.blocked !== detail.blocked) {
+    detail.blocked = body.blocked;
+    if (!body.blocked) {
+      detail.blocked_reason = null;
+    }
+  }
+  if (detail.blocked && 'blocked_reason' in body) {
+    detail.blocked_reason = (typeof body.blocked_reason === 'string' && body.blocked_reason) ? body.blocked_reason : null;
+  }
+  return adminGuildDetail(guildId);
 });
 
 
@@ -1398,7 +1682,9 @@ route('GET', '/tags/directory', (_match, { query }) => {
     .sort((a, b) => (BigInt(b.id) > BigInt(a.id)) ? 1 : -1)
     .filter((item) => category === undefined || item.category === category)
     .filter((item) => matchesDirectorySearch(search, item.tag, [item.title, item.tag.name, item.description]))
-    .filter((item) => !before || BigInt(item.id) < BigInt(before));
+    .filter((item) => !before || BigInt(item.id) < BigInt(before))
+    // `TagDirectory.to_dict()`: the media only goes public once the listing is verified
+    .map((item) => (item.verified === TagDirectoryVerificationStates.VERIFIED) ? item : {...item, assets: []});
   return {count: items.length, items: items.slice(0, limit)};
 });
 

@@ -1,9 +1,10 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router';
 
 import { Routes } from '@/config';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminUserRef } from '@/lib/api';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { cn, formatDate, formatExactDateTime, toDate } from '@/lib/utils';
@@ -12,6 +13,11 @@ import { cn, formatDate, formatExactDateTime, toDate } from '@/lib/utils';
 // the Tags tab searching `query`, like `user:<id>`
 export function adminTagsPath(query: string): string {
   return `${Routes.DASHBOARD_ADMIN_ALL_TAGS}?${new URLSearchParams({q: query}).toString()}`;
+}
+
+// the admin server list with that server open over it
+export function adminServerPath(guildId: string): string {
+  return `${Routes.DASHBOARD_ADMIN_SERVERS}?${new URLSearchParams({server: guildId}).toString()}`;
 }
 
 
@@ -341,5 +347,53 @@ export function DetailList({ items }: {items: Array<[ReactNode, ReactNode] | nul
         </div>
       ))}
     </dl>
+  );
+}
+
+
+// edits locally and lands in the URL once typing stops (and only when it's a snowflake)
+export function IdFilter({ className, label, placeholder, value, onChange }: {
+  className?: string,
+  label: string,
+  placeholder: string,
+  value: string,
+  onChange: (value: string | null) => void,
+}) {
+  const [ input, setInput ] = useState(value);
+  useEffect(() => setInput(value), [value]);
+  const debounced = useDebouncedValue(input.trim(), 400);
+  useEffect(() => {
+    if (debounced !== value && (!debounced || /^\d+$/.test(debounced))) {
+      onChange(debounced);
+    }
+    // only when the typed value settles
+  }, [debounced]);
+
+  return (
+    <label className={cn('text-sm', className)}>
+      <span className='mb-1 block text-subtle'>{label}</span>
+      <span className='relative block'>
+        <input
+          className='input pr-9 font-mono'
+          inputMode='numeric'
+          placeholder={placeholder}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+        />
+        {(input) ? (
+          <button
+            type='button'
+            aria-label={`Clear ${label.toLowerCase()} filter`}
+            className='absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer rounded p-1 text-subtle hover:text-fg'
+            onClick={() => {
+              setInput('');
+              onChange(null);
+            }}
+          >
+            <X className='size-4'/>
+          </button>
+        ) : null}
+      </span>
+    </label>
   );
 }

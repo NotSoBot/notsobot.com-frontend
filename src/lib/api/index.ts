@@ -1,8 +1,12 @@
-import { ApiEndpoints } from './endpoints';
+import { ApiEndpoints, guildEndpoints, type GuildScope } from './endpoints';
 import { ApiRequestError, apiRequest } from './client';
-import { ApiErrorCodes } from './types';
+import { ApiErrorCodes, toTagDirectoryCategory } from './types';
 import type {
   AdminEntitlementsPage,
+  AdminGuild,
+  AdminGuildPatch,
+  AdminGuildsPage,
+  AdminGuildsSortBy,
   AdminTagBlob,
   AdminTagDirectoryItem,
   AdminTagDirectoryPage,
@@ -34,6 +38,7 @@ import type {
   ReportsPage,
   GuildListKind,
   InfoDiscord,
+  JobResponse,
   Tag,
   TagAsset,
   TagBlobs,
@@ -42,8 +47,10 @@ import type {
   TagDirectoryListingInput,
   TagDirectoryPage,
   TagPatch,
+  TagServerCounts,
   TagServers,
   TagsPage,
+  MeTagsDirectoryFilter,
   MeTagsSortBy,
   TagStorageScope,
   TagStorageType,
@@ -67,6 +74,16 @@ import type {
 export * from './client';
 export * from './endpoints';
 export * from './types';
+
+
+// every listing the api returns goes through these, so pages only ever see categories they know
+function normalizeListing<T extends {category: number}>(item: T): T {
+  return {...item, category: toTagDirectoryCategory(item.category)};
+}
+
+function normalizeListings<T extends {items: Array<{category: number}>}>(page: T): T {
+  return {...page, items: page.items.map(normalizeListing)};
+}
 
 
 export const api = {
@@ -110,7 +127,7 @@ export const api = {
         offset: params.offset || undefined,
         limit: params.limit,
       },
-    });
+    }).then(normalizeListings);
   },
 
   // There's no public single-item endpoint; the directory is keyed and ordered by tag id,
@@ -125,7 +142,7 @@ export const api = {
       query: {before: (BigInt(id) + 1n).toString(), limit: 1},
     });
     const item = page.items[0];
-    return (item && item.id === id) ? item : null;
+    return (item && item.id === id) ? normalizeListing(item) : null;
   },
 
   fetchMe: (signal?: AbortSignal) => {
@@ -152,12 +169,15 @@ export const api = {
   },
 
   // `before` only works with the default (newest) sort, `offset` pages any of them
-  fetchMeTags: (params: {query?: string, sortBy?: MeTagsSortBy, before?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
+  fetchMeTags: (params: {query?: string, sortBy?: MeTagsSortBy, directory?: MeTagsDirectoryFilter, serverId?: string | null, before?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
     return apiRequest<TagsPage>(ApiEndpoints.USER_ME_TAGS, {
       signal,
       query: {
         query: params.query || undefined,
         sort_by: (params.sortBy && params.sortBy !== 'newest') ? params.sortBy : undefined,
+        directory: params.directory?.listed,
+        directory_verified: (params.directory?.listed) ? params.directory.verified : undefined,
+        server_id: params.serverId || undefined,
         before: params.before,
         offset: params.offset || undefined,
         limit: params.limit,
@@ -176,7 +196,7 @@ export const api = {
   // null when the tag isn't on the directory
   fetchMeTagDirectory: async (tagId: string, signal?: AbortSignal): Promise<TagDirectoryItem | null> => {
     try {
-      return await apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {signal});
+      return normalizeListing(await apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {signal}));
     } catch (error) {
       if (error instanceof ApiRequestError && error.code === ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ITEM) {
         return null;
@@ -187,21 +207,38 @@ export const api = {
 
   // publishes the tag (moving it to your personal tags), or edits the listing if it's already there
   publishMeTagDirectory: (tagId: string, body: TagDirectoryListingInput) => {
-    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {method: 'PUT', body});
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {method: 'PUT', body}).then(normalizeListing);
   },
 
   patchMeTagDirectory: (tagId: string, body: TagDirectoryListingInput) => {
-    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY(tagId), {method: 'PATCH', body}).then(normalizeListing);
   },
 
   // puts an unverified listing up for review, which locks the tag
   requestMeTagDirectoryVerification: (tagId: string) => {
-    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_VERIFY(tagId), {method: 'POST'});
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_VERIFY(tagId), {method: 'POST'}).then(normalizeListing);
   },
 
   // only while it's still pending, unlocks the tag again
   cancelMeTagDirectoryVerification: (tagId: string) => {
-    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_VERIFY(tagId), {method: 'DELETE'});
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_VERIFY(tagId), {method: 'DELETE'}).then(normalizeListing);
+  },
+
+  // the listing's assets can only change while verification is pending; each answers with the whole listing
+  uploadMeTagDirectoryAsset: (tagId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    // the api probes the media first, which can take a while for videos
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_ASSETS(tagId), {method: 'POST', body, timeout: 120_000}).then(normalizeListing);
+  },
+
+  // `position` 0 is the cover
+  moveMeTagDirectoryAsset: (tagId: string, assetId: string, position: number) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_ASSET(tagId, assetId), {method: 'PATCH', body: {position}}).then(normalizeListing);
+  },
+
+  deleteMeTagDirectoryAsset: (tagId: string, assetId: string) => {
+    return apiRequest<TagDirectoryItem>(ApiEndpoints.USER_ME_TAG_DIRECTORY_ASSET(tagId, assetId), {method: 'DELETE'}).then(normalizeListing);
   },
 
   deleteMeTag: (tagId: string) => {
@@ -225,9 +262,9 @@ export const api = {
     return apiRequest<TagBlobs>(ApiEndpoints.USER_ME_TAG_BLOBS(tagId), {signal, query: {...scope}});
   },
 
-  // the servers that added the tag, only for its owner (staff use `fetchAdminTagServers`)
+  // how many servers added the tag, only for its owner and counts only (which servers is `fetchAdminTagServers`, staff only)
   fetchMeTagServers: (tagId: string, signal?: AbortSignal) => {
-    return apiRequest<TagServers>(ApiEndpoints.USER_ME_TAG_SERVERS(tagId), {signal});
+    return apiRequest<TagServerCounts>(ApiEndpoints.USER_ME_TAG_SERVERS(tagId), {signal});
   },
 
   // replaces every blob in the given scope (blobs left out are removed)
@@ -278,28 +315,29 @@ export const api = {
     return apiRequest<UserGuild>(ApiEndpoints.USER_ME_GUILD(guildId), {signal});
   },
 
-  patchMeGuild: (guildId: string, body: UserGuildPatch) => {
-    return apiRequest<unknown>(ApiEndpoints.USER_ME_GUILD(guildId), {method: 'PATCH', body});
+  // the server edits below go through `/users/@me/guilds` (`scope: 'me'`) or `/admin/guilds` (`'admin'`), same bodies
+  patchGuild: (scope: GuildScope, guildId: string, body: UserGuildPatch) => {
+    return apiRequest<unknown>(guildEndpoints(scope, guildId).GUILD, {method: 'PATCH', body});
   },
 
-  addMeGuildPrefix: (guildId: string, prefix: string) => {
-    return apiRequest<unknown>(ApiEndpoints.USER_ME_GUILD_PREFIXES(guildId), {method: 'PUT', body: {prefix}});
+  addGuildPrefix: (scope: GuildScope, guildId: string, prefix: string) => {
+    return apiRequest<unknown>(guildEndpoints(scope, guildId).PREFIXES, {method: 'PUT', body: {prefix}});
   },
 
-  removeMeGuildPrefix: (guildId: string, prefix: string) => {
-    return apiRequest<unknown>(ApiEndpoints.USER_ME_GUILD_PREFIXES_DELETE(guildId), {method: 'POST', body: {prefix}});
+  removeGuildPrefix: (scope: GuildScope, guildId: string, prefix: string) => {
+    return apiRequest<unknown>(guildEndpoints(scope, guildId).PREFIXES_DELETE, {method: 'POST', body: {prefix}});
   },
 
-  setMeGuildListEntry: (guildId: string, list: GuildListKind, id: string, type: string, present: boolean) => {
-    return apiRequest<void>(ApiEndpoints.USER_ME_GUILD_LIST(guildId, list, id, type), {method: (present) ? 'PUT' : 'DELETE'});
+  setGuildListEntry: (scope: GuildScope, guildId: string, list: GuildListKind, id: string, type: string, present: boolean) => {
+    return apiRequest<void>(guildEndpoints(scope, guildId).LIST(list, id, type), {method: (present) ? 'PUT' : 'DELETE'});
   },
 
-  setMeGuildCommandListEntry: (guildId: string, list: GuildListKind, command: string, id: string, type: string, present: boolean) => {
-    return apiRequest<void>(ApiEndpoints.USER_ME_GUILD_COMMAND_LIST(guildId, command, list, id, type), {method: (present) ? 'PUT' : 'DELETE'});
+  setGuildCommandListEntry: (scope: GuildScope, guildId: string, list: GuildListKind, command: string, id: string, type: string, present: boolean) => {
+    return apiRequest<void>(guildEndpoints(scope, guildId).COMMAND_LIST(command, list, id, type), {method: (present) ? 'PUT' : 'DELETE'});
   },
 
-  removeMeGuildLogger: (guildId: string, body: {channel_id: string, type: number}) => {
-    return apiRequest<void>(ApiEndpoints.USER_ME_GUILD_LOGGERS_DELETE(guildId), {method: 'POST', body});
+  removeGuildLogger: (scope: GuildScope, guildId: string, body: {channel_id: string, type: number}) => {
+    return apiRequest<void>(guildEndpoints(scope, guildId).LOGGERS_DELETE, {method: 'POST', body});
   },
 
   // adds a tag directory tag to a server (`guild_id`) or your DMs with the bot (no `guild_id`), as an alias
@@ -307,13 +345,13 @@ export const api = {
     return apiRequest<Tag>(ApiEndpoints.USER_ME_TAG_ADD(tagId), {method: 'POST', body});
   },
 
-  // server owners only
-  exportMeGuildData: (guildId: string) => {
-    return apiRequest<UserGuildDataExport>(ApiEndpoints.USER_ME_GUILD_DATA_EXPORT(guildId), {timeout: 60 * 1000});
+  // server owners only (`'me'`); any staff can export and bot owners delete (`'admin'`)
+  exportGuildData: (scope: GuildScope, guildId: string) => {
+    return apiRequest<UserGuildDataExport>(guildEndpoints(scope, guildId).DATA_EXPORT, {timeout: 60 * 1000});
   },
 
-  deleteMeGuildData: (guildId: string) => {
-    return apiRequest<UserGuildDataDelete>(ApiEndpoints.USER_ME_GUILD_DATA_DELETE(guildId), {method: 'POST', timeout: 60 * 1000});
+  deleteGuildData: (scope: GuildScope, guildId: string) => {
+    return apiRequest<UserGuildDataDelete>(guildEndpoints(scope, guildId).DATA_DELETE, {method: 'POST', timeout: 60 * 1000});
   },
 
   requestMeDataExport: () => {
@@ -329,6 +367,7 @@ export const api = {
 
   fetchAdminTags: (params: {
     query?: string,
+    serverId?: string,
     searchContent?: boolean,
     sortBy?: AdminTagsSortBy,
     nsfw?: boolean | null,
@@ -339,6 +378,7 @@ export const api = {
       signal,
       query: {
         query: params.query || undefined,
+        server_id: params.serverId || undefined,
         search_content: (params.searchContent) ? true : undefined,
         sort_by: params.sortBy,
         nsfw: params.nsfw,
@@ -348,11 +388,11 @@ export const api = {
     });
   },
 
-  // read-only, every storage the tag has (filtered to one storage type with `storageType`)
-  fetchAdminTagVariables: (tagId: string, params: {storageType?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+  // read-only, every storage the tag has (filtered to one storage type with `storageType`, `query` matches part of a storage id or a variable's name/value)
+  fetchAdminTagVariables: (tagId: string, params: {storageType?: number | null, query?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
     return apiRequest<AdminTagStoragePage<AdminTagVariable>>(ApiEndpoints.ADMIN_TAG_VARIABLES(tagId), {
       signal,
-      query: {storage_type: params.storageType ?? undefined, offset: params.offset || undefined, limit: params.limit},
+      query: {storage_type: params.storageType ?? undefined, query: params.query || undefined, offset: params.offset || undefined, limit: params.limit},
     });
   },
 
@@ -360,10 +400,10 @@ export const api = {
     return apiRequest<TagServers>(ApiEndpoints.ADMIN_TAG_SERVERS(tagId), {signal});
   },
 
-  fetchAdminTagBlobs: (tagId: string, params: {storageType?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+  fetchAdminTagBlobs: (tagId: string, params: {storageType?: number | null, query?: string, offset?: number, limit?: number}, signal?: AbortSignal) => {
     return apiRequest<AdminTagStoragePage<AdminTagBlob>>(ApiEndpoints.ADMIN_TAG_BLOBS(tagId), {
       signal,
-      query: {storage_type: params.storageType ?? undefined, offset: params.offset || undefined, limit: params.limit},
+      query: {storage_type: params.storageType ?? undefined, query: params.query || undefined, offset: params.offset || undefined, limit: params.limit},
     });
   },
 
@@ -387,12 +427,12 @@ export const api = {
         offset: params.offset || undefined,
         limit: params.limit,
       },
-    });
+    }).then(normalizeListings);
   },
 
   // `content` rewrites the tag even though it's locked (verified/pending)
   patchAdminTagDirectory: (tagId: string, body: {verified?: number, content?: string, name?: string, title?: string, description?: string, category?: number}) => {
-    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body});
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {method: 'PATCH', body}).then(normalizeListing);
   },
 
   // archives a file, or whatever `url` points at, for the tag; the content isn't touched
@@ -492,6 +532,22 @@ export const api = {
     return apiRequest<ContentFlagMatches>(ApiEndpoints.ADMIN_CONTENT_FLAG_MATCHES(flagId), {signal});
   },
 
+  // starts fetching a flag's source media (by the api, never the browser) like `.download` does, it waits a couple
+  // seconds for it; poll `fetchJob` if it's still going. The file comes back once, base64 in
+  // `result.response.file.value`, and nothing is kept or uploaded
+  startAdminContentFlagMedia: (flagId: string, signal?: AbortSignal) => {
+    return apiRequest<JobResponse>(ApiEndpoints.ADMIN_CONTENT_FLAG_MEDIA(flagId), {method: 'POST', signal});
+  },
+
+  fetchJob: (jobId: string, signal?: AbortSignal) => {
+    return apiRequest<JobResponse>(ApiEndpoints.JOB(jobId), {signal});
+  },
+
+  // stops it if it's queued or running, then deletes it
+  deleteJob: (jobId: string) => {
+    return apiRequest<void>(ApiEndpoints.JOB(jobId), {method: 'DELETE'});
+  },
+
   patchAdminContentFlag: (flagId: string, body: ContentFlagPatch) => {
     return apiRequest<ContentFlag>(ApiEndpoints.ADMIN_CONTENT_FLAG(flagId), {method: 'PATCH', body});
   },
@@ -510,6 +566,7 @@ export const api = {
     status?: number | null,
     userId?: string,
     targetId?: string,
+    guildId?: string,
     offset?: number,
     limit?: number,
   }, signal?: AbortSignal) => {
@@ -520,6 +577,7 @@ export const api = {
         status: params.status,
         user_id: params.userId || undefined,
         target_id: params.targetId || undefined,
+        guild_id: params.guildId || undefined,
         offset: params.offset || undefined,
         limit: params.limit,
       },
@@ -565,5 +623,34 @@ export const api = {
 
   patchAdminVoice: (voiceId: string, body: VoicePatch) => {
     return apiRequest<AdminVoice>(ApiEndpoints.ADMIN_VOICE(voiceId), {method: 'PATCH', body});
+  },
+
+  fetchAdminGuilds: (params: {
+    query?: string,
+    inBot?: boolean | null,
+    blocked?: boolean | null,
+    sortBy?: AdminGuildsSortBy,
+    offset?: number,
+    limit?: number,
+  }, signal?: AbortSignal) => {
+    return apiRequest<AdminGuildsPage>(ApiEndpoints.ADMIN_GUILDS, {
+      signal,
+      query: {
+        query: params.query || undefined,
+        in_bot: params.inBot ?? undefined,
+        blocked: params.blocked ?? undefined,
+        sort_by: params.sortBy,
+        offset: params.offset || undefined,
+        limit: params.limit,
+      },
+    });
+  },
+
+  fetchAdminGuild: (guildId: string, signal?: AbortSignal) => {
+    return apiRequest<AdminGuild>(ApiEndpoints.ADMIN_GUILD(guildId), {signal});
+  },
+
+  patchAdminGuild: (guildId: string, body: AdminGuildPatch) => {
+    return apiRequest<AdminGuild>(ApiEndpoints.ADMIN_GUILD(guildId), {method: 'PATCH', body});
   },
 };

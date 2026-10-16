@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Clock, EyeOff, Pencil, ShieldCheck, ShieldX } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { isStaff, useAuth } from '@/auth';
+import { Modal } from '@/components/ui/Modal';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Spinner } from '@/components/ui/Spinner';
 import { Routes } from '@/config';
@@ -13,6 +14,7 @@ import {
   TagDirectoryVerificationStates,
   type TagDirectoryItem,
   type TagDirectoryListingInput,
+  type TagServer,
 } from '@/lib/api';
 import {
   errorMessage,
@@ -20,7 +22,8 @@ import {
   useMeTagQuery,
   usePatchAdminTagDirectoryMutation,
   usePatchMeTagDirectoryMutation,
-  useTagServersQuery,
+  useAdminTagServersQuery,
+  useTagServerCountsQuery,
 } from '@/lib/api/dashboardQueries';
 import { queryKeys } from '@/lib/api/queries';
 import { cn, formatDate } from '@/lib/utils';
@@ -124,13 +127,88 @@ export function HiddenContentSection({ item, access }: {item: TagDirectoryItem, 
 // past this many servers the list gets a filter box
 const SERVERS_FILTER_MIN = 8;
 
-// The servers that added the tag (as an alias), to the owner and staff only. Everyone else just sees the count.
+// Where the tag has been added (as an alias). Staff get the servers, its owner only counts: server admins adding a
+// directory tag don't expect its author to see their server. Everyone else just sees the listing's server count.
 export function TagServersSection({ item, access }: {item: TagDirectoryItem, access: ListingAccess}) {
-  const { data, isPending, isError, error, refetch } = useTagServersQuery(item.id, access);
-  const [ filter, setFilter ] = useState('');
-  if (!access.owner && !access.staff) {
-    return null;
+  if (access.staff) {
+    return <TagServersList item={item}/>;
   }
+  if (access.owner) {
+    return <TagServerCounts item={item}/>;
+  }
+  return null;
+}
+
+
+function ServersHeading({ note }: {note: string}) {
+  return (
+    <div className='mb-2 flex items-baseline justify-between gap-3'>
+      <h3 className='section-label'>Servers</h3>
+      <span className='flex items-center gap-1.5 text-xs text-subtle'>
+        <EyeOff aria-hidden className='size-3.5'/>
+        {note}
+      </span>
+    </div>
+  );
+}
+
+
+// the loading / error box for either query, null once there's data
+function ServersQueryState({ query }: {query: {isPending: boolean, isError: boolean, error: unknown, refetch: () => unknown}}) {
+  if (query.isPending) {
+    return <div className='flex h-24 items-center justify-center rounded-md border border-line bg-deep'><Spinner className='size-5'/></div>;
+  }
+  if (query.isError) {
+    return (
+      <div className='rounded-md border border-line bg-deep p-3 text-sm text-muted'>
+        {errorMessage(query.error, 'Couldn’t load the servers.')}{' '}
+        <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => query.refetch()}>Retry</button>
+      </div>
+    );
+  }
+  return null;
+}
+
+
+function TagServerCounts({ item }: {item: TagDirectoryItem}) {
+  const query = useTagServerCountsQuery(item.id);
+  const { data } = query;
+  return (
+    <section>
+      <ServersHeading note='Only you and NotSoBot staff can see this'/>
+      {(data) ? (
+        <>
+          <div className='grid grid-cols-2 gap-2'>
+            <div className='rounded-md border border-line bg-deep p-3'>
+              <p className='text-xs text-subtle'>Servers</p>
+              <p className='text-xl font-semibold text-white tabular-nums'>{data.server_count.toLocaleString()}</p>
+            </div>
+            <div className='rounded-md border border-line bg-deep p-3'>
+              <p className='text-xs text-subtle'>Names</p>
+              <p className='text-xl font-semibold text-white tabular-nums'>{data.alias_count.toLocaleString()}</p>
+            </div>
+          </div>
+          <p className='mt-2 text-xs text-subtle'>
+            {(data.server_count) ? (
+              <>
+                Added to {data.server_count.toLocaleString()} server{(data.server_count === 1) ? '' : 's'} or DM{(data.server_count === 1) ? '' : 's'}
+                {(data.alias_count > data.server_count) ? ', some of them under more than one name' : null}.{' '}
+              </>
+            ) : 'No servers have added this tag yet. '}
+            Which servers added it is kept private.
+          </p>
+        </>
+      ) : <ServersQueryState query={query}/>}
+    </section>
+  );
+}
+
+
+function TagServersList({ item }: {item: TagDirectoryItem}) {
+  const query = useAdminTagServersQuery(item.id);
+  const { data } = query;
+  const [ filter, setFilter ] = useState('');
+  const [ namesOf, setNamesOf ] = useState<TagServer | null>(null);
 
   const search = filter.trim().toLowerCase();
   const servers = (data && search) ? data.servers.filter((server) => {
@@ -139,20 +217,9 @@ export function TagServersSection({ item, access }: {item: TagDirectoryItem, acc
 
   return (
     <section>
-      <div className='mb-2 flex items-baseline justify-between gap-3'>
-        <h3 className='section-label'>Servers</h3>
-        <span className='flex items-center gap-1.5 text-xs text-subtle'>
-          <EyeOff aria-hidden className='size-3.5'/>
-          {(access.owner) ? 'Only you and NotSoBot staff can see this' : 'Only the owner and staff can see this'}
-        </span>
-      </div>
-      {(isPending) ? (
-        <div className='flex h-24 items-center justify-center rounded-md border border-line bg-deep'><Spinner className='size-5'/></div>
-      ) : (isError) ? (
-        <div className='rounded-md border border-line bg-deep p-3 text-sm text-muted'>
-          {errorMessage(error, 'Couldn’t load the servers.')}{' '}
-          <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => refetch()}>Retry</button>
-        </div>
+      <ServersHeading note='Only NotSoBot staff can see this'/>
+      {(!data) ? (
+        <ServersQueryState query={query}/>
       ) : (!data.servers.length) ? (
         <p className='rounded-md border border-line bg-deep p-3 text-sm text-muted'>
           {(data.other_count) ? 'No servers NotSoBot knows about have added this tag yet.' : 'No servers have added this tag yet.'}
@@ -171,18 +238,31 @@ export function TagServersSection({ item, access }: {item: TagDirectoryItem, acc
           {(servers?.length) ? (
             <ul className='max-h-72 divide-y divide-line overflow-auto rounded-md border border-line bg-deep'>
               {servers.map((server) => {
-                // only worth showing when it was added under another name
-                const renamed = server.names.filter((name) => name !== item.tag.name);
+                // a lone alias under the original name isn't worth spelling out, anything else is
+                const named = (server.names.length > 1 || server.names[0] !== item.tag.name);
+                // the name the filter matched, so a server found by one of its other names shows why
+                const shown = (search && server.names.find((name) => name.includes(search))) || server.names[0];
                 return (
                   <li key={server.id} className='flex items-center gap-3 px-3 py-2'>
                     <GuildIcon guild={server} size={32} className='size-8 rounded-lg text-xs'/>
                     <div className='min-w-0 flex-1'>
                       <p className='truncate text-sm text-white' title={server.name}>{server.name}</p>
-                      <p className='truncate text-xs text-subtle'>
-                        {(renamed.length) ? <>as <span className='font-mono'>{renamed.join(', ')}</span> · </> : null}
-                        Added {formatDate(server.added)}
-                      </p>
+                      <p className='truncate text-xs text-subtle'>Added {formatDate(server.added)}</p>
                     </div>
+                    {/* tag names can be very long, so the chip caps the one it shows and the dialog has them all */}
+                    {(named) ? (
+                      <button
+                        type='button'
+                        className='flex max-w-32 shrink-0 cursor-pointer items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:text-white sm:max-w-48'
+                        title={(server.names.length > 1) ? `Added under ${server.names.length.toLocaleString()} names, click to see them` : `Added as ${shown}`}
+                        onClick={() => setNamesOf(server)}
+                      >
+                        as <span className='truncate font-mono'>{shown}</span>
+                        {(server.names.length > 1) ? (
+                          <span className='shrink-0 font-medium tabular-nums'>+{(server.names.length - 1).toLocaleString()}</span>
+                        ) : null}
+                      </button>
+                    ) : null}
                     <span className='hidden shrink-0 font-mono text-xs text-subtle sm:block'>{server.id}</span>
                   </li>
                 );
@@ -199,7 +279,35 @@ export function TagServersSection({ item, access }: {item: TagDirectoryItem, acc
           {(data.other_count) ? `Also in ${data.other_count.toLocaleString()} DM${(data.other_count === 1) ? '' : 's'} or server${(data.other_count === 1) ? '' : 's'} NotSoBot has no details for.` : null}
         </p>
       ) : null}
+      {(namesOf) ? <ServerNamesDialog server={namesOf} onClose={() => setNamesOf(null)}/> : null}
     </section>
+  );
+}
+
+
+// Every name a server added the tag under, in full, since its row only fits a shortened one.
+function ServerNamesDialog({ server, onClose }: {server: TagServer, onClose: () => void}) {
+  const titleId = useId();
+  return (
+    <Modal labelledBy={titleId} onClose={onClose} className='max-w-md'>
+      <div className='p-5 sm:p-6'>
+        <h2 id={titleId} className='flex items-center gap-3 pr-10 text-lg font-semibold text-white'>
+          <GuildIcon guild={server} size={32} className='size-8 shrink-0 rounded-lg text-xs'/>
+          <span className='truncate' title={server.name}>{server.name}</span>
+        </h2>
+        <p className='mt-2 text-sm text-muted'>
+          {(server.names.length > 1) ? `Added the tag ${server.names.length.toLocaleString()} times, under these names. Newest first.` : 'Added the tag under this name.'}
+        </p>
+        <ul className='mt-4 max-h-80 divide-y divide-line overflow-auto rounded-md border border-line bg-deep'>
+          {server.names.map((name) => (
+            <li key={name} className='px-3 py-2 font-mono text-sm break-all text-fg'>{name}</li>
+          ))}
+        </ul>
+        <div className='mt-6 flex justify-end'>
+          <button type='button' className='btn btn-secondary' onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -235,7 +343,7 @@ export function ManageListingCard({ item, access, editing, onEdit }: {
         Edit listing
       </button>
       {(access.owner) ? (
-        <Link to={Routes.DASHBOARD_TAG.replace(':tagId', item.id)} className='btn btn-ghost mt-2 w-full'>
+        <Link to={Routes.DASHBOARD_TAG_EDIT.replace(':tagId', item.id)} className='btn btn-ghost mt-2 w-full'>
           Open in dashboard
           <ArrowUpRight className='size-3.5'/>
         </Link>
@@ -473,7 +581,7 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
       ) : (
         <p className='text-xs text-subtle'>
           To change the tag’s content, edit it in your{' '}
-          <Link to={Routes.DASHBOARD_TAG.replace(':tagId', item.id)} className='text-brand hover:underline'>dashboard</Link>
+          <Link to={Routes.DASHBOARD_TAG_EDIT.replace(':tagId', item.id)} className='text-brand hover:underline'>dashboard</Link>
           {(item.tag.locked) ? ' (it’s locked while it’s pending or verified).' : '.'}
         </p>
       )}

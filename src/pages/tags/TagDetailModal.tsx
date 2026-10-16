@@ -4,12 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { TagDirectoryVerificationStates, type TagDirectoryItem } from '@/lib/api';
+import { useAdminTagDirectoryItemQuery, useMeTagDirectoryQuery } from '@/lib/api/dashboardQueries';
 import { useTagDirectoryItemQuery } from '@/lib/api/queries';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 
 import { AddTagButton, categoryLabel, NsfwBadge, verificationInfo } from './tagDirectory';
 import { HiddenContentSection, ListingEditForm, ManageListingCard, TagServersSection, useListingAccess } from './TagListingManager';
+import { MediaSection } from './TagMedia';
 
 
 const TITLE_ID = 'tag-modal-title';
@@ -92,6 +94,11 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
   const verification = verificationInfo(item.verified);
   const access = useListingAccess(item);
   const canManage = access.owner || access.staff;
+  // the public listing only has its media once it's verified, the owner and staff see it before that
+  const own = useMeTagDirectoryQuery(item.id, {enabled: access.owner});
+  const admin = useAdminTagDirectoryItemQuery(item.id, {enabled: access.staff && !access.owner});
+  const privateItem = (access.owner) ? own.data : (access.staff) ? admin.data : undefined;
+  const assets = privateItem?.assets ?? item.assets;
 
   return (
     <>
@@ -146,6 +153,14 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
                   <p className='whitespace-pre-wrap text-white'>{item.description}</p>
                 </section>
               ) : null}
+
+              <MediaSection
+                key={item.id}
+                assets={assets}
+                nsfw={tag.nsfw}
+                tagName={tag.name}
+                manage={(access.owner) ? {tagId: item.id, verified: own.data?.verified ?? item.verified} : undefined}
+              />
 
               {/* only filled in when the owner chose to show it */}
               {(item.content_public && tag.content) ? (

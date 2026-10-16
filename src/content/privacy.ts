@@ -83,7 +83,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       title: "Section 6 - Content Safety",
       blocks: [
         {type: 'paragraph', text: "Media and prompts processed by NotSoBot may be scanned by automated safety systems. If something is flagged, We keep a record containing the user, server, channel, message and command involved, the prompt, the URL the media came from, a cryptographic hash (SHA-256) and perceptual hash (PDQ) of the media, and the safety scores. We do not keep a copy of the media. Hashes can't be turned back into the original media, and We use them to block the same media if it's uploaded again."},
-        {type: 'paragraph', text: "Flags may be reviewed by Our team. Mistaken flags are dismissed. Confirmed content may be reported to Discord, and to law enforcement or other authorities when the law requires it or when We believe it's needed to protect someone's safety. Section 7 of Our Terms of Service has more detail."},
+        {type: 'paragraph', text: "Flags may be reviewed by Our team, who may view the flagged media by fetching it again from the URL it came from while reviewing. That copy is only shown to the reviewer and is not kept. Mistaken flags are dismissed. Confirmed content may be reported to Discord, and to law enforcement or other authorities when the law requires it or when We believe it's needed to protect someone's safety. Section 7 of Our Terms of Service has more detail."},
       ],
     },
     {

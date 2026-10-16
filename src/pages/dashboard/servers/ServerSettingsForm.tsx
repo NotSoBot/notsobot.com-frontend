@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 
 import { useToast } from '@/components/ui/Toast';
 import type { UserGuild, UserGuildPatch } from '@/lib/api';
-import { errorMessage, useMeGuildMutation } from '@/lib/api/dashboardQueries';
+import { errorMessage, useGuildMutation } from '@/lib/api/dashboardQueries';
 
 import { ChoiceSelect } from '../settings/ChoiceSelect';
 import {
@@ -25,7 +25,7 @@ type Values = Required<{[K in keyof UserGuildPatch]: Exclude<UserGuildPatch[K], 
 export function ServerSettingsForm({ guild, onDirtyChange }: {guild: UserGuild, onDirtyChange: (dirty: boolean) => void}) {
   const toast = useToast();
   const editable = guild.editable.settings;
-  const mutation = useMeGuildMutation(guild.id);
+  const mutation = useGuildMutation(guild.id);
 
   const saved: Values = useMemo(() => ({
     locale: guild.locale,

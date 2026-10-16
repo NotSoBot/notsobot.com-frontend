@@ -19,7 +19,8 @@ import { userAvatarUrl } from '@/lib/discord';
 import { cn, formatDate } from '@/lib/utils';
 
 import { TagDetailModal } from './TagDetailModal';
-import { AddTagButton, CategoryBadge, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, tagDirectoryItemPath, VerificationBadge } from './tagDirectory';
+import { AssetThumbnail } from './TagMedia';
+import { AddTagButton, CategoryBadge, categoryOptionFromParam, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, tagDirectoryItemPath, VerificationBadge } from './tagDirectory';
 
 
 // URL value -> API value; defaults are left out of the URL
@@ -58,7 +59,7 @@ export function TagDirectoryPage() {
   const sort = findOption(SORT_OPTIONS, searchParams.get('sort'), DEFAULT_SORT);
   const status = findOption(STATUS_OPTIONS, searchParams.get('status'), DEFAULT_STATUS);
   // no `category` param (or an unknown one) is every category
-  const category = TAG_DIRECTORY_CATEGORY_OPTIONS.find((option) => option.param === searchParams.get('category')) ?? null;
+  const category = categoryOptionFromParam(searchParams.get('category'));
   // NSFW tags are hidden unless asked for
   const showNsfw = searchParams.get('nsfw') === 'show';
   const [ nsfwNoticeOpen, setNsfwNoticeOpen ] = useState(false);
@@ -253,48 +254,57 @@ export function TagDirectoryPage() {
 
 function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
   const { tag } = item;
+  // a video cover plays while a mouse is over the card (touch screens just show its first frame)
+  const [ hovered, setHovered ] = useState(false);
   return (
-    <li className='group relative flex flex-col rounded-lg border border-line bg-surface p-4 transition-colors hover:border-brand'>
-      <div className='mb-3 flex items-start justify-between gap-3'>
-        <div className='min-w-0 flex-1'>
-          <div className='mb-1 flex items-center gap-2'>
-            <h2 className='truncate text-lg font-medium text-white transition-colors group-hover:text-brand'>
-              {/* stretched link: the whole card is clickable without nesting the Add button inside a link */}
-              <Link
-                to={{pathname: tagDirectoryItemPath(item.id), search}}
-                state={{fromDirectory: true}}
-                preventScrollReset
-                className='after:absolute after:inset-0 after:rounded-lg'
-              >
-                {tag.name}
-              </Link>
-            </h2>
-            {(tag.nsfw) ? <NsfwBadge/> : null}
+    <li
+      className='group relative flex flex-col rounded-lg border border-line bg-surface transition-colors hover:border-brand'
+      onPointerEnter={(event) => event.pointerType === 'mouse' && setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
+      <div className='flex flex-1 flex-col p-4'>
+        <div className='mb-3 flex items-start gap-3'>
+          <AssetThumbnail assets={item.assets} nsfw={tag.nsfw} playing={hovered}/>
+          <div className='min-w-0 flex-1'>
+            <div className='mb-1 flex items-center gap-2'>
+              <h2 className='truncate text-lg font-medium text-white transition-colors group-hover:text-brand'>
+                {/* stretched link: the whole card is clickable without nesting the Add button inside a link */}
+                <Link
+                  to={{pathname: tagDirectoryItemPath(item.id), search}}
+                  state={{fromDirectory: true}}
+                  preventScrollReset
+                  className='after:absolute after:inset-0 after:rounded-lg'
+                >
+                  {tag.name}
+                </Link>
+              </h2>
+              {(tag.nsfw) ? <NsfwBadge/> : null}
+            </div>
+            {(item.title) ? <p className='mb-2 text-sm text-muted'>{item.title}</p> : null}
           </div>
-          {(item.title) ? <p className='mb-2 text-sm text-muted'>{item.title}</p> : null}
+          <div className='flex shrink-0 flex-col items-end gap-1.5'>
+            <VerificationBadge verified={item.verified} hideUnverified/>
+            {(item.category !== TagDirectoryCategories.OTHER) ? <CategoryBadge category={item.category}/> : null}
+          </div>
         </div>
-        <div className='flex shrink-0 flex-col items-end gap-1.5'>
-          <VerificationBadge verified={item.verified} hideUnverified/>
-          {(item.category !== TagDirectoryCategories.OTHER) ? <CategoryBadge category={item.category}/> : null}
-        </div>
-      </div>
 
-      {(item.description) ? <p className='mb-3 line-clamp-2 text-sm text-muted'>{item.description}</p> : null}
+        {(item.description) ? <p className='mb-3 line-clamp-2 text-sm text-muted'>{item.description}</p> : null}
 
-      <div className='mt-auto mb-3 flex items-center justify-between text-xs text-subtle'>
-        <div className='flex items-center gap-3'>
-          <span>{tag.uses.toLocaleString()} uses</span>
-          <span>{item.server_count.toLocaleString()} servers</span>
+        <div className='mt-auto mb-3 flex items-center justify-between text-xs text-subtle'>
+          <div className='flex items-center gap-3'>
+            <span>{tag.uses.toLocaleString()} uses</span>
+            <span>{item.server_count.toLocaleString()} servers</span>
+          </div>
+          <span>{formatDate(item.created)}</span>
         </div>
-        <span>{formatDate(item.created)}</span>
-      </div>
 
-      <div className='flex items-center justify-between border-t border-line pt-3'>
-        <div className='flex min-w-0 items-center gap-2'>
-          <img src={userAvatarUrl(tag.user, 32)} alt='' loading='lazy' className='size-6 rounded-full bg-surface-3'/>
-          <span className='truncate text-sm text-muted'>{tag.user.username}</span>
+        <div className='flex items-center justify-between border-t border-line pt-3'>
+          <div className='flex min-w-0 items-center gap-2'>
+            <img src={userAvatarUrl(tag.user, 32)} alt='' loading='lazy' className='size-6 rounded-full bg-surface-3'/>
+            <span className='truncate text-sm text-muted'>{tag.user.username}</span>
+          </div>
+          <AddTagButton tag={tag} verified={item.verified}/>
         </div>
-        <AddTagButton tag={tag} verified={item.verified}/>
       </div>
     </li>
   );

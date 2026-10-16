@@ -97,7 +97,12 @@ export function AddTagDialog({ tag, verified, onClose }: {tag: Pick<Tag, 'id' | 
 
           <div className='mt-5 space-y-4'>
             <div>
-              <label htmlFor={destinationId} className='mb-1.5 block text-sm text-muted'>Add to</label>
+              <div className='mb-1.5 flex items-center justify-between gap-3'>
+                <label htmlFor={destinationId} className='text-sm text-muted'>Add to</label>
+                {(guilds.isPending) ? (
+                  <span className='flex shrink-0 items-center gap-2 text-xs text-subtle'><Spinner className='size-3'/> Loading your servers…</span>
+                ) : null}
+              </div>
               <select
                 id={destinationId}
                 value={destination}
@@ -106,15 +111,17 @@ export function AddTagDialog({ tag, verified, onClose }: {tag: Pick<Tag, 'id' | 
                 className='input'
               >
                 <option value={DM_DESTINATION}>Your DMs with NotSoBot</option>
-                {(guilds.data?.length) ? (
+                {(guilds.isPending) ? (
+                  <optgroup label='Servers'>
+                    <option disabled>Loading servers…</option>
+                  </optgroup>
+                ) : (guilds.data?.length) ? (
                   <optgroup label='Servers'>
                     {guilds.data.map((guild) => <option key={guild.id} value={guild.id}>{guild.name}</option>)}
                   </optgroup>
                 ) : null}
               </select>
-              {(guilds.isPending) ? (
-                <p className='mt-1.5 flex items-center gap-2 text-xs text-subtle'><Spinner className='size-3'/> Loading your servers…</p>
-              ) : (guildsError) ? (
+              {(guilds.isPending) ? null : (guildsError) ? (
                 <p className='mt-1.5 text-xs text-warning'>{guildsError}</p>
               ) : (!guilds.data?.length) ? (
                 <p className='mt-1.5 text-xs text-subtle'>NotSoBot isn’t in any of your servers.</p>

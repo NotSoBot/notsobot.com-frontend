@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronUp, Database } from 'lucide-react';
 import { useState, type CSSProperties } from 'react';
 
+import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { TagStorageTypes, type AdminTagBlob, type AdminTagStoragePage, type AdminTagVariable, type TagStorageType } from '@/lib/api';
 import {
   ADMIN_TAG_BLOBS_PAGE_SIZE,
@@ -39,14 +41,23 @@ export function TagStoragePanel({ tagId, className }: {tagId: string, className?
 function StorageBrowser({ tagId }: {tagId: string}) {
   const [ kind, setKind ] = useState<Kind>('variables');
   const [ storageType, setStorageType ] = useState<TagStorageType | null>(null);
+  const [ search, setSearch ] = useState('');
+  const query = useDebouncedValue(search.trim(), 300);
   const [ page, setPage ] = useState(0);
 
-  // the other kind only needs its first page, for the counts on its tab
-  const idle = {storageType: null, page: 0};
-  const variables = useAdminTagStorageQuery(tagId, 'variables', (kind === 'variables') ? {storageType, page} : idle);
-  const blobs = useAdminTagStorageQuery(tagId, 'blobs', (kind === 'blobs') ? {storageType, page} : idle);
-  const query = (kind === 'variables') ? variables : blobs;
-  const data = query.data as AdminTagStoragePage<AdminTagVariable | AdminTagBlob> | undefined;
+  // back to the first page whenever the (debounced) search changes
+  const [ pageQuery, setPageQuery ] = useState(query);
+  if (pageQuery !== query) {
+    setPageQuery(query);
+    setPage(0);
+  }
+
+  // the other kind only needs its first page, for the counts on its tab (the search applies to both)
+  const idle = {storageType: null, query, page: 0};
+  const variables = useAdminTagStorageQuery(tagId, 'variables', (kind === 'variables') ? {storageType, query, page} : idle);
+  const blobs = useAdminTagStorageQuery(tagId, 'blobs', (kind === 'blobs') ? {storageType, query, page} : idle);
+  const current = (kind === 'variables') ? variables : blobs;
+  const data = current.data as AdminTagStoragePage<AdminTagVariable | AdminTagBlob> | undefined;
   const pageSize = (kind === 'variables') ? ADMIN_TAG_VARIABLES_PAGE_SIZE : ADMIN_TAG_BLOBS_PAGE_SIZE;
   const total = (counts: Partial<Record<string, number>> | undefined) => Object.values(counts ?? {}).reduce<number>((sum, value) => sum + (value ?? 0), 0);
 
@@ -85,25 +96,33 @@ function StorageBrowser({ tagId }: {tagId: string}) {
             ))}
           </select>
         </label>
-        {(query.isFetching) ? <Spinner className='size-4'/> : null}
+        <SearchInput
+          size='sm'
+          className='min-w-48 flex-1 sm:max-w-80'
+          value={search}
+          onValueChange={setSearch}
+          placeholder={(kind === 'variables') ? 'Search IDs, names or values...' : 'Search IDs...'}
+          aria-label={(kind === 'variables') ? 'Search variables by storage ID, name or value' : 'Search blobs by storage ID'}
+        />
+        {(current.isFetching) ? <Spinner className='size-4'/> : null}
         <span className='text-xs text-subtle sm:ml-auto'>Read-only. User storage can hold other people’s data.</span>
       </div>
 
       <div className='mt-3'>
-        {(query.isPending) ? (
+        {(current.isPending) ? (
           <p className='flex items-center gap-2 text-sm text-muted'><Spinner className='size-4'/> Loading…</p>
-        ) : (query.isError && !data) ? (
+        ) : (current.isError && !data) ? (
           <p className='text-sm text-danger'>
-            {errorMessage(query.error)}{' '}
-            <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => query.refetch()}>Retry</button>
+            {errorMessage(current.error)}{' '}
+            <button type='button' className='cursor-pointer text-brand hover:underline' onClick={() => current.refetch()}>Retry</button>
           </p>
         ) : (!data?.items.length) ? (
           <p className='text-sm text-subtle italic'>
-            {(storageType === null) ? `No ${kind} stored.` : `No ${STORAGE_ORDER.find((meta) => meta.type === storageType)?.label.toLowerCase()} ${kind} stored.`}
+            {(query) ? `No ${kind} match “${query}”.` : (storageType === null) ? `No ${kind} stored.` : `No ${STORAGE_ORDER.find((meta) => meta.type === storageType)?.label.toLowerCase()} ${kind} stored.`}
           </p>
         ) : (
           <>
-            <ul className={cn('space-y-2 transition-opacity', query.isPlaceholderData && 'opacity-60')}>
+            <ul className={cn('space-y-2 transition-opacity', current.isPlaceholderData && 'opacity-60')}>
               {(kind === 'variables') ? (
                 (data.items as Array<AdminTagVariable>).map((item) => (
                   <VariableRow key={`${item.storage_type}:${item.storage_id}:${item.name}`} item={item}/>
@@ -115,7 +134,7 @@ function StorageBrowser({ tagId }: {tagId: string}) {
               )}
             </ul>
             {(pageSize < data.count) ? (
-              <Pagination page={page} count={data.count} pageSize={pageSize} onChange={setPage} fetching={query.isFetching && query.isPlaceholderData} className='mt-3'/>
+              <Pagination page={page} count={data.count} pageSize={pageSize} onChange={setPage} fetching={current.isFetching && current.isPlaceholderData} className='mt-3'/>
             ) : null}
           </>
         )}

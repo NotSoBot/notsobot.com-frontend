@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { api } from './index';
-import { TagDirectorySortByFilters, type MeTagsSortBy, type TagDirectoryFilters, type TagDirectoryItem } from './types';
+import { TagDirectorySortByFilters, type MeTagsDirectoryFilter, type MeTagsSortBy, type TagDirectoryFilters, type TagDirectoryItem } from './types';
 
 
 export const queryKeys = {
@@ -16,7 +16,7 @@ export const queryKeys = {
   // dashboard; everything per-user lives under ['users', '@me'] so logging out drops it
   meSettings: (token: string | null) => ['users', '@me', token, 'settings'] as const,
   meTags: (token: string | null) => ['users', '@me', token, 'tags'] as const,
-  meTagsList: (token: string | null, query: string, sortBy: MeTagsSortBy) => ['users', '@me', token, 'tags', 'list', {query, sortBy}] as const,
+  meTagsList: (token: string | null, query: string, sortBy: MeTagsSortBy, directory: MeTagsDirectoryFilter, serverId: string | null) => ['users', '@me', token, 'tags', 'list', {query, sortBy, directory, serverId}] as const,
   meTag: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId] as const,
   meTagVariables: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'variables', scope] as const,
   meTagBlobs: (token: string | null, tagId: string, scope: object) => ['users', '@me', token, 'tags', 'item', tagId, 'blobs', scope] as const,
@@ -39,6 +39,9 @@ export const queryKeys = {
   adminEntitlements: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'entitlements', filters] as const,
   adminReports: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'reports', filters] as const,
   adminVoices: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'voices', filters] as const,
+  // a server's list rows and its detail are both under `guilds`, so one invalidation refreshes either after an edit
+  adminGuilds: (token: string | null, filters: object) => ['users', '@me', token, 'admin', 'guilds', 'list', filters] as const,
+  adminGuild: (token: string | null, guildId: string) => ['users', '@me', token, 'admin', 'guilds', 'detail', guildId] as const,
 };
 
 

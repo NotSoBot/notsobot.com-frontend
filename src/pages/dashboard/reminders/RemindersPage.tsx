@@ -15,6 +15,7 @@ import {
 import { formatDate, formatDateTime, formatExactDateTime } from '@/lib/utils';
 
 import { Chip } from '../admin/adminUi';
+import { ServerFilterChip } from '../servers/ServerFilterChip';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { EditReminderDialog } from './EditReminderDialog';
 
@@ -47,18 +48,23 @@ export function RemindersPage() {
   const guildNames = useMemo(() => new Map((guilds.data ?? []).map((guild) => [guild.id, guild.name])), [guilds.data]);
   const [ searchParams, setSearchParams ] = useSearchParams();
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'next';
-  const items = useMemo(() => [...(data?.items ?? [])].sort(SORTERS[sortBy]), [data?.items, sortBy]);
-  const setSortBy = (value: string) => {
+  // `?server=<id>`: only the reminders in that server (the server modal's "Your reminders")
+  const serverId = searchParams.get('server') || null;
+  const items = useMemo(() => {
+    return (data?.items ?? []).filter((reminder) => !serverId || reminder.guild_id === serverId).sort(SORTERS[sortBy]);
+  }, [data?.items, sortBy, serverId]);
+  const setParam = (key: string, value: string | null) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (value === 'next') {
-        next.delete('sort');
+      if (value) {
+        next.set(key, value);
       } else {
-        next.set('sort', value);
+        next.delete(key);
       }
       return next;
     }, {replace: true, preventScrollReset: true});
   };
+  const setSortBy = (value: string) => setParam('sort', (value === 'next') ? null : value);
 
   const toast = useToast();
   const patch = usePatchMeReminderMutation();
@@ -86,12 +92,14 @@ export function RemindersPage() {
         description={<>Reminders you set with the bot’s <code className='text-fg'>reminder</code> commands. You can change their text, move them to your DMs or delete them here.</>}
       />
 
+      {(serverId) ? <ServerFilterChip guildId={serverId} name={guildNames.get(serverId)} onClear={() => setParam('server', null)}/> : null}
+
       {(isPending) ? (
         <ListSkeleton/>
       ) : (isError) ? (
         <ErrorPanel title='Couldn’t load your reminders' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
       ) : (!items.length) ? (
-        <EmptyState icon={<AlarmClock className='size-10'/>} title='No reminders yet'>
+        <EmptyState icon={<AlarmClock className='size-10'/>} title={(serverId) ? 'No reminders in this server' : 'No reminders yet'}>
           Set one in Discord with <code className='text-fg'>/reminder create</code>.
         </EmptyState>
       ) : (

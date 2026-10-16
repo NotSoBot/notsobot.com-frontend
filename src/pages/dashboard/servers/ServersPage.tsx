@@ -1,6 +1,6 @@
 import { Crown, Eye, KeyRound, Server, Settings2 } from 'lucide-react';
-import { useMemo } from 'react';
-import { Link } from 'react-router';
+import { useCallback, useMemo } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { useAuth } from '@/auth';
 import { ApiEndpoints, apiUrl, type UserGuildSummary } from '@/lib/api';
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { GuildIcon } from './GuildIcon';
-import { dashboardServerPath } from './guildMeta';
+import { ServerDetailsModal } from './ServerDetailsModal';
 
 
 export function ServersPage() {
@@ -19,6 +19,23 @@ export function ServersPage() {
   const guilds = useMemo(() => {
     return (data ?? []).slice().sort((a, b) => Number(b.can_manage) - Number(a.can_manage) || a.name.localeCompare(b.name));
   }, [data]);
+
+  // `?server=<id>` opens the server over the list, like `?tag=` on the tag list
+  const [ searchParams ] = useSearchParams();
+  const serverId = searchParams.get('server');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const openedHere = (location.state as {serverOpenedHere?: boolean} | null)?.serverOpenedHere === true;
+  const closeServer = useCallback(() => {
+    if (openedHere) {
+      navigate(-1);
+    } else {
+      // arrived on a link with `?server=`, there's no list entry to go back to
+      const next = new URLSearchParams(searchParams);
+      next.delete('server');
+      navigate({search: next.toString()}, {replace: true, preventScrollReset: true});
+    }
+  }, [navigate, openedHere, searchParams]);
 
   return (
     <>
@@ -44,6 +61,8 @@ export function ServersPage() {
           {guilds.map((guild) => <ServerCard key={guild.id} guild={guild}/>)}
         </ul>
       )}
+
+      {(serverId) ? <ServerDetailsModal key={serverId} guildId={serverId} onClose={closeServer}/> : null}
     </>
   );
 }
@@ -53,7 +72,9 @@ function ServerCard({ guild }: {guild: UserGuildSummary}) {
   return (
     <li>
       <Link
-        to={dashboardServerPath(guild.id)}
+        to={{search: `?${new URLSearchParams({server: guild.id})}`}}
+        state={{serverOpenedHere: true}}
+        preventScrollReset
         className={cn(
           'group card card-hover flex h-full items-center gap-3 p-4',
           (guild.can_manage) ? 'hover:border-brand' : 'hover:border-line-strong',

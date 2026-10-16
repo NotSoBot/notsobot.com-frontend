@@ -24,14 +24,16 @@ import {
   useRequestMeTagDirectoryVerificationMutation,
 } from '@/lib/api/dashboardQueries';
 import { formatDate, formatDateTime } from '@/lib/utils';
-import { CategorySelect, tagDirectoryItemPath, VerificationBadge, verificationInfo } from '@/pages/tags/tagDirectory';
+import { CategorySelect, tagDirectoryItemPath, VerificationBadge, verificationInfo, verificationRequirement } from '@/pages/tags/tagDirectory';
+import { MediaSection } from '@/pages/tags/TagMedia';
 
 import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar, Toggle } from '../ui';
 import { describeTagLocation, tagLocation } from './tagMeta';
 
 
 // The "Directory" tab of the tag editor: publish the tag, or edit its listing once it's published.
-// The title, description, category and whether the content is shown publicly are editable here; images aren't supported yet.
+// The title, description, category and whether the content is shown publicly are editable here, and the media while
+// verification is pending.
 export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: boolean) => void}) {
   const { data: directory, isPending, isError, error, refetch, isRefetching } = useMeTagDirectoryQuery(tag.id);
   // requesting verification would freeze unsaved listing edits, so the request waits until they're saved or discarded
@@ -53,6 +55,18 @@ export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChan
   return (
     <div className='space-y-4'>
       <ListingForm key={directory.id} tag={tag} directory={directory} onDirtyChange={onListingDirtyChange}/>
+      <Panel
+        title='Media'
+        description='Images, videos or audio that show what the tag does. The first one is the cover on the directory.'
+      >
+        <MediaSection
+          assets={directory.assets}
+          nsfw={false}
+          tagName={tag.name}
+          manage={{tagId: tag.id, verified: directory.verified}}
+          headingClassName='sr-only'
+        />
+      </Panel>
       <VerificationPanel tag={tag} directory={directory} listingDirty={listingDirty}/>
     </div>
   );
@@ -137,13 +151,12 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const isAlias = !!tag.reference_tag;
-  // publishing moves the tag into the owner's personal tags (the API sets server_id to the owner's id), so a
-  // server, DM or group DM tag stops being one there
+  // publishing moves the tag into the owner's personal tags (the API sets server_id to the owner's id) and leaves an
+  // alias of it in the server, DM or group DM it came from
   const guildNames = new Map((guilds ?? []).map((guild) => [guild.id, guild.name]));
   const location = tagLocation(tag, user, guildNames);
   const movesOutOfServer = location.kind === 'server' || location.kind === 'dm' || location.kind === 'group_dm';
   const serverLabel = describeTagLocation(location);
-  const stopsBeing = (location.kind === 'server') ? 'a tag in that server' : (location.kind === 'dm') ? 'a tag in your DM' : 'a tag in that group DM';
 
   const doPublish = () => {
     publish.mutate({title, description, category, content_public: contentPublic}, {
@@ -187,8 +200,8 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
             </p>
           ) : (movesOutOfServer) ? (
             <p className='mb-5 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-fg'>
-              Publishing moves this tag out of <span className='font-medium text-white'>{serverLabel}</span> into your personal
-              tags, so it stops being {stopsBeing}.
+              Publishing moves this tag into your personal tags and leaves an alias with the same name in{' '}
+              <span className='font-medium text-white'>{serverLabel}</span>, so it keeps working there.
             </p>
           ) : null}
 
@@ -219,7 +232,7 @@ function PublishForm({ tag, onDirtyChange }: {tag: Tag, onDirtyChange: (dirty: b
         <ConfirmDialog
           tone='primary'
           title={`Publish “${tag.name}”?`}
-          description={<>This moves the tag out of <span className='font-medium text-white'>{serverLabel}</span> into your personal tags and lists it on the tag directory.</>}
+          description={<>This moves the tag into your personal tags, leaves an alias of it in <span className='font-medium text-white'>{serverLabel}</span> and lists it on the tag directory.</>}
           confirmLabel='Publish'
           pending={publish.isPending}
           error={(publish.isError) ? errorMessage(publish.error, 'Couldn’t publish this tag.') : undefined}
@@ -353,6 +366,7 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
     return null;
   }
   const pending = directory.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
+  const missing = verificationRequirement(directory);
 
   const doRequest = () => {
     request.mutate(undefined, {
@@ -386,8 +400,8 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
           <button
             type='button'
             className='btn btn-primary btn-sm'
-            disabled={listingDirty}
-            title={(listingDirty) ? 'Save or discard your listing changes first.' : undefined}
+            disabled={listingDirty || !!missing}
+            title={(listingDirty) ? 'Save or discard your listing changes first.' : (missing ?? undefined)}
             onClick={() => setConfirming(true)}
           >
             <ShieldCheck className='size-3.5'/>
@@ -403,6 +417,7 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
           )}
         </div>
         {(listingDirty && !pending) ? <p className='mt-3 text-sm text-subtle'>Save or discard your listing changes before requesting verification.</p> : null}
+        {(!listingDirty && !pending && missing) ? <p className='mt-3 text-sm text-subtle'>{missing}</p> : null}
         {(cancel.isError) ? <InlineError>{errorMessage(cancel.error, 'Couldn’t cancel the request.')}</InlineError> : null}
       </Panel>
 

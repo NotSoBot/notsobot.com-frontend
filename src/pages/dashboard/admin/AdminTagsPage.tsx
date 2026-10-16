@@ -17,11 +17,12 @@ import {
   type TagDirectoryCategory,
 } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminTagDirectoryQuery, usePatchAdminTagDirectoryMutation } from '@/lib/api/dashboardQueries';
-import { cn, formatMemory } from '@/lib/utils';
+import { cn, formatDate, formatMemory } from '@/lib/utils';
 import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
-import { CategoryBadge, CategorySelect, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge } from '@/pages/tags/tagDirectory';
+import { CategoryBadge, categoryOptionFromParam, CategorySelect, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge, verificationRequirement } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
+import { AdminTagModal, useOpenListItem } from './AdminTagModal';
 import { Chip, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 import { TagAssetsPanel } from './TagAssetsPanel';
@@ -47,6 +48,8 @@ const SORTS: Array<{value: AdminTagDirectorySortBy, label: string}> = [
   {value: 'title', label: 'Title'},
 ];
 
+const TITLE_ID = 'admin-directory-tag-modal-title';
+
 
 export function AdminTagsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
@@ -58,7 +61,7 @@ export function AdminTagsPage() {
   const hideNsfw = searchParams.get('nsfw') === 'hide';
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'newest';
   // same `category` param as the public directory
-  const category = TAG_DIRECTORY_CATEGORY_OPTIONS.find((option) => option.param === searchParams.get('category')) ?? null;
+  const category = categoryOptionFromParam(searchParams.get('category'));
   const query = searchParams.get('q') || '';
   const debouncedQuery = useDebouncedValue(query.trim(), 300);
 
@@ -71,6 +74,7 @@ export function AdminTagsPage() {
     page,
   });
   const items = data?.items ?? [];
+  const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (item) => item.id);
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
   const pagination = {
     page,
@@ -142,14 +146,75 @@ export function AdminTagsPage() {
       ) : (
         <>
           <Pagination {...pagination} className='mt-0 mb-4'/>
-          <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
-            {items.map((item) => <DirectoryTagCard key={item.id} item={item} onDelete={() => setDeletingItem(item)}/>)}
+          <ul className={cn('grid grid-cols-1 gap-3 transition-opacity sm:grid-cols-2 xl:grid-cols-3', isPlaceholderData && 'opacity-60')}>
+            {items.map((item) => <DirectoryTagCard key={item.id} item={item} onOpen={open}/>)}
           </ul>
           <Pagination {...pagination}/>
         </>
       )}
+
+      {(openItem) ? (
+        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close}>
+          <DirectoryTagDetails
+            key={openItem.id}
+            item={openItem}
+            onDelete={() => {
+              // the delete flow is its own dialog, and the tag leaves the list once it's deleted
+              close();
+              setDeletingItem(openItem);
+            }}
+          />
+        </AdminTagModal>
+      ) : null}
       {(deletingItem) ? <DeleteDirectoryTagFlow item={deletingItem} onClose={() => setDeletingItem(null)}/> : null}
     </>
+  );
+}
+
+
+// laid out like the dashboard's own tag cards: just enough to triage, the review tools are in `DirectoryTagDetails`
+function DirectoryTagCard({ item, onOpen }: {item: AdminTagDirectoryItem, onOpen: (id: string) => void}) {
+  const { tag } = item;
+  return (
+    <li className='group relative flex min-w-0 flex-col rounded-lg border border-line bg-surface p-4 transition-colors hover:border-brand'>
+      <div className='mb-3 flex items-start justify-between gap-3'>
+        <div className='min-w-0 flex-1'>
+          <div className='flex items-center gap-2'>
+            <h2 className='truncate font-medium text-white transition-colors group-hover:text-brand'>
+              {/* stretched: the whole card opens the tag */}
+              <button
+                type='button'
+                className='cursor-pointer text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-brand'
+                onClick={() => onOpen(item.id)}
+              >
+                {item.title || <span className='text-subtle italic'>Untitled</span>}
+              </button>
+            </h2>
+            {(tag.nsfw) ? <NsfwBadge/> : null}
+          </div>
+          <p className='mt-0.5 truncate font-mono text-sm text-code'>{tag.name}</p>
+        </div>
+        <div className='flex shrink-0 flex-col items-end gap-1.5'>
+          <VerificationBadge verified={item.verified}/>
+          <CategoryBadge category={item.category}/>
+          {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
+        </div>
+      </div>
+      {(item.description) ? (
+        <p className='mb-3 line-clamp-2 text-sm break-words text-muted'>{item.description}</p>
+      ) : (
+        <p className='mb-3 text-sm text-subtle italic'>No description</p>
+      )}
+      <div className='mb-3'>
+        <UserCell user={item.user} fallbackId={tag.user_id ?? null} size='sm'/>
+      </div>
+      <div className='mt-auto flex items-center justify-between gap-3 border-t border-line pt-3 text-xs text-subtle'>
+        <span className='tabular-nums'>
+          {(tag.uses ?? 0).toLocaleString()} uses · {(item.server_count ?? 0).toLocaleString()} {(item.server_count === 1) ? 'server' : 'servers'}
+        </span>
+        <span>{(item.created) ? `Listed ${formatDate(item.created)}` : `Created ${formatDate(tag.created)}`}</span>
+      </div>
+    </li>
   );
 }
 
@@ -162,7 +227,7 @@ const CONTENT_MAX = 2000;
 const TITLE_MAX = 128;
 const DESCRIPTION_MAX = 2000;
 
-function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDelete: () => void}) {
+function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, onDelete: () => void}) {
   const { tag } = item;
   const toast = useToast();
   const mutation = usePatchAdminTagDirectoryMutation();
@@ -243,13 +308,14 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
     });
   };
   const pendingTarget = (mutation.isPending) ? mutation.variables?.verified : undefined;
+  const missing = verificationRequirement(item);
 
   return (
-    <li className='card p-4 sm:p-5'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
+    <div className='p-4 sm:p-6'>
+      <div className='flex flex-wrap items-start justify-between gap-3 pr-10'>
         <div className='min-w-0 flex-1'>
           <div className='flex flex-wrap items-center gap-2'>
-            <h2 className='truncate text-lg font-semibold text-white'>{item.title || <span className='text-subtle italic'>Untitled</span>}</h2>
+            <h2 id={TITLE_ID} className='truncate text-xl font-semibold text-white'>{item.title || <span className='text-subtle italic'>Untitled</span>}</h2>
             <VerificationBadge verified={item.verified}/>
             <CategoryBadge category={item.category}/>
             {(tag.nsfw) ? <NsfwBadge/> : null}
@@ -262,7 +328,8 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
             label='Verify'
             icon={<ShieldCheck className='size-4'/>}
             className='btn-primary'
-            disabled={mutation.isPending || item.verified === TagDirectoryVerificationStates.VERIFIED}
+            disabled={mutation.isPending || item.verified === TagDirectoryVerificationStates.VERIFIED || !!missing}
+            title={(item.verified !== TagDirectoryVerificationStates.VERIFIED) ? (missing ?? undefined) : undefined}
             pending={pendingTarget === TagDirectoryVerificationStates.VERIFIED}
             onClick={() => setVerified(TagDirectoryVerificationStates.VERIFIED, 'verified')}
           />
@@ -473,7 +540,7 @@ function DirectoryTagCard({ item, onDelete }: {item: AdminTagDirectoryItem, onDe
         </div>
       ) : null}
 
-    </li>
+    </div>
   );
 }
 
@@ -499,16 +566,17 @@ function AssetRow({ asset }: {asset: TagDirectoryAsset}) {
 }
 
 
-function ActionButton({ label, icon, className, disabled, pending, onClick }: {
+function ActionButton({ label, icon, className, disabled, title, pending, onClick }: {
   label: string,
   icon: ReactNode,
   className: string,
   disabled: boolean,
+  title?: string,
   pending: boolean,
   onClick: () => void,
 }) {
   return (
-    <button type='button' className={cn('btn btn-sm', className)} disabled={disabled} onClick={onClick}>
+    <button type='button' className={cn('btn btn-sm', className)} disabled={disabled} title={title} onClick={onClick}>
       {(pending) ? <Spinner className='size-4 border-white/40 border-t-white'/> : icon}
       {label}
     </button>
@@ -518,12 +586,13 @@ function ActionButton({ label, icon, className, disabled, pending, onClick }: {
 
 function ListSkeleton() {
   return (
-    <ul aria-hidden className='space-y-3'>
-      {Array.from({length: 4}, (_, i) => (
-        <li key={i} className='card p-5'>
-          <Skeleton className='h-5 w-48'/>
+    <ul aria-hidden className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+      {Array.from({length: 9}, (_, i) => (
+        <li key={i} className='rounded-lg border border-line bg-surface p-4'>
+          <Skeleton className='h-4 w-40'/>
           <Skeleton className='mt-2 h-3 w-24 bg-surface-2'/>
-          <Skeleton className='mt-4 h-24 w-full bg-surface-2'/>
+          <Skeleton className='mt-4 h-8 w-full bg-surface-2'/>
+          <Skeleton className='mt-6 h-3 w-full bg-surface-2'/>
         </li>
       ))}
     </ul>

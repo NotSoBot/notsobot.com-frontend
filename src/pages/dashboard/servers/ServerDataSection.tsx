@@ -1,11 +1,12 @@
 import { Download, ShieldAlert, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { isOwner, useAuth } from '@/auth';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import type { UserGuild, UserGuildDataExport } from '@/lib/api';
-import { errorMessage, useDeleteMeGuildDataMutation, useExportMeGuildDataMutation } from '@/lib/api/dashboardQueries';
+import { errorMessage, useDeleteGuildDataMutation, useExportGuildDataMutation, useGuildScope } from '@/lib/api/dashboardQueries';
 
 import { Panel } from '../ui';
 
@@ -32,11 +33,19 @@ function exportFilename(guildId: string, data: UserGuildDataExport): string {
 }
 
 
-// Owner only: download or wipe what NotSoBot stores for this server.
+// Owner only: download or wipe what NotSoBot stores for this server. From the admin panel any staff member can export
+// and bot owners can delete.
 export function ServerDataSection({ guild }: {guild: UserGuild}) {
   const toast = useToast();
-  const exportData = useExportMeGuildDataMutation(guild.id);
-  const deleteData = useDeleteMeGuildDataMutation(guild.id);
+  const { user } = useAuth();
+  const staff = useGuildScope() === 'admin';
+  const canExport = staff || guild.owner;
+  const canDelete = (staff) ? isOwner(user) : guild.owner;
+  const readOnly = (canExport && canDelete) ? undefined
+    : (staff) ? 'Only bot owners can delete a server’s data.'
+    : 'Only the server owner can export or delete this server’s data.';
+  const exportData = useExportGuildDataMutation(guild.id);
+  const deleteData = useDeleteGuildDataMutation(guild.id);
   const [ confirmingDelete, setConfirmingDelete ] = useState(false);
 
   const runExport = () => {
@@ -63,7 +72,7 @@ export function ServerDataSection({ guild }: {guild: UserGuild}) {
       title='Server data'
       accent='#ed4245'
       description='Export or delete everything NotSoBot stores for this server.'
-      readOnly={(guild.owner) ? undefined : 'Only the server owner can export or delete this server’s data.'}
+      readOnly={readOnly}
     >
       <div className='space-y-5'>
         <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
@@ -71,7 +80,7 @@ export function ServerDataSection({ guild }: {guild: UserGuild}) {
             <p className='font-medium text-white'>Export</p>
             <p className='mt-0.5 text-muted'>A JSON file with this server’s settings, prefixes, allow/blocklists, loggers and tags.</p>
           </div>
-          <button type='button' className='btn btn-secondary shrink-0' onClick={runExport} disabled={!guild.owner || exportData.isPending}>
+          <button type='button' className='btn btn-secondary shrink-0' onClick={runExport} disabled={!canExport || exportData.isPending}>
             {(exportData.isPending) ? <Spinner className='size-4'/> : <Download aria-hidden className='size-4'/>}
             Export data
           </button>
@@ -97,7 +106,7 @@ export function ServerDataSection({ guild }: {guild: UserGuild}) {
             type='button'
             className='btn btn-danger shrink-0'
             onClick={() => setConfirmingDelete(true)}
-            disabled={!guild.owner || deleteData.isPending}
+            disabled={!canDelete || deleteData.isPending}
           >
             <Trash2 aria-hidden className='size-4'/>
             Delete data

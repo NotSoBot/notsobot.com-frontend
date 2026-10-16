@@ -1,21 +1,21 @@
 // Bug, user, server, message and tag reports sent with the bot's `report` commands (prefixed, slash and context menus).
 // `content` is whatever the reporter typed, so it's only ever rendered as plain text.
 
-import { ExternalLink, Filter, Inbox, X } from 'lucide-react';
+import { ExternalLink, Filter, Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { Routes } from '@/config';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ReportStatuses, ReportTypes, type Report, type ReportPatch, type ReportStatus } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportsQuery, usePatchAdminReportMutation } from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { REPORT_TYPES, type ReportTone, reportJumpUrl, reportTypeInfo } from '../reports/reportLabels';
-import { Chip, CollapseButton, CollapsedCard, CopyableValue, DetailList, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { AdminTagModal, useOpenListItem } from './AdminTagModal';
+import { adminServerPath, Chip, CopyableValue, DetailList, ExactDate, IdFilter, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
 type Tone = ReportTone;
@@ -42,6 +42,8 @@ function statusInfo(status: number) {
 
 const typeInfo = reportTypeInfo;
 
+const TITLE_ID = 'admin-report-modal-title';
+
 
 function parseEnum(value: string | null): number | null {
   if (value === null || value === '' || Number.isNaN(Number(value))) {
@@ -50,22 +52,31 @@ function parseEnum(value: string | null): number | null {
   return Number(value);
 }
 
+// defaults to the open ones (the review queue), `status=all` shows every report
+function parseStatus(value: string | null): number | null {
+  return (value === 'all') ? null : parseEnum(value) ?? ReportStatuses.OPEN;
+}
+
 
 export function AdminReportsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
   const type = parseEnum(searchParams.get('type'));
-  const status = parseEnum(searchParams.get('status'));
+  const status = parseStatus(searchParams.get('status'));
   const userId = (searchParams.get('user_id') || '').trim();
   const targetId = (searchParams.get('target_id') || '').trim();
+  // sent from the server or about it (the admin server modal's "Reports")
+  const guildId = (searchParams.get('guild_id') || '').trim();
 
   const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useAdminReportsQuery({
     type,
     status,
     userId,
     targetId,
+    guildId,
     page,
   });
   const items = data?.items ?? [];
+  const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (report) => report.id);
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_PAGE_SIZE});
   const pagination = {
     page,
@@ -74,7 +85,12 @@ export function AdminReportsPage() {
     onChange: setPage,
     fetching: isFetching && isPlaceholderData,
   };
-  const filtered = !!(type !== null || status !== null || userId || targetId);
+  const filtered = !!(type !== null || status !== ReportStatuses.OPEN || userId || targetId || guildId);
+  // closes the report first, the one it's filtering by might not be in the new list
+  const filterBy = (changes: Record<string, string | null>) => {
+    close();
+    update(changes);
+  };
 
   return (
     <>
@@ -83,11 +99,15 @@ export function AdminReportsPage() {
         description='Bug, user, server, message and tag reports sent with the bot’s report commands, newest first.'
       />
 
-      <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4'>
+      <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
         <label className='text-sm'>
           <span className='mb-1 block text-subtle'>Status</span>
-          <select className='input' value={(status === null) ? '' : String(status)} onChange={(event) => update({status: event.target.value})}>
-            <option value=''>Any</option>
+          <select
+            className='input'
+            value={(status === null) ? 'all' : String(status)}
+            onChange={(event) => update({status: (event.target.value === String(ReportStatuses.OPEN)) ? null : event.target.value})}
+          >
+            <option value='all'>Any</option>
             {STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
@@ -110,6 +130,12 @@ export function AdminReportsPage() {
           value={targetId}
           onChange={(value) => update({target_id: value})}
         />
+        <IdFilter
+          label='Server id'
+          placeholder='Sent from or about'
+          value={guildId}
+          onChange={(value) => update({guild_id: value})}
+        />
       </div>
 
       {(isPending || steppingBack) ? (
@@ -117,73 +143,30 @@ export function AdminReportsPage() {
       ) : (isError && !items.length) ? (
         <ErrorPanel title='Couldn’t load reports' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
       ) : (!items.length) ? (
-        <EmptyState icon={<Inbox className='size-10'/>} title='No reports'>
-          {(filtered) ? 'Nothing matches these filters.' : null}
+        <EmptyState icon={<Inbox className='size-10'/>} title={(filtered) ? 'No reports' : 'No open reports'}>
+          {(filtered) ? 'Nothing matches these filters.' : 'Everything’s been reviewed.'}
         </EmptyState>
       ) : (
         <>
           <Pagination {...pagination} className='mt-0 mb-4'/>
-          <ul className={cn('space-y-3 transition-opacity', isPlaceholderData && 'opacity-60')}>
-            {items.map((report) => (
-              <ReportCard
-                key={report.id}
-                report={report}
-                onFilterReporter={(value) => update({user_id: value})}
-                onFilterTarget={(value) => update({target_id: value})}
-              />
-            ))}
+          <ul className={cn('card divide-y divide-line transition-opacity', isPlaceholderData && 'opacity-60')}>
+            {items.map((report) => <ReportRow key={report.id} report={report} onOpen={open}/>)}
           </ul>
           <Pagination {...pagination}/>
         </>
       )}
+
+      {(openItem) ? (
+        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close}>
+          <ReportDetails
+            key={openItem.id}
+            report={openItem}
+            onFilterReporter={(value) => filterBy({user_id: value})}
+            onFilterTarget={(value) => filterBy({target_id: value})}
+          />
+        </AdminTagModal>
+      ) : null}
     </>
-  );
-}
-
-
-// edits locally and lands in the URL once typing stops (and only when it's a snowflake)
-function IdFilter({ label, placeholder, value, onChange }: {
-  label: string,
-  placeholder: string,
-  value: string,
-  onChange: (value: string | null) => void,
-}) {
-  const [ input, setInput ] = useState(value);
-  useEffect(() => setInput(value), [value]);
-  const debounced = useDebouncedValue(input.trim(), 400);
-  useEffect(() => {
-    if (debounced !== value && (!debounced || /^\d+$/.test(debounced))) {
-      onChange(debounced);
-    }
-    // only when the typed value settles
-  }, [debounced]);
-
-  return (
-    <label className='text-sm'>
-      <span className='mb-1 block text-subtle'>{label}</span>
-      <span className='relative block'>
-        <input
-          className='input pr-9 font-mono'
-          inputMode='numeric'
-          placeholder={placeholder}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-        />
-        {(input) ? (
-          <button
-            type='button'
-            aria-label={`Clear ${label.toLowerCase()} filter`}
-            className='absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer rounded p-1 text-subtle hover:text-fg'
-            onClick={() => {
-              setInput('');
-              onChange(null);
-            }}
-          >
-            <X className='size-4'/>
-          </button>
-        ) : null}
-      </span>
-    </label>
   );
 }
 
@@ -203,7 +186,32 @@ function FilterButton({ label, onClick }: {label: string, onClick: () => void}) 
 }
 
 
-function ReportCard({ report, onFilterReporter, onFilterTarget }: {
+// one line per report, just enough to triage from; the rest is in `ReportDetails` a click away.
+// Plain content only inside (no buttons, links or focusable dates), since the whole row is a button.
+function ReportRow({ report, onOpen }: {report: Report, onOpen: (id: string) => void}) {
+  const status = statusInfo(report.status);
+  const type = typeInfo(report.type);
+  return (
+    <li>
+      <button
+        type='button'
+        className='flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left first:rounded-t-[inherit] hover:bg-surface-2 sm:px-5'
+        onClick={() => onOpen(report.id)}
+      >
+        {/* fixed widths so every row lines up in columns */}
+        <span className='w-44 font-mono text-sm text-white'>#{report.id}</span>
+        <Chip tone={type.tone} className='w-16 justify-center'>{type.label}</Chip>
+        <Chip tone={status.tone} className='w-20 justify-center'>{status.label}</Chip>
+        <span className='w-52 min-w-0'><UserCell user={report.user} size='sm'/></span>
+        <span className='min-w-0 flex-1 basis-40 truncate text-sm text-muted'>{report.content}</span>
+        <span className='ml-auto text-xs text-subtle'>{formatDateTime(report.created)}</span>
+      </button>
+    </li>
+  );
+}
+
+
+function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
   report: Report,
   onFilterReporter: (userId: string) => void,
   onFilterTarget: (targetId: string) => void,
@@ -213,11 +221,7 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
   const [ notes, setNotes ] = useState(report.notes ?? '');
   useEffect(() => setNotes(report.notes ?? ''), [report.notes]);
   const notesDirty = notes !== (report.notes ?? '');
-  // resolved and dismissed reports fold down to one line, and fold again whenever their status changes
-  const [ expanded, setExpanded ] = useState(false);
-  useEffect(() => setExpanded(false), [report.status]);
 
-  const reviewed = report.status !== ReportStatuses.OPEN;
   const status = statusInfo(report.status);
   const type = typeInfo(report.type);
   const pendingStatus = (mutation.isPending) ? mutation.variables?.patch.status : undefined;
@@ -245,27 +249,12 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
   const isMessageReport = report.type === ReportTypes.MESSAGE;
   const jumpUrl = reportJumpUrl(report);
 
-  if (reviewed && !expanded) {
-    return (
-      <CollapsedCard onExpand={() => setExpanded(true)}>
-        {/* fixed widths so every collapsed row lines up in columns */}
-        <span className='w-44 font-mono text-sm text-white'>#{report.id}</span>
-        <Chip tone={type.tone} className='w-16 justify-center'>{type.label}</Chip>
-        <Chip tone={status.tone} className='w-20 justify-center'>{status.label}</Chip>
-        <span className='w-52 min-w-0'><UserCell user={report.user} size='sm'/></span>
-        <span className='min-w-0 flex-1 basis-40 truncate text-sm text-muted'>{report.content}</span>
-        <span className='ml-auto text-xs text-subtle'>{formatDateTime(report.created)}</span>
-      </CollapsedCard>
-    );
-  }
-
   return (
-    <li className='card p-4 sm:p-5'>
+    <div className='p-4 pr-14 sm:p-6 sm:pr-14'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='min-w-0'>
           <div className='flex flex-wrap items-center gap-2'>
-            {(reviewed) ? <CollapseButton onClick={() => setExpanded(false)}/> : null}
-            <span className='font-mono text-sm text-white'>#{report.id}</span>
+            <h2 id={TITLE_ID} className='font-mono text-lg font-semibold text-white'>Report #{report.id}</h2>
             <Chip tone={type.tone}>{type.label}</Chip>
             <Chip tone={status.tone}>{status.label}</Chip>
           </div>
@@ -313,6 +302,11 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
                     Find in tags
                   </Link>
                 ) : null}
+                {(report.type === ReportTypes.SERVER) ? (
+                  <Link to={adminServerPath(report.target_id)} className='text-xs text-code hover:underline'>
+                    Open server
+                  </Link>
+                ) : null}
               </div>
             ) : (
               <p className='text-sm text-subtle'>Not given</p>
@@ -341,7 +335,12 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
         <h3 className='section-label mb-1'>{(isMessageReport) ? 'Reported message' : 'Sent from'}</h3>
         <DetailList
           items={[
-            ['Server', (report.guild_id) ? <CopyableValue value={report.guild_id} truncate={0}/> : 'Direct messages'],
+            ['Server', (report.guild_id) ? (
+              <span className='inline-flex flex-wrap items-center gap-2'>
+                <CopyableValue value={report.guild_id} truncate={0}/>
+                <Link to={adminServerPath(report.guild_id)} className='text-xs text-code hover:underline'>Open server</Link>
+              </span>
+            ) : 'Direct messages'],
             ['Channel', (report.channel_id) ? <CopyableValue value={report.channel_id} truncate={0}/> : '—'],
             ['Message', (report.message_id) ? (
               <span className='inline-flex flex-wrap items-center gap-2'>
@@ -391,19 +390,21 @@ function ReportCard({ report, onFilterReporter, onFilterTarget }: {
           </div>
         ) : null}
       </form>
-    </li>
+    </div>
   );
 }
 
 
 function ListSkeleton() {
   return (
-    <ul aria-hidden className='space-y-3'>
-      {Array.from({length: 4}, (_, i) => (
-        <li key={i} className='card p-5'>
-          <Skeleton className='h-4 w-56'/>
-          <Skeleton className='mt-3 h-8 w-40 bg-surface-2'/>
-          <Skeleton className='mt-4 h-20 w-full bg-surface-2'/>
+    <ul aria-hidden className='card divide-y divide-line'>
+      {Array.from({length: 6}, (_, i) => (
+        <li key={i} className='flex items-center gap-3 px-4 py-3 sm:px-5'>
+          <Skeleton className='h-4 w-44'/>
+          <Skeleton className='h-5 w-16 bg-surface-2'/>
+          <Skeleton className='h-5 w-20 bg-surface-2'/>
+          <Skeleton className='size-6 rounded-full bg-surface-2'/>
+          <Skeleton className='h-3 flex-1 bg-surface-2'/>
         </li>
       ))}
     </ul>

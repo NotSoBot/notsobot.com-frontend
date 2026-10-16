@@ -101,7 +101,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
           "the safety scores and the action taken",
         ]},
         {type: 'paragraph', text: "We do not keep a copy of flagged media. Hashes can't be turned back into the original media, and We use them to recognize and block the same media if it's uploaded again."},
-        {type: 'paragraph', text: "Flags may be reviewed by Our team. Flags found to be mistaken are dismissed. If a review confirms content that breaks these Terms or the law, We may block the users or servers involved, report the content to Discord, and report it to law enforcement or other authorities when the law requires it or when We believe it's needed to protect someone's safety. Flag records are kept to prevent repeat abuse, and for as long as the law requires for content We report."},
+        {type: 'paragraph', text: "Flags may be reviewed by Our team, who may view the flagged media by fetching it again from the URL it came from while reviewing. That copy is only shown to the reviewer and is not kept. Flags found to be mistaken are dismissed. If a review confirms content that breaks these Terms or the law, We may block the users or servers involved, report the content to Discord, and report it to law enforcement or other authorities when the law requires it or when We believe it's needed to protect someone's safety. Flag records are kept to prevent repeat abuse, and for as long as the law requires for content We report."},
       ],
     },
     {

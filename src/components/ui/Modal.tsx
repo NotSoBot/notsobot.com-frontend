@@ -4,6 +4,15 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 
+// open modals, innermost last: Escape only closes the top one, so a confirm dialog over a modal doesn't close both
+const openModals: Array<symbol> = [];
+
+// for keyboard shortcuts of a modal that shouldn't fire while another one is open over it
+export function openModalCount(): number {
+  return openModals.length;
+}
+
+
 // Centered dialog over the current page: Escape / backdrop click close it, focus moves in and is
 // handed back to whatever opened it, and the page underneath doesn't scroll while it's open.
 export function Modal({ labelledBy, onClose, className, children }: {
@@ -19,8 +28,10 @@ export function Modal({ labelledBy, onClose, className, children }: {
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     closeRef.current?.focus({preventScroll: true});
+    const self = Symbol('modal');
+    openModals.push(self);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && openModals.at(-1) === self) {
         onCloseRef.current();
       }
     };
@@ -29,6 +40,7 @@ export function Modal({ labelledBy, onClose, className, children }: {
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      openModals.splice(openModals.indexOf(self), 1);
       document.body.style.overflow = overflow;
       previouslyFocused?.focus?.({preventScroll: true});
     };

@@ -2,13 +2,17 @@
 // Every key is scoped to the session token, so switching accounts never shows someone else's data.
 
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { createContext, useContext } from 'react';
 
 import { useAuth } from '@/auth';
 
 import { ApiRequestError } from './client';
+import type { GuildScope } from './endpoints';
 import { api } from './index';
 import { queryKeys } from './queries';
 import type {
+  AdminGuildPatch,
+  AdminGuildsSortBy,
   AdminTagBlob,
   AdminTagStoragePage,
   AdminTagVariable,
@@ -28,6 +32,7 @@ import type {
   ContentFlagType,
   ContentFlagsPage,
   GuildListKind,
+  MeTagsDirectoryFilter,
   MeTagsSortBy,
   Reminder,
   ReminderPatch,
@@ -40,6 +45,7 @@ import type {
   TagDirectoryItem,
   TagDirectoryListingInput,
   TagPatch,
+  TagServerCounts,
   TagServers,
   TagsPage,
   TagStorageScope,
@@ -51,10 +57,10 @@ import type {
   Voice,
   VoicesPage,
 } from './types';
-import { ApiErrorCodes } from './types';
+import { ApiErrorCodes, TAG_DIRECTORY_ASSETS_MAX } from './types';
 
 
-export const ME_TAGS_PAGE_SIZE = 25;
+export const ME_TAGS_PAGE_SIZE = 50;
 
 
 // 404/405 from a planned endpoint means it hasn't shipped yet
@@ -89,6 +95,8 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
     switch (error.code) {
       case ApiErrorCodes.DISCORD_RATELIMITED:
         return 'Discord is rate limiting us right now. Try again in a minute.';
+      case ApiErrorCodes.RATELIMITED:
+        return 'You’re doing that too fast. Wait a couple of seconds and try again.';
       case ApiErrorCodes.DISCORD_FETCH_FAILED:
       case ApiErrorCodes.DISCORD_API_ERROR:
         return 'Discord didn’t answer properly. Try again in a moment.';
@@ -116,8 +124,23 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong. T
         return 'This listing doesn’t have a pending verification request.';
       case ApiErrorCodes.TAG_DIRECTORY_CANNOT_UNVERIFY_VERIFIED:
         return 'This listing has already been verified, so the request can’t be canceled.';
+      case ApiErrorCodes.TAG_DIRECTORY_VERIFICATION_REQUIRES_DESCRIPTION:
+        return 'Verified listings need a description.';
+      case ApiErrorCodes.TAG_DIRECTORY_VERIFICATION_REQUIRES_CATEGORY:
+        return 'Verified listings need a category other than Other.';
       case ApiErrorCodes.MAX_TAG_DIRECTORY:
         return 'You’ve reached the limit of tags you can publish.';
+      case ApiErrorCodes.TAG_DIRECTORY_ASSETS_REQUIRE_PENDING:
+        return 'Media can only be changed while the listing is pending verification.';
+      case ApiErrorCodes.MAX_TAG_DIRECTORY_ASSETS:
+        return `Listings can have up to ${TAG_DIRECTORY_ASSETS_MAX} images, videos or audio files.`;
+      case ApiErrorCodes.UNKNOWN_TAG_DIRECTORY_ASSET:
+        return 'That file was already removed.';
+      case ApiErrorCodes.FILE_TOO_LARGE:
+        return 'That file is too big.';
+      case ApiErrorCodes.INVALID_FILE_TYPE:
+      case ApiErrorCodes.UNSUPPORTED_UPLOAD_TYPE:
+        return 'That file type isn’t supported. Use an image, video or audio file.';
       case ApiErrorCodes.UNKNOWN_VOICE:
         return 'That voice doesn’t exist anymore. It may have been deleted with the bot.';
       case ApiErrorCodes.UNKNOWN_REMINDER:
@@ -185,11 +208,12 @@ export function usePatchMeSettingsMutation() {
 
 /* tags */
 
-export function useMeTagsQuery(query: string, sortBy: MeTagsSortBy = 'newest') {
+// `serverId`: only the tags in that server
+export function useMeTagsQuery(query: string, sortBy: MeTagsSortBy = 'newest', directory: MeTagsDirectoryFilter = null, serverId: string | null = null) {
   const { token } = useAuth();
   return useInfiniteQuery({
-    queryKey: queryKeys.meTagsList(token, query, sortBy),
-    queryFn: ({ pageParam, signal }) => api.fetchMeTags({query, sortBy, offset: pageParam, limit: ME_TAGS_PAGE_SIZE}, signal),
+    queryKey: queryKeys.meTagsList(token, query, sortBy, directory, serverId),
+    queryFn: ({ pageParam, signal }) => api.fetchMeTags({query, sortBy, directory, serverId, offset: pageParam, limit: ME_TAGS_PAGE_SIZE}, signal),
     initialPageParam: 0,
     getNextPageParam: (lastPage: TagsPage, pages: Array<TagsPage>) => {
       return (lastPage.items.length < ME_TAGS_PAGE_SIZE) ? undefined : pages.reduce((total, page) => total + page.items.length, 0);
@@ -199,12 +223,12 @@ export function useMeTagsQuery(query: string, sortBy: MeTagsSortBy = 'newest') {
 }
 
 
-// just the total, for the overview
-export function useMeTagsCountQuery() {
+// just the total, for the overview (or one server's, for its modal)
+export function useMeTagsCountQuery(serverId: string | null = null) {
   const { token } = useAuth();
   return useQuery({
-    queryKey: [...queryKeys.meTags(token), 'count'],
-    queryFn: ({ signal }) => api.fetchMeTags({limit: 1}, signal),
+    queryKey: [...queryKeys.meTags(token), 'count', serverId],
+    queryFn: ({ signal }) => api.fetchMeTags({serverId, limit: 1}, signal),
     select: (page) => page.count,
   });
 }
@@ -247,12 +271,12 @@ export function usePatchMeTagMutation(tagId: string) {
 }
 
 
-export function useMeTagDirectoryQuery(tagId: string) {
+export function useMeTagDirectoryQuery(tagId: string, { enabled = true }: {enabled?: boolean} = {}) {
   const { token } = useAuth();
   return useQuery({
     queryKey: queryKeys.meTagDirectory(token, tagId),
     queryFn: ({ signal }) => api.fetchMeTagDirectory(tagId, signal),
-    enabled: !!token,
+    enabled: !!token && enabled,
   });
 }
 
@@ -301,6 +325,28 @@ function useMeTagDirectoryVerificationMutation(tagId: string, mutationFn: () => 
     },
   });
 }
+
+// uploading, moving or removing one of the listing's assets; every call answers with the whole listing
+export function useMeTagDirectoryAssetMutation(tagId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (action: {upload: File} | {move: string, position: number} | {remove: string}): Promise<TagDirectoryItem> => {
+      if ('upload' in action) {
+        return api.uploadMeTagDirectoryAsset(tagId, action.upload);
+      }
+      if ('move' in action) {
+        return api.moveMeTagDirectoryAsset(tagId, action.move, action.position);
+      }
+      return api.deleteMeTagDirectoryAsset(tagId, action.remove);
+    },
+    onSuccess: (directory: TagDirectoryItem) => {
+      queryClient.setQueryData(queryKeys.meTagDirectory(token, tagId), directory);
+      void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
 
 export function useRequestMeTagDirectoryVerificationMutation(tagId: string) {
   return useMeTagDirectoryVerificationMutation(tagId, () => api.requestMeTagDirectoryVerification(tagId));
@@ -546,27 +592,42 @@ export type GuildAction =
   | {kind: 'settings', patch: UserGuildPatch};
 
 
-// one mutation for every server edit; each refetches the server afterwards so the page shows
-// exactly what the API stored (and what the bot will see)
-export function useMeGuildMutation(guildId: string) {
+// Which routes the server sections (prefixes, settings, lists, loggers, data) edit through: yours (`/users/@me/guilds`,
+// the default) or staff's (`/admin/guilds`, the admin server modal provides it).
+export const GuildScopeContext = createContext<GuildScope>('me');
+
+export function useGuildScope(): GuildScope {
+  return useContext(GuildScopeContext);
+}
+
+// what to refetch after a server edit, so the page shows exactly what the API stored (and what the bot will see)
+function guildQueryKey(scope: GuildScope, token: string | null, guildId: string) {
+  // staff edits also refresh the admin server list (blocked, name)
+  return (scope === 'admin') ? [...queryKeys.admin(token), 'guilds'] : queryKeys.meGuild(token, guildId);
+}
+
+
+// one mutation for every server edit; each refetches the server afterwards
+export function useGuildMutation(guildId: string) {
   const { token } = useAuth();
+  const scope = useGuildScope();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (action: GuildAction): Promise<unknown> => {
       switch (action.kind) {
         case 'prefix':
-          return (action.present) ? api.addMeGuildPrefix(guildId, action.prefix) : api.removeMeGuildPrefix(guildId, action.prefix);
+          return (action.present) ? api.addGuildPrefix(scope, guildId, action.prefix) : api.removeGuildPrefix(scope, guildId, action.prefix);
         case 'list':
-          return api.setMeGuildListEntry(guildId, action.list, action.id, action.type, action.present);
+          return api.setGuildListEntry(scope, guildId, action.list, action.id, action.type, action.present);
         case 'command-list':
-          return api.setMeGuildCommandListEntry(guildId, action.list, action.command, action.id, action.type, action.present);
+          return api.setGuildCommandListEntry(scope, guildId, action.list, action.command, action.id, action.type, action.present);
         case 'logger-remove':
-          return api.removeMeGuildLogger(guildId, {channel_id: action.channelId, type: action.type});
+          return api.removeGuildLogger(scope, guildId, {channel_id: action.channelId, type: action.type});
         case 'settings':
-          return api.patchMeGuild(guildId, action.patch);
+          return api.patchGuild(scope, guildId, action.patch);
       }
     },
-    onSettled: () => queryClient.invalidateQueries({queryKey: queryKeys.meGuild(token, guildId)}),
+    onSettled: () => queryClient.invalidateQueries({queryKey: guildQueryKey(scope, token, guildId)}),
   });
 }
 
@@ -584,20 +645,24 @@ export function useAddMeTagMutation(tagId: string) {
 
 /* data */
 
-// server owners only; the delete refetches the server (and your tags) so the page shows it reset
-export function useExportMeGuildDataMutation(guildId: string) {
-  return useMutation({mutationFn: () => api.exportMeGuildData(guildId)});
+// server owners only (bot owners from the admin panel); the delete refetches the server (and the tags lists) so the page
+// shows it reset
+export function useExportGuildDataMutation(guildId: string) {
+  const scope = useGuildScope();
+  return useMutation({mutationFn: () => api.exportGuildData(scope, guildId)});
 }
 
-export function useDeleteMeGuildDataMutation(guildId: string) {
+export function useDeleteGuildDataMutation(guildId: string) {
   const { token } = useAuth();
+  const scope = useGuildScope();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.deleteMeGuildData(guildId),
+    mutationFn: () => api.deleteGuildData(scope, guildId),
     onSettled: () => Promise.all([
-      queryClient.invalidateQueries({queryKey: queryKeys.meGuild(token, guildId)}),
+      queryClient.invalidateQueries({queryKey: guildQueryKey(scope, token, guildId)}),
       // the server's tags show up in your tags list too
       queryClient.invalidateQueries({queryKey: queryKeys.meTags(token)}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'all-tags']}),
     ]),
   });
 }
@@ -619,6 +684,8 @@ export const ADMIN_CONTENT_FLAGS_PAGE_SIZE = 50;
 
 export interface AdminTagsFilters {
   query: string,
+  // only tags made in this server
+  serverId?: string,
   searchContent: boolean,
   sortBy: AdminTagsSortBy,
   nsfw: boolean | null,
@@ -629,15 +696,22 @@ export interface AdminTagsFilters {
 export const ADMIN_TAG_VARIABLES_PAGE_SIZE = 50;
 export const ADMIN_TAG_BLOBS_PAGE_SIZE = 10;
 
-export function useAdminTagStorageQuery(tagId: string, kind: 'variables', filters: {storageType: number | null, page: number}): UseQueryResult<AdminTagStoragePage<AdminTagVariable>>;
-export function useAdminTagStorageQuery(tagId: string, kind: 'blobs', filters: {storageType: number | null, page: number}): UseQueryResult<AdminTagStoragePage<AdminTagBlob>>;
-export function useAdminTagStorageQuery(tagId: string, kind: 'variables' | 'blobs', filters: {storageType: number | null, page: number}) {
+export interface AdminTagStorageFilters {
+  storageType: number | null,
+  // part of a storage id; variables also match their name/value
+  query: string,
+  page: number,
+}
+
+export function useAdminTagStorageQuery(tagId: string, kind: 'variables', filters: AdminTagStorageFilters): UseQueryResult<AdminTagStoragePage<AdminTagVariable>>;
+export function useAdminTagStorageQuery(tagId: string, kind: 'blobs', filters: AdminTagStorageFilters): UseQueryResult<AdminTagStoragePage<AdminTagBlob>>;
+export function useAdminTagStorageQuery(tagId: string, kind: 'variables' | 'blobs', filters: AdminTagStorageFilters) {
   const { token } = useAuth();
   const pageSize = (kind === 'variables') ? ADMIN_TAG_VARIABLES_PAGE_SIZE : ADMIN_TAG_BLOBS_PAGE_SIZE;
   return useQuery<AdminTagStoragePage<AdminTagVariable> | AdminTagStoragePage<AdminTagBlob>>({
     queryKey: queryKeys.adminTagStorage(token, tagId, kind, filters),
     queryFn: ({ signal }) => {
-      const params = {storageType: filters.storageType, offset: filters.page * pageSize, limit: pageSize};
+      const params = {storageType: filters.storageType, query: filters.query, offset: filters.page * pageSize, limit: pageSize};
       return (kind === 'variables') ? api.fetchAdminTagVariables(tagId, params, signal) : api.fetchAdminTagBlobs(tagId, params, signal);
     },
     placeholderData: keepPreviousData,
@@ -652,6 +726,7 @@ export function useAdminTagsQuery(filters: AdminTagsFilters) {
     queryKey: queryKeys.adminTags(token, filters),
     queryFn: ({ signal }) => api.fetchAdminTags({
       query: filters.query,
+      serverId: filters.serverId,
       searchContent: filters.searchContent,
       sortBy: filters.sortBy,
       nsfw: filters.nsfw,
@@ -692,13 +767,24 @@ export function useAdminTagDirectoryQuery(filters: AdminTagDirectoryFilters) {
 
 // one listing (with its content) by tag id, for staff editing it from the public directory; null if it isn't listed.
 // Lives under the admin list keys so `usePatchAdminTagDirectoryMutation` updates and refetches it too.
-// Which servers added the tag, for its owner and staff only. Staff read it from the admin route (their own tags too).
-export function useTagServersQuery(tagId: string, { owner, staff }: {owner: boolean, staff: boolean}) {
+// How widely the owner's tag has been added, counts only. Which servers is staff only, see `useAdminTagServersQuery`.
+export function useTagServerCountsQuery(tagId: string) {
+  const { token } = useAuth();
+  return useQuery<TagServerCounts>({
+    queryKey: queryKeys.meTagServers(token, tagId),
+    queryFn: ({ signal }) => api.fetchMeTagServers(tagId, signal),
+    enabled: !!token,
+  });
+}
+
+
+// Which servers added the tag, staff only (their own tags too).
+export function useAdminTagServersQuery(tagId: string) {
   const { token } = useAuth();
   return useQuery<TagServers>({
-    queryKey: (staff) ? queryKeys.adminTagServers(token, tagId) : queryKeys.meTagServers(token, tagId),
-    queryFn: ({ signal }) => (staff) ? api.fetchAdminTagServers(tagId, signal) : api.fetchMeTagServers(tagId, signal),
-    enabled: (owner || staff) && !!token,
+    queryKey: queryKeys.adminTagServers(token, tagId),
+    queryFn: ({ signal }) => api.fetchAdminTagServers(tagId, signal),
+    enabled: !!token,
   });
 }
 
@@ -966,6 +1052,7 @@ export interface AdminReportsFilters {
   status: number | null,
   userId: string,
   targetId: string,
+  guildId: string,
   page: number,
 }
 
@@ -978,6 +1065,7 @@ export function useAdminReportsQuery(filters: AdminReportsFilters) {
       status: filters.status,
       userId: filters.userId,
       targetId: filters.targetId,
+      guildId: filters.guildId,
       offset: filters.page * ADMIN_PAGE_SIZE,
       limit: ADMIN_PAGE_SIZE,
     }, signal),
@@ -1065,5 +1153,51 @@ export function usePatchAdminVoiceMutation() {
       void queryClient.invalidateQueries({queryKey: queryKeys.meVoices(token)});
     },
     onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+  });
+}
+
+
+export interface AdminGuildsFilters {
+  query: string,
+  inBot: boolean | null,
+  blocked: boolean | null,
+  sortBy: AdminGuildsSortBy,
+  page: number,
+}
+
+export function useAdminGuildsQuery(filters: AdminGuildsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminGuilds(token, filters),
+    queryFn: ({ signal }) => api.fetchAdminGuilds({
+      query: filters.query,
+      inBot: filters.inBot,
+      blocked: filters.blocked,
+      sortBy: filters.sortBy,
+      offset: filters.page * ADMIN_PAGE_SIZE,
+      limit: ADMIN_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+
+export function useAdminGuildQuery(guildId: string) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.adminGuild(token, guildId),
+    queryFn: ({ signal }) => api.fetchAdminGuild(guildId, signal),
+  });
+}
+
+
+// blocking/unblocking a server (unblocking is owner only); the settings go through `useGuildMutation` like everywhere else
+export function usePatchAdminGuildMutation(guildId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: AdminGuildPatch) => api.patchAdminGuild(guildId, patch),
+    onSuccess: (guild) => queryClient.setQueryData(queryKeys.adminGuild(token, guildId), guild),
+    onSettled: () => queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'guilds']}),
   });
 }
