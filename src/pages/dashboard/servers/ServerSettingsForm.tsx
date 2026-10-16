@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 
 import { useToast } from '@/components/ui/Toast';
-import type { UserGuild, UserGuildPatch } from '@/lib/api';
+import type { GuildAdminBypassSetting, UserGuild, UserGuildPatch } from '@/lib/api';
 import { errorMessage, useGuildMutation } from '@/lib/api/dashboardQueries';
 
 import { ChoiceSelect } from '../settings/ChoiceSelect';
@@ -19,7 +19,9 @@ import { CharCounter, Field, InlineError, Panel, SaveBar } from '../ui';
 import { readOnlyMessage } from './guildMeta';
 
 
-type Values = Required<{[K in keyof UserGuildPatch]: Exclude<UserGuildPatch[K], undefined>}>;
+// the owner/admin bypass settings are changed from the list panels
+type SettingsPatch = Omit<UserGuildPatch, GuildAdminBypassSetting>;
+type Values = Required<{[K in keyof SettingsPatch]: Exclude<SettingsPatch[K], undefined>}>;
 
 
 export function ServerSettingsForm({ guild, onDirtyChange }: {guild: UserGuild, onDirtyChange: (dirty: boolean) => void}) {

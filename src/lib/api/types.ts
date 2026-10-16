@@ -86,6 +86,9 @@ export interface CommandMetadata {
   dmable: boolean,
   enabled: boolean,
   examples: Array<string>,
+  // the discord application command's id, slash/context menu commands only (a subcommand has its top-level
+  // command's), for mentioning it as `</name:id>`. missing from commands uploaded before it existed
+  external_id?: string | null,
   name: string,
   ratelimits: Array<{duration: number, key: string | null, limit: number, type: string}>,
   type: CommandType,
@@ -230,7 +233,10 @@ export interface TagDirectoryAsset {
 }
 
 // `TagAssets.to_dict()`, same shape as a directory listing's assets
-export type TagAsset = TagDirectoryAsset;
+export type TagAsset = TagDirectoryAsset & {
+  // text, json, code, etc, which staff can edit (missing from an api older than the field)
+  is_text?: boolean,
+};
 
 // the listing's own thumbnail for the directory card, always a small png (videos give their first frame)
 export interface TagDirectoryThumbnail {
@@ -364,6 +370,7 @@ export const ApiErrorCodes = {
   UNKNOWN_TAG_ASSET: 10019,
   UNKNOWN_TAG_DIRECTORY_ASSET: 10020,
   UNKNOWN_TAG_DIRECTORY_EDIT_REQUEST: 10021,
+  UNKNOWN_GUILD_LIST_ITEM: 10022,
   UNKNOWN_SERVER: 10012,
   UNKNOWN_REPORT: 10017,
   UNKNOWN_REMINDER: 10007,
@@ -574,6 +581,8 @@ export interface UserGuildSummary {
 
 export interface GuildListEntry {
   added: string,
+  // if the server owner and admins skip this entry, null follows the server's setting for the list
+  admin_bypass: boolean | null,
   id: string,
   type: string,
   user_id: string | null,
@@ -601,13 +610,18 @@ export interface GuildPrefix {
 }
 
 export interface GuildSettings {
+  // if the server owner and admins skip each list (entries can override it)
+  allowlist_admin_bypass: boolean,
+  blocklist_admin_bypass: boolean,
+  commands_allowlist_admin_bypass: boolean,
+  commands_blocklist_admin_bypass: boolean,
   ml_diffusion_model: string | null,
   ml_llm_model: string | null,
   ml_llm_personality: string | null,
   response_display: number | null,
 }
 
-export type GuildEditableArea = 'prefixes' | 'allowlist' | 'blocklist' | 'commands' | 'loggers' | 'settings';
+export type GuildEditableArea = 'prefixes' | 'allowlist' | 'blocklist' | 'commands' | 'loggers' | 'settings' | 'admin_bypass';
 
 // `Guild.to_dict()` + the caller's permissions and what they may edit
 export interface UserGuild {
@@ -646,7 +660,14 @@ export interface UserGuildDataDelete {
   tags_deleted: number,
 }
 
+export type GuildAdminBypassSetting = 'allowlist_admin_bypass' | 'blocklist_admin_bypass' | 'commands_allowlist_admin_bypass' | 'commands_blocklist_admin_bypass';
+
+// the `*_admin_bypass` settings need the `admin_bypass` area, null resets one to true
 export interface UserGuildPatch {
+  allowlist_admin_bypass?: boolean | null,
+  blocklist_admin_bypass?: boolean | null,
+  commands_allowlist_admin_bypass?: boolean | null,
+  commands_blocklist_admin_bypass?: boolean | null,
   locale?: string | null,
   timezone?: string | null,
   ml_llm_personality?: string | null,
@@ -829,6 +850,22 @@ export interface AdminTagsPage {
   items: Array<AdminTagItem>,
 }
 
+// `POST /admin/tags/<id>/merge`, what replacing a tag with another moves (or would, for a dry run). Variables and blobs
+// move per storage scope (a user, channel, server or global): `dropped` are in scopes the target already has something in
+export interface AdminTagMergeSummary {
+  aliases: number,
+  assets: number,
+  blobs: {dropped: number, moved: number},
+  // the source's directory listing, deleted with it
+  directory: boolean,
+  // rows of use history
+  use_records: number,
+  uses: number,
+  variables: {dropped: number, moved: number},
+  source: AdminDirectoryTag,
+  target: AdminDirectoryTag,
+}
+
 // a tag's variables/blobs across every storage, read-only; `counts` is per storage type over the whole tag
 export interface AdminTagVariable {
   name: string,
@@ -892,6 +929,7 @@ export interface ContentFlag {
   pdq: string | null,
   query: string | null,
   reviewed_at: ApiTimestamp | null,
+  // TODO: make this a user object (`{id, username, discriminator, avatar}` like `user`) instead of just the id
   reviewed_by: string | null,
   scores_worst: Record<string, unknown> | null,
   sha256: string | null,

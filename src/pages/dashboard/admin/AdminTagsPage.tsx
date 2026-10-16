@@ -1,10 +1,11 @@
-import { Check, ChevronDown, ChevronUp, Clock, Music, Pencil, ShieldCheck, ShieldX, Trash2, X } from 'lucide-react';
+import { Check, Clock, Music, Pencil, ShieldCheck, ShieldX, Trash2, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
+import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
   ApiErrorCodes,
@@ -22,16 +23,17 @@ import {
   ADMIN_TAGS_PAGE_SIZE,
   errorMessage,
   useAdminTagDirectoryEditRequestMutation,
+  useAdminTagDirectoryItemQuery,
   useAdminTagDirectoryQuery,
   usePatchAdminTagDirectoryMutation,
 } from '@/lib/api/dashboardQueries';
-import { cn, formatDate, formatMemory } from '@/lib/utils';
+import { cn, formatDate, formatMemory, NO_AUTOFILL } from '@/lib/utils';
 import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
 import { CategoryBadge, categoryOptionFromParam, CategorySelect, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge, verificationRequirement } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
 import { AdminTagModal, useOpenListItem } from './AdminTagModal';
-import { Chip, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { Chip, CopyableValue, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 import { TagAssetsPanel } from './TagAssetsPanel';
 import { TagStoragePanel } from './TagStoragePanel';
@@ -85,7 +87,10 @@ export function AdminTagsPage() {
     page,
   });
   const items = data?.items ?? [];
-  const { openItem, previousId, nextId, open, close } = useOpenListItem(items, (item) => item.id);
+  const { openId, openItem: listedItem, previousId, nextId, open, close } = useOpenListItem(items, (item) => item.id, Routes.DASHBOARD_ADMIN_TAG_DIRECTORY);
+  // a linked listing that isn't on this page (or under this filter) is fetched on its own
+  const linked = useAdminTagDirectoryItemQuery(openId ?? '', {enabled: !!openId && !listedItem});
+  const openItem = listedItem ?? linked.data ?? null;
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ADMIN_TAGS_PAGE_SIZE});
   const pagination = {
     page,
@@ -231,8 +236,6 @@ function DirectoryTagCard({ item, onOpen }: {item: AdminTagDirectoryItem, onOpen
 }
 
 
-const CONTENT_COLLAPSE_LINES = 14;
-const CONTENT_COLLAPSE_CHARS = 900;
 // `Tag.content` is varchar(2000)
 const CONTENT_MAX = 2000;
 // same limits as the api's directory listing validators
@@ -245,14 +248,12 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
   const mutation = usePatchAdminTagDirectoryMutation();
   // separate instance so saving content doesn't show up as a pending verification change
   const contentMutation = usePatchAdminTagDirectoryMutation();
-  const [ expanded, setExpanded ] = useState(false);
   const listingMutation = usePatchAdminTagDirectoryMutation();
   // null when not editing
   const [ draft, setDraft ] = useState<string | null>(null);
   const [ listingDraft, setListingDraft ] = useState<{name: string, title: string, description: string, category: TagDirectoryCategory} | null>(null);
 
   const content = tag.content ?? '';
-  const long = CONTENT_COLLAPSE_LINES < content.split('\n').length || CONTENT_COLLAPSE_CHARS < content.length;
 
   const saveContent = () => {
     if (draft === null) {
@@ -392,6 +393,7 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
                 value={listingDraft.name}
                 disabled={listingMutation.isPending}
                 autoComplete='off'
+                {...NO_AUTOFILL}
                 spellCheck={false}
                 onChange={(event) => {
                   listingMutation.reset();
@@ -407,6 +409,8 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
                 className='input'
                 value={listingDraft.title}
                 disabled={listingMutation.isPending}
+                autoComplete='off'
+                {...NO_AUTOFILL}
                 onChange={(event) => setListingDraft({...listingDraft, title: event.target.value})}
               />
             )}
@@ -470,7 +474,7 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
       <div className='mt-3'>
         <DetailList
           items={[
-            ['Tag id', <span className='font-mono'>{tag.id}</span>],
+            ['Tag id', <CopyableValue value={tag.id} truncate={0}/>],
             ['Uses', (tag.uses ?? 0).toLocaleString()],
             ['Servers', (item.server_count ?? 0).toLocaleString()],
             ['Created', <ExactDate value={tag.created}/>],
@@ -486,12 +490,6 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
           <h3 className='section-label'>Content</h3>
           <div className='flex items-center gap-1'>
             <span className='mr-1 text-xs text-subtle tabular-nums'><CharCounter length={(draft ?? content).length} max={CONTENT_MAX}/></span>
-            {(draft === null && long) ? (
-              <button type='button' className='btn btn-ghost btn-sm' onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-                {(expanded) ? <ChevronUp className='size-4'/> : <ChevronDown className='size-4'/>}
-                {(expanded) ? 'Collapse' : 'Expand'}
-              </button>
-            ) : null}
             {(draft === null && content) ? <CopyButton value={content} label='Copy'/> : null}
             {(draft === null) ? (
               <button type='button' className='btn btn-ghost btn-sm' onClick={() => setDraft(content)}>
@@ -526,19 +524,12 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
           </div>
         ) : (
           <pre
-            className={cn(
-              'overflow-x-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg',
-              long && !expanded && 'max-h-72 overflow-y-hidden',
-              'focus:border-line-strong focus:outline-none',
-            )}
+            className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none'
             {...selectAllScope}
           >
             {content || <span className='text-subtle italic'>(empty)</span>}
           </pre>
         )}
-        {(draft === null && long && !expanded) ? (
-          <button type='button' className='mt-1 cursor-pointer text-xs text-brand hover:underline' onClick={() => setExpanded(true)}>Show full content</button>
-        ) : null}
       </div>
 
       <TagAssetsPanel tagId={item.id} assets={tag.assets ?? []} onArchived={onArchived}/>

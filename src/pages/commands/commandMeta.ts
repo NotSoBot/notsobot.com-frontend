@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import { commandPath as commandPathFor, commandTypeFromPath } from '@/lib/commandPaths';
 import { CommandCategories, CommandTypes, LegacyCommandCategories, type Command, type CommandMetadata, type CommandStat, type CommandType } from '@/lib/api';
 
 
@@ -116,6 +117,21 @@ export interface Entry {
 
 export function entryKey(commandId: string, type: CommandType): string {
   return `${commandId}:${type}`;
+}
+
+
+function commandTypes(entries: Array<Entry>, commandId: string): Array<CommandType> {
+  return entries.filter((entry) => entry.command.id === commandId).map((entry) => entry.metadata.type);
+}
+
+export function commandPath(entry: Entry, entries: Array<Entry>): string {
+  return commandPathFor(entry.command.id, entry.metadata.type, commandTypes(entries, entry.command.id));
+}
+
+// the entry a /commands/:commandId(/:commandType) path points at, undefined for an unknown command or type
+export function entryFromPath(entries: Array<Entry>, commandId: string, slug: string | undefined): Entry | undefined {
+  const type = commandTypeFromPath(slug, commandTypes(entries, commandId));
+  return (type === undefined) ? undefined : entries.find((entry) => entry.command.id === commandId && entry.metadata.type === type);
 }
 
 

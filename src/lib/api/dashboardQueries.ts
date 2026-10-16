@@ -672,6 +672,8 @@ export type GuildAction =
   | {kind: 'prefix', prefix: string, present: boolean}
   | {kind: 'list', list: GuildListKind, id: string, type: string, present: boolean}
   | {kind: 'command-list', list: GuildListKind, command: string, id: string, type: string, present: boolean}
+  | {kind: 'list-admin-bypass', list: GuildListKind, id: string, type: string, adminBypass: boolean | null}
+  | {kind: 'command-list-admin-bypass', list: GuildListKind, command: string, id: string, type: string, adminBypass: boolean | null}
   | {kind: 'logger-remove', channelId: string, type: number}
   | {kind: 'settings', patch: UserGuildPatch};
 
@@ -705,6 +707,10 @@ export function useGuildMutation(guildId: string) {
           return api.setGuildListEntry(scope, guildId, action.list, action.id, action.type, action.present);
         case 'command-list':
           return api.setGuildCommandListEntry(scope, guildId, action.list, action.command, action.id, action.type, action.present);
+        case 'list-admin-bypass':
+          return api.setGuildListEntryAdminBypass(scope, guildId, action.list, action.id, action.type, action.adminBypass);
+        case 'command-list-admin-bypass':
+          return api.setGuildCommandListEntryAdminBypass(scope, guildId, action.list, action.command, action.id, action.type, action.adminBypass);
         case 'logger-remove':
           return api.removeGuildLogger(scope, guildId, {channel_id: action.channelId, type: action.type});
         case 'settings':
@@ -914,6 +920,52 @@ export function usePatchAdminTagDirectoryMutation() {
 }
 
 
+// staff changing a listing's media or thumbnail, whatever its verification state; each answers with the whole listing
+function useAdminTagDirectoryListingMutation<Action>(tagId: string, mutationFn: (action: Action) => Promise<AdminTagDirectoryItem>) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const listKey = [...queryKeys.admin(token), 'tags'];
+  return useMutation({
+    mutationFn,
+    onSuccess: (item: AdminTagDirectoryItem) => {
+      queryClient.setQueriesData<AdminTagDirectoryPage>({queryKey: listKey}, (page) => {
+        if (!page) {
+          return page;
+        }
+        return {...page, items: page.items.map((other) => (other.id === item.id) ? item : other)};
+      });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({queryKey: listKey});
+      // the owner's copy too, for staff editing their own listing
+      void queryClient.invalidateQueries({queryKey: queryKeys.meTagDirectory(token, tagId)});
+      void queryClient.invalidateQueries({queryKey: ['tags', 'directory']});
+    },
+  });
+}
+
+export function useAdminTagDirectoryMediaMutation(tagId: string) {
+  return useAdminTagDirectoryListingMutation(tagId, (action: {upload: File} | {move: string, position: number} | {remove: string}) => {
+    if ('upload' in action) {
+      return api.uploadAdminTagDirectoryMedia(tagId, action.upload);
+    }
+    if ('move' in action) {
+      return api.moveAdminTagDirectoryMedia(tagId, action.move, action.position);
+    }
+    return api.deleteAdminTagDirectoryMedia(tagId, action.remove);
+  });
+}
+
+export function useAdminTagDirectoryThumbnailMutation(tagId: string) {
+  return useAdminTagDirectoryListingMutation(tagId, (action: {upload: File} | {remove: true}) => {
+    if ('upload' in action) {
+      return api.uploadAdminTagDirectoryThumbnail(tagId, action.upload);
+    }
+    return api.deleteAdminTagDirectoryThumbnail(tagId);
+  });
+}
+
+
 // approving changes the live listing (and maybe the tag's content), rejecting only closes the request
 export function useAdminTagDirectoryEditRequestMutation() {
   const { token } = useAuth();
@@ -1042,6 +1094,37 @@ export function usePatchAdminUserMutation() {
     onSettled: () => Promise.all([
       queryClient.invalidateQueries({queryKey: listKey}),
       queryClient.invalidateQueries({queryKey: flagsKey}),
+    ]),
+  });
+}
+
+
+// what replacing `tagId` with `targetId` would move, a dry run of `useMergeAdminTagMutation`
+export function useAdminTagMergePreviewQuery(tagId: string, targetId: string | null) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: [...queryKeys.admin(token), 'tag-merge', tagId, targetId],
+    queryFn: ({ signal }) => api.mergeAdminTag(tagId, targetId!, {dryRun: true}, signal),
+    enabled: !!token && !!targetId,
+    retry: false,
+    // it's what's about to be confirmed, so never an old count
+    gcTime: 0,
+  });
+}
+
+
+export function useMergeAdminTagMutation() {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tagId, targetId }: {tagId: string, targetId: string}) => api.mergeAdminTag(tagId, targetId),
+    // both admin tag lists (and their storage/servers), and the public directory if either was listed
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'all-tags']}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'tags']}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'tag-storage']}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'tag-servers']}),
+      queryClient.invalidateQueries({queryKey: ['tags', 'directory']}),
     ]),
   });
 }

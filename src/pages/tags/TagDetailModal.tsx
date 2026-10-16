@@ -10,10 +10,11 @@ import { useTagDirectoryItemQuery } from '@/lib/api/queries';
 import { Routes } from '@/routes';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
+import { adminTagsPath, CopyButton } from '@/pages/dashboard/admin/adminUi';
 
 import { AddTagButton, categoryLabel, NsfwBadge, verificationInfo } from './tagDirectory';
 import { HiddenContentSection, ListingEditForm, ManageListingCard, TagServersSection, useListingAccess } from './TagListingManager';
-import { MediaSection, ThumbnailManager } from './TagMedia';
+import { MediaSection, ThumbnailManager, type MediaManage } from './TagMedia';
 
 
 const TITLE_ID = 'tag-modal-title';
@@ -97,10 +98,12 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
   const access = useListingAccess(item);
   const canManage = access.owner || access.staff;
   // the public listing only has its media once it's verified, the owner and staff see it before that
-  const own = useMeTagDirectoryQuery(item.id, {enabled: access.owner});
-  const admin = useAdminTagDirectoryItemQuery(item.id, {enabled: access.staff && !access.owner});
-  const privateItem = (access.owner) ? own.data : (access.staff) ? admin.data : undefined;
+  const own = useMeTagDirectoryQuery(item.id, {enabled: access.owner && !access.staff});
+  const admin = useAdminTagDirectoryItemQuery(item.id, {enabled: access.staff});
+  const privateItem = (access.staff) ? admin.data : (access.owner) ? own.data : undefined;
   const assets = privateItem?.assets ?? item.assets;
+  // staff change the media through the admin routes, whatever the verification state; owners only while it's pending
+  const staffManage: MediaManage | undefined = (access.staff && admin.data) ? {tagId: item.id, verified: admin.data.verified, staff: true} : undefined;
 
   return (
     <>
@@ -135,7 +138,7 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
               </span>
             </p>
           </div>
-          <AddTagButton tag={tag} verified={item.verified} size='lg' className='w-full justify-center sm:w-auto'/>
+          <AddTagButton tag={tag} verified={item.verified} size='lg' className='w-full justify-center sm:w-auto' openFromUrl/>
         </div>
       </header>
 
@@ -147,10 +150,34 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
 
           {(editing && canManage) ? (
             <>
-              <ListingEditForm item={item} access={access} onDone={() => onEditingChange(false)}/>
-              {/* the media saves as it goes (it isn't part of the form), and only the owner can change it. A verified
-                  listing's media changes through a change request, which lives in the dashboard */}
-              {(access.owner && own.data && own.data.verified === TagDirectoryVerificationStates.VERIFIED) ? (
+              {/* the media saves as it goes (it isn't part of the form's save). Staff can always change it, and get it above
+                  the content they're editing; the owner only while it's pending: a verified listing's media changes through
+                  a change request, which lives in the dashboard */}
+              <ListingEditForm
+                item={item}
+                access={access}
+                media={(staffManage && admin.data) ? (
+                  <div className='space-y-5 rounded-md border border-line bg-deep p-4'>
+                    <section>
+                      <h3 className='mb-1 font-semibold text-white'>Thumbnail</h3>
+                      <p className='mb-3 text-sm text-muted'>The small picture on the directory card. Images and videos are shrunk to a small PNG (videos use their first frame). Without one, the cover is used.</p>
+                      <ThumbnailManager assets={admin.data.assets} thumbnail={admin.data.thumbnail ?? null} manage={staffManage}/>
+                    </section>
+                    <div className='border-t border-line pt-5'>
+                      <MediaSection
+                        key={item.id}
+                        assets={admin.data.assets}
+                        nsfw={false}
+                        tagName={tag.name}
+                        manage={staffManage}
+                        headingClassName='font-semibold text-white'
+                      />
+                    </div>
+                  </div>
+                ) : undefined}
+                onDone={() => onEditingChange(false)}
+              />
+              {(staffManage) ? null : (access.owner && own.data && own.data.verified === TagDirectoryVerificationStates.VERIFIED) ? (
                 <p className='rounded-lg border border-line bg-surface p-4 text-sm text-muted'>
                   This listing is verified, so its content, thumbnail and media are locked.{' '}
                   <Link to={`${Routes.DASHBOARD_TAG_EDIT.replace(':tagId', item.id)}?tab=directory`} className='text-brand hover:underline'>
@@ -196,7 +223,7 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
                 assets={assets}
                 nsfw={tag.nsfw}
                 tagName={tag.name}
-                manage={(access.owner) ? {tagId: item.id, verified: own.data?.verified ?? item.verified} : undefined}
+                manage={(!access.owner) ? undefined : (access.staff) ? staffManage : {tagId: item.id, verified: own.data?.verified ?? item.verified}}
               />
 
               {/* only filled in when the owner chose to show it */}
@@ -217,7 +244,21 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
             <StatTile icon={Server} label='Servers'><span className='text-2xl font-bold'>{item.server_count.toLocaleString()}</span></StatTile>
             <StatTile icon={Calendar} label='Listed'><span className='text-sm font-medium'>{formatDate(item.created)}</span></StatTile>
             <StatTile icon={Hash} label='Tag ID'>
-              <span className='block truncate font-mono text-sm' title={item.id}>{item.id}</span>
+              <span className='flex min-w-0 items-center gap-1'>
+                {/* staff jump straight to the tag in the admin panel */}
+                {(access.staff) ? (
+                  <Link
+                    to={adminTagsPath(`id:${item.id}`)}
+                    title='Open in the admin panel'
+                    className='truncate font-mono text-sm underline-offset-2 hover:text-brand hover:underline'
+                  >
+                    {item.id}
+                  </Link>
+                ) : (
+                  <span className='truncate font-mono text-sm select-all' title={item.id}>{item.id}</span>
+                )}
+                <CopyButton value={item.id}/>
+              </span>
             </StatTile>
           </div>
 

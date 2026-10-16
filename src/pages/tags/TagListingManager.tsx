@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUpRight, Clock, EyeOff, Pencil, ShieldCheck, ShieldX } from 'lucide-react';
+import { ArrowUpRight, Clock, EyeOff, Pencil, ShieldCheck, ShieldX, X } from 'lucide-react';
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { isStaff, useAuth } from '@/auth';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Spinner } from '@/components/ui/Spinner';
@@ -19,18 +20,22 @@ import {
 import {
   errorMessage,
   useAdminTagDirectoryItemQuery,
+  useCancelMeTagDirectoryVerificationMutation,
   useMeTagQuery,
   usePatchAdminTagDirectoryMutation,
   usePatchMeTagDirectoryMutation,
+  useRequestMeTagDirectoryVerificationMutation,
   useAdminTagServersQuery,
   useTagServerCountsQuery,
 } from '@/lib/api/dashboardQueries';
 import { queryKeys } from '@/lib/api/queries';
 import { cn, formatDate } from '@/lib/utils';
+import { adminTagDirectoryPath } from '@/pages/dashboard/admin/adminUi';
+import { TagAssetsPanel } from '@/pages/dashboard/admin/TagAssetsPanel';
 import { GuildIcon } from '@/pages/dashboard/servers/GuildIcon';
 import { CharCounter, Field, InlineError, Toggle } from '@/pages/dashboard/ui';
 
-import { CategorySelect } from './tagDirectory';
+import { CategorySelect, verificationRequirement, VerificationWarning } from './tagDirectory';
 
 
 // The listing's owner and NotSoBot staff can manage a directory tag right from the public directory. Owners go through
@@ -312,7 +317,7 @@ function ServerNamesDialog({ server, onClose }: {server: TagServer, onClose: () 
 }
 
 
-// Owner/staff box in the modal's sidebar: start editing, jump to the dashboard and, for staff, set verification.
+// Owner/staff box in the modal's sidebar: start editing, jump to the dashboard, request verification (owners) or set it (staff).
 export function ManageListingCard({ item, access, editing, onEdit }: {
   item: TagDirectoryItem,
   access: ListingAccess,
@@ -349,6 +354,9 @@ export function ManageListingCard({ item, access, editing, onEdit }: {
         </Link>
       ) : null}
 
+      {/* staff who own the tag verify it themselves below */}
+      {(access.owner && !access.staff) ? <OwnerVerificationSection item={item} editing={editing}/> : null}
+
       {(access.staff) ? (
         <div className='mt-4 border-t border-line pt-4'>
           <h4 className='section-label mb-2'>Verification</h4>
@@ -383,7 +391,7 @@ export function ManageListingCard({ item, access, editing, onEdit }: {
           </div>
           {(verify.isError) ? <InlineError>{errorMessage(verify.error, 'Couldn’t change the verification.')}</InlineError> : null}
           <Link
-            to={{pathname: Routes.DASHBOARD_ADMIN_TAG_DIRECTORY, search: `?q=${encodeURIComponent(`id:${item.id}`)}&status=all`}}
+            to={adminTagDirectoryPath(item.id)}
             className='btn btn-ghost mt-2 w-full'
           >
             Open in admin
@@ -392,6 +400,79 @@ export function ManageListingCard({ item, access, editing, onEdit }: {
         </div>
       ) : null}
     </section>
+  );
+}
+
+
+// the owner's side of verification, the same as the dashboard's Directory tab: request it for an unverified listing, or
+// cancel a pending request; nothing to do once it's verified. No toasts, the directory isn't inside the dashboard's
+// `ToastProvider`, the section switching over shows it worked
+function OwnerVerificationSection({ item, editing }: {item: TagDirectoryItem, editing: boolean}) {
+  const merge = useMergeIntoDirectoryItem(item.id);
+  const request = useRequestMeTagDirectoryVerificationMutation(item.id);
+  const cancel = useCancelMeTagDirectoryVerificationMutation(item.id);
+  const [ confirming, setConfirming ] = useState(false);
+
+  if (item.verified === TagDirectoryVerificationStates.VERIFIED) {
+    return null;
+  }
+  const pending = item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
+  // requesting verification would freeze unsaved listing edits, so it waits until the edit form is closed
+  const blocker = (editing) ? 'Save or cancel your listing changes before requesting verification.' : verificationRequirement(item);
+
+  const doRequest = () => {
+    request.mutate(undefined, {
+      onSuccess: (updated) => {
+        merge({verified: updated.verified});
+        setConfirming(false);
+      },
+    });
+  };
+
+  const doCancel = () => {
+    cancel.mutate(undefined, {
+      onSuccess: (updated) => merge({verified: updated.verified}),
+    });
+  };
+
+  return (
+    <div className='mt-4 border-t border-line pt-4'>
+      <h4 className='section-label mb-2'>Verification</h4>
+      {(pending) ? (
+        <>
+          <p className='mb-3 text-xs text-subtle'>Waiting for NotSoBot’s team to review it. Canceling unlocks the tag so you can edit it again.</p>
+          <button type='button' className='btn btn-danger w-full' disabled={cancel.isPending} onClick={doCancel}>
+            <X className='size-4'/>
+            {(cancel.isPending) ? 'Canceling…' : 'Cancel request'}
+          </button>
+          {(cancel.isError) ? <InlineError>{errorMessage(cancel.error, 'Couldn’t cancel the request.')}</InlineError> : null}
+        </>
+      ) : (
+        <>
+          <p className='mb-3 text-xs text-subtle'>{blocker ?? 'Ask NotSoBot’s team to review it. Verified tags are marked as safe to run on the directory.'}</p>
+          <button type='button' className='btn btn-primary w-full' disabled={!!blocker} onClick={() => setConfirming(true)}>
+            <ShieldCheck className='size-4'/>
+            Request verification
+          </button>
+        </>
+      )}
+
+      {(confirming) ? (
+        <ConfirmDialog
+          tone='primary'
+          title={`Request verification for “${item.tag.name}”?`}
+          description={<VerificationWarning/>}
+          confirmLabel='Request verification'
+          pending={request.isPending}
+          error={(request.isError) ? errorMessage(request.error, 'Couldn’t request verification.') : undefined}
+          onConfirm={doRequest}
+          onClose={() => {
+            setConfirming(false);
+            request.reset();
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -415,9 +496,12 @@ function VerifyButton({ label, icon, className, current, disabled, pending, onCl
 
 
 // Replaces the listing's description/content in the modal while editing. Owners get the title, description, category
-// and the "show content publicly" switch; staff get the title, description, category and the content itself.
-export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryItem, access: ListingAccess, onDone: () => void}) {
+// and the "show content publicly" switch; staff get the title, description, category and the content itself, with
+// `media` (the thumbnail/media managers, which save on their own) slotted in above the content.
+export function ListingEditForm({ item, access, media, onDone }: {item: TagDirectoryItem, access: ListingAccess, media?: ReactNode, onDone: () => void}) {
   const full = useFullContent(item, access);
+  // same query `useFullContent` reads, for the tag's archived files
+  const admin = useAdminTagDirectoryItemQuery(item.id, {enabled: access.staff});
   const ownerPatch = usePatchMeTagDirectoryMutation(item.id);
   const adminPatch = usePatchAdminTagDirectoryMutation();
   const merge = useMergeIntoDirectoryItem(item.id);
@@ -557,27 +641,44 @@ export function ListingEditForm({ item, access, onDone }: {item: TagDirectoryIte
         />
       ) : null}
 
+      {media}
+
       {(access.staff) ? (
-        <Field
-          label='Content'
-          hint='Saving bypasses the lock. The owner isn’t notified and the tag’s edited date stays the same.'
-          counter={(content !== null) ? <CharCounter length={content.length} max={CONTENT_MAX}/> : undefined}
-        >
-          {(props) => (full.isPending) ? (
-            <div className='flex h-32 items-center justify-center rounded-md border border-line bg-deep'><Spinner className='size-5'/></div>
-          ) : (content === null) ? (
-            <p className='text-sm text-muted'>{errorMessage(full.error, 'Couldn’t load the content, so it can’t be edited here.')}</p>
-          ) : (
-            <textarea
-              {...props}
-              className='input resize-y font-mono text-sm leading-relaxed'
-              rows={Math.min(20, Math.max(6, content.split('\n').length + 1))}
-              value={content}
-              disabled={saving}
-              onChange={(event) => setContent(event.target.value)}
+        <>
+          <Field
+            label='Content'
+            hint='Saving bypasses the lock. The owner isn’t notified and the tag’s edited date stays the same.'
+            counter={(content !== null) ? <CharCounter length={content.length} max={CONTENT_MAX}/> : undefined}
+          >
+            {(props) => (full.isPending) ? (
+              <div className='flex h-32 items-center justify-center rounded-md border border-line bg-deep'><Spinner className='size-5'/></div>
+            ) : (content === null) ? (
+              <p className='text-sm text-muted'>{errorMessage(full.error, 'Couldn’t load the content, so it can’t be edited here.')}</p>
+            ) : (
+              <textarea
+                {...props}
+                className='input resize-y font-mono text-sm leading-relaxed'
+                rows={Math.min(20, Math.max(6, content.split('\n').length + 1))}
+                value={content}
+                disabled={saving}
+                onChange={(event) => setContent(event.target.value)}
+              />
+            )}
+          </Field>
+          {/* archiving a link that's in the content swaps it for the permanent one in the draft, saved with the listing */}
+          {(admin.data) ? (
+            <TagAssetsPanel
+              tagId={item.id}
+              assets={admin.data.tag.assets ?? []}
+              className=''
+              onArchived={(asset, sourceUrl) => {
+                if (sourceUrl) {
+                  setContent((current) => current?.replaceAll(sourceUrl, asset.urls.cdn) ?? current);
+                }
+              }}
             />
-          )}
-        </Field>
+          ) : null}
+        </>
       ) : (
         <p className='text-xs text-subtle'>
           To change the tag’s content, edit it in your{' '}

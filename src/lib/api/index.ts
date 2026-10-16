@@ -14,6 +14,7 @@ import type {
   AdminUserPatch,
   AdminUsersPage,
   AdminTagDirectorySortBy,
+  AdminTagMergeSummary,
   AdminTagsPage,
   AdminTagsSortBy,
   AdminTagStoragePage,
@@ -399,6 +400,15 @@ export const api = {
     return apiRequest<void>(guildEndpoints(scope, guildId).COMMAND_LIST(command, list, id, type), {method: (present) ? 'PUT' : 'DELETE'});
   },
 
+  // owners/admins only (`editable.admin_bypass`), null follows the server's setting for the list
+  setGuildListEntryAdminBypass: (scope: GuildScope, guildId: string, list: GuildListKind, id: string, type: string, adminBypass: boolean | null) => {
+    return apiRequest<void>(guildEndpoints(scope, guildId).LIST(list, id, type), {method: 'PATCH', body: {admin_bypass: adminBypass}});
+  },
+
+  setGuildCommandListEntryAdminBypass: (scope: GuildScope, guildId: string, list: GuildListKind, command: string, id: string, type: string, adminBypass: boolean | null) => {
+    return apiRequest<void>(guildEndpoints(scope, guildId).COMMAND_LIST(command, list, id, type), {method: 'PATCH', body: {admin_bypass: adminBypass}});
+  },
+
   removeGuildLogger: (scope: GuildScope, guildId: string, body: {channel_id: string, type: number}) => {
     return apiRequest<void>(guildEndpoints(scope, guildId).LOGGERS_DELETE, {method: 'POST', body});
   },
@@ -528,6 +538,31 @@ export const api = {
     return apiRequest<void>(ApiEndpoints.ADMIN_TAG_ASSET(tagId, assetId), {method: 'DELETE'});
   },
 
+  // the listing's media and thumbnail, same as the owner's routes but not limited to pending listings
+  uploadAdminTagDirectoryMedia: (tagId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_MEDIA(tagId), {method: 'POST', body, timeout: 120_000}).then(normalizeListing);
+  },
+
+  moveAdminTagDirectoryMedia: (tagId: string, assetId: string, position: number) => {
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_MEDIA_ITEM(tagId, assetId), {method: 'PATCH', body: {position}}).then(normalizeListing);
+  },
+
+  deleteAdminTagDirectoryMedia: (tagId: string, assetId: string) => {
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_MEDIA_ITEM(tagId, assetId), {method: 'DELETE'}).then(normalizeListing);
+  },
+
+  uploadAdminTagDirectoryThumbnail: (tagId: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_THUMBNAIL(tagId), {method: 'PUT', body, timeout: 120_000}).then(normalizeListing);
+  },
+
+  deleteAdminTagDirectoryThumbnail: (tagId: string) => {
+    return apiRequest<AdminTagDirectoryItem>(ApiEndpoints.ADMIN_TAG_DIRECTORY_THUMBNAIL(tagId), {method: 'DELETE'}).then(normalizeListing);
+  },
+
   // `deleteTag` also deletes the tag itself (and its aliases), not just the listing
   deleteAdminTagDirectory: (tagId: string, params: {deleteTag?: boolean} = {}) => {
     return apiRequest<void>(ApiEndpoints.ADMIN_TAG_DIRECTORY(tagId), {
@@ -560,6 +595,17 @@ export const api = {
 
   patchAdminUser: (userId: string, body: AdminUserPatch) => {
     return apiRequest<AdminUser>(ApiEndpoints.ADMIN_USER(userId), {method: 'PATCH', body});
+  },
+
+  // replaces `tagId` with `targetId` everywhere and deletes it (owner only); `dryRun` only counts what would move
+  mergeAdminTag: (tagId: string, targetId: string, params: {dryRun?: boolean} = {}, signal?: AbortSignal) => {
+    return apiRequest<AdminTagMergeSummary>(ApiEndpoints.ADMIN_TAG_MERGE(tagId), {
+      method: 'POST',
+      signal,
+      body: {target_id: targetId, dry_run: !!params.dryRun},
+      // moving a popular tag's use history can take a while
+      timeout: 120_000,
+    });
   },
 
   // every tag the user owns, everywhere; `count` is how many of theirs were deleted

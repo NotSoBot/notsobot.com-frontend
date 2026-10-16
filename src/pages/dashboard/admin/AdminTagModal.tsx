@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { Modal, openModalCount } from '@/components/ui/Modal';
+import { useToastClearance } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 
 
@@ -307,11 +308,15 @@ export function AdminModalFooter({ previousId, nextId, onNavigate, children }: {
 }) {
   const slide = useContext(SlideNavigation);
   const navigate = slide ?? onNavigate;
+  const ref = useRef<HTMLElement>(null);
+  // toasts (e.g. a status change's undo) would otherwise land on top of Next
+  useToastClearance(ref);
   if (!children && !previousId && !nextId) {
     return null;
   }
   return (
     <footer
+      ref={ref}
       className={cn(
         'flex items-center justify-between gap-3 border-t border-line',
         (children) ? 'sticky -bottom-6 z-10 rounded-b-xl bg-bg/95 px-3 py-3 backdrop-blur sm:-bottom-10 sm:px-4' : 'px-6 py-3',

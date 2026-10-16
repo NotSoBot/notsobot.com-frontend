@@ -1,7 +1,7 @@
 import { Search, X } from 'lucide-react';
 import type { InputHTMLAttributes } from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn, NO_AUTOFILL } from '@/lib/utils';
 
 
 interface SearchInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value' | 'size'> {
@@ -19,6 +19,7 @@ export function SearchInput({ className, value, onValueChange, size = 'md', ...p
         type='search'
         autoComplete='off'
         spellCheck={false}
+        {...NO_AUTOFILL}
         {...props}
         value={value}
         onChange={(event) => onValueChange(event.target.value)}

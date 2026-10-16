@@ -107,8 +107,20 @@ export function DashboardLayout() {
 function SectionList({ sections }: {sections: ReadonlyArray<Section>}) {
   return (
     <ul className='-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0'>
-      {sections.flatMap((section) => [section, ...(section.children ?? []).map((child) => ({...child, nested: true}))]).map((section) => (
-        <li key={section.to} className={cn('shrink-0', ('nested' in section) && 'lg:pl-5')}>
+      {sections.flatMap((section): Array<Section & {nested?: boolean, last?: boolean}> => [
+        section,
+        ...(section.children ?? []).map((child, i, children) => ({...child, nested: true, last: i === children.length - 1})),
+      ]).map((section) => (
+        <li key={section.to} className={cn('shrink-0', (section.nested) && 'lg:relative lg:pl-8')}>
+          {/* desktop tree line: an elbow from the parent's icon into this link, plus a stem on to the next child */}
+          {(section.nested) ? (
+            <>
+              <span aria-hidden className='pointer-events-none absolute -top-2.5 left-5 hidden h-[30px] w-2.5 rounded-bl-md border-b border-l border-subtle/70 lg:block'/>
+              {(!section.last) ? (
+                <span aria-hidden className='pointer-events-none absolute top-5 -bottom-0.5 left-5 hidden border-l border-subtle/70 lg:block'/>
+              ) : null}
+            </>
+          ) : null}
           <NavLink
             to={section.to}
             end={section.end}

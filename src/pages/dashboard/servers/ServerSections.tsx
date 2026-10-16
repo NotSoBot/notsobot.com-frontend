@@ -3,13 +3,13 @@ import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
-import type { GuildListKind, UserGuild } from '@/lib/api';
+import type { GuildAdminBypassSetting, GuildListEntry, GuildListKind, UserGuild } from '@/lib/api';
 import { errorField, errorMessage, useGuildMutation, type GuildAction } from '@/lib/api/dashboardQueries';
 import { useCommandsQuery } from '@/lib/api/queries';
 import { formatDate } from '@/lib/utils';
 
 import { isSnowflake } from '../tags/tagMeta';
-import { EmptyState, Field, Panel } from '../ui';
+import { EmptyState, Field, Panel, Toggle } from '../ui';
 import {
   COMMAND_LIST_TYPES,
   ENTRY_TYPE_LABELS,
@@ -92,6 +92,74 @@ function AddRow({ onSubmit, children, pending, disabled, label = 'Add' }: {
         {label}
       </button>
     </form>
+  );
+}
+
+
+/* owner/admin bypass */
+
+// the server owner and admins skip every list unless it (or an entry) says otherwise
+function AdminBypassToggle({ guild, setting, listName, edit }: {
+  guild: UserGuild,
+  setting: GuildAdminBypassSetting,
+  listName: string,
+  edit: ReturnType<typeof useGuildEdit>,
+}) {
+  const editable = guild.editable.admin_bypass;
+  const checked = guild.settings[setting];
+  return (
+    <div className='mb-4 rounded-md border border-line bg-deep px-3 py-2.5'>
+      <Toggle
+        checked={checked}
+        disabled={!editable || edit.pending}
+        label={`Server owner and admins skip the ${listName}`}
+        description={(editable)
+          ? 'Turn off to make them follow it too, like turning a command off for everyone. Entries can override this.'
+          : `Only the server owner and admins can change this.`}
+        onChange={(value) => void edit.run(
+          '\u0000bypass',
+          {kind: 'settings', patch: {[setting]: value}},
+          (value) ? `The server owner and admins skip the ${listName} again` : `The server owner and admins now follow the ${listName}`,
+        )}
+      />
+    </div>
+  );
+}
+
+
+// an entry's own bypass, or the list's setting (empty value)
+function EntryAdminBypass({ entry, serverValue, editable, busy, disabled, label, onChange }: {
+  entry: GuildListEntry,
+  serverValue: boolean,
+  editable: boolean,
+  busy: boolean,
+  disabled: boolean,
+  label: string,
+  onChange: (value: boolean | null) => void,
+}) {
+  if (!editable) {
+    if (entry.admin_bypass === null) {
+      return null;
+    }
+    return <span className='shrink-0 text-xs text-subtle'>{(entry.admin_bypass) ? 'Admins skip' : 'Admins follow'}</span>;
+  }
+  const value = (entry.admin_bypass === null) ? '' : String(entry.admin_bypass);
+  return (
+    <div className='flex shrink-0 items-center gap-1.5'>
+      {(busy) ? <Spinner className='size-3.5'/> : null}
+      <select
+        aria-label={label}
+        title={label}
+        className='input h-7 w-auto py-0 pr-7 pl-2 text-xs'
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange((event.target.value === '') ? null : event.target.value === 'true')}
+      >
+        <option value=''>{`Default (admins ${(serverValue) ? 'skip' : 'follow'})`}</option>
+        <option value='true'>Admins skip</option>
+        <option value='false'>Admins follow</option>
+      </select>
+    </div>
   );
 }
 
@@ -182,16 +250,27 @@ export function ListSection({ guild, list }: {guild: UserGuild, list: GuildListK
 
   return (
     <Panel title={copy.title} accent={copy.accent} description={copy.description} readOnly={(editable) ? undefined : readOnlyMessage(list)}>
+      <AdminBypassToggle guild={guild} setting={`${list}_admin_bypass`} listName={list} edit={edit}/>
       {(entries.length) ? (
         <ul className='divide-y divide-line rounded-md border border-line'>
           {entries.map((entry) => {
             const key = `${entry.type}:${entry.id}`;
+            const bypassKey = `${key}:bypass`;
             return (
-              <li key={key} className='flex items-center gap-3 px-3 py-2'>
-                <div className='min-w-0 flex-1'>
+              <li key={key} className='flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2'>
+                <div className='min-w-[8rem] flex-1'>
                   <EntryMention type={entry.type} id={entry.id}/>
                 </div>
                 <span className='hidden text-xs text-subtle sm:inline'>{ENTRY_TYPE_LABELS[entry.type] ?? entry.type} · added {formatDate(entry.added)}</span>
+                <EntryAdminBypass
+                  entry={entry}
+                  serverValue={guild.settings[`${list}_admin_bypass`]}
+                  editable={guild.editable.admin_bypass}
+                  busy={edit.busyKey === bypassKey}
+                  disabled={edit.pending}
+                  label={`Owner/admin bypass for ${entry.type} ${entry.id}`}
+                  onChange={(adminBypass) => void edit.run(bypassKey, {kind: 'list-admin-bypass', list, id: entry.id, type: entry.type, adminBypass}, 'Updated the owner/admin bypass')}
+                />
                 {(editable) ? (
                   <RemoveButton
                     label={`Remove ${entry.type} ${entry.id} from the ${list}`}
@@ -316,6 +395,7 @@ export function CommandListSection({ guild, list }: {guild: UserGuild, list: Gui
 
   return (
     <Panel title={copy.title} accent={copy.accent} description={copy.description} readOnly={(editable) ? undefined : readOnlyMessage('commands')}>
+      <AdminBypassToggle guild={guild} setting={`commands_${list}_admin_bypass`} listName={`command ${list}`} edit={edit}/>
       {(grouped.length) ? (
         <ul className='space-y-3'>
           {grouped.map(([ name, items ]) => (
@@ -324,9 +404,19 @@ export function CommandListSection({ guild, list }: {guild: UserGuild, list: Gui
               <ul className='divide-y divide-line'>
                 {items.map((entry) => {
                   const key = `${entry.command}:${entry.type}:${entry.id}`;
+                  const bypassKey = `${key}:bypass`;
                   return (
-                    <li key={key} className='flex items-center gap-3 px-3 py-2'>
-                      <div className='min-w-0 flex-1'><EntryMention type={entry.type} id={entry.id}/></div>
+                    <li key={key} className='flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2'>
+                      <div className='min-w-[8rem] flex-1'><EntryMention type={entry.type} id={entry.id}/></div>
+                      <EntryAdminBypass
+                        entry={entry}
+                        serverValue={guild.settings[`commands_${list}_admin_bypass`]}
+                        editable={guild.editable.admin_bypass}
+                        busy={edit.busyKey === bypassKey}
+                        disabled={edit.pending}
+                        label={`Owner/admin bypass for ${entry.type} ${entry.id} on ${name}`}
+                        onChange={(adminBypass) => void edit.run(bypassKey, {kind: 'command-list-admin-bypass', list, command: entry.command, id: entry.id, type: entry.type, adminBypass}, 'Updated the owner/admin bypass')}
+                      />
                       {(editable) ? (
                         <RemoveButton
                           label={`Remove ${entry.type} ${entry.id} from the ${name} ${list}`}

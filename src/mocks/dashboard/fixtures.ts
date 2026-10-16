@@ -175,6 +175,19 @@ export interface MockGuild {
   detail: Omit<UserGuild, 'editable' | 'owner' | 'permissions'>,
 }
 
+export function createGuildSettings(): UserGuild['settings'] {
+  return {
+    allowlist_admin_bypass: true,
+    blocklist_admin_bypass: true,
+    commands_allowlist_admin_bypass: true,
+    commands_blocklist_admin_bypass: true,
+    ml_diffusion_model: null,
+    ml_llm_model: null,
+    ml_llm_personality: null,
+    response_display: null,
+  };
+}
+
 function guild(id: string, name: string, icon: string | null, permissions: bigint, owner = false): MockGuild {
   const added = new Date(Date.now() - 86400000 * 30).toISOString();
   const canManage = owner || !!(permissions & (MANAGE_GUILD | ADMINISTRATOR));
@@ -184,9 +197,9 @@ function guild(id: string, name: string, icon: string | null, permissions: bigin
       allowlist: [],
       blocked: false,
       blocked_reason: null,
-      blocklist: [{added, id: '1200000000000000011', type: 'channel', user_id: mockUser.id}],
+      blocklist: [{added, admin_bypass: null, id: '1200000000000000011', type: 'channel', user_id: mockUser.id}],
       commands_allowlist: [],
-      commands_blocklist: [{added, command: 'nsfw', id: id, type: 'guild', user_id: mockUser.id}],
+      commands_blocklist: [{added, admin_bypass: false, command: 'nsfw', id: id, type: 'guild', user_id: mockUser.id}],
       disabled_logger_events: 0,
       features: [],
       icon,
@@ -195,7 +208,7 @@ function guild(id: string, name: string, icon: string | null, permissions: bigin
       loggers: [{added, channel_id: '1200000000000000022', disabled_events: 0, guild_id: id, type: 0, user_id: mockUser.id}],
       name,
       prefixes: [{added, guild_id: id, prefix: '.', user_id: mockUser.id}, {added, guild_id: id, prefix: 'nsb ', user_id: mockUser.id}],
-      settings: {ml_diffusion_model: null, ml_llm_model: null, ml_llm_personality: null, response_display: null},
+      settings: createGuildSettings(),
       timezone: 'Europe/London',
     },
   };
@@ -249,7 +262,7 @@ export function guildEditable(summary: UserGuildSummary): UserGuild['editable'] 
   const permissions = BigInt(summary.permissions);
   const admin = summary.owner || !!(permissions & ADMINISTRATOR);
   const manage = admin || !!(permissions & MANAGE_GUILD);
-  return {prefixes: manage, allowlist: admin, blocklist: admin, commands: manage, loggers: manage, settings: manage};
+  return {prefixes: manage, allowlist: admin, blocklist: admin, commands: manage, loggers: manage, settings: manage, admin_bypass: admin};
 }
 
 

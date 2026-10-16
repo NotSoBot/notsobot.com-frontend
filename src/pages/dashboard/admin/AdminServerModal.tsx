@@ -173,7 +173,11 @@ export function BotChip({ bot }: {bot: AdminGuildSummary['bot']}) {
 
 // the other admin pages filtered to this server; the counts match what each one shows
 function ServerShortcuts({ guild }: {guild: AdminGuild}) {
-  const { counts } = guild;
+  const { counts } = guild as {counts?: AdminGuild['counts']};
+  // an API from before `counts` was added leaves it out
+  if (!counts) {
+    return null;
+  }
   return (
     <nav aria-label='Linked to this server' className='mt-4 flex flex-wrap gap-2'>
       <YourStuffLink to={adminListPath(Routes.DASHBOARD_ADMIN_TAGS, {server: guild.id})} icon={TagsIcon} label='Tags' count={counts.tags}/>

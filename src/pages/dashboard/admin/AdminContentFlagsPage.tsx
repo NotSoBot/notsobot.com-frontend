@@ -31,7 +31,7 @@ import {
   UserFlags,
 } from '@/lib/api';
 import { ADMIN_CONTENT_FLAGS_PAGE_SIZE, errorMessage, useAdminContentFlagQuery, useAdminContentFlagsQuery, useFetchContentFlagMatches, useFlagAdminContentFlagPromptMutation, usePatchAdminContentFlagMutation, usePatchAdminUserMutation, useTranslateAdminContentFlagMutation } from '@/lib/api/dashboardQueries';
-import { cn, formatDateTime, formatMemory } from '@/lib/utils';
+import { cn, formatDateTime, formatMemory, NO_AUTOFILL } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
 import { AdminModalFooter, AdminTagModal, useOpenListItem } from './AdminTagModal';
@@ -404,6 +404,8 @@ function IdFilter({ className = 'lg:col-span-4', label, placeholder, value, patt
           inputMode={(numeric) ? 'numeric' : 'text'}
           spellCheck={false}
           autoCapitalize='off'
+          autoComplete='off'
+          {...NO_AUTOFILL}
           placeholder={placeholder}
           value={input}
           onChange={(event) => setInput(event.target.value)}
@@ -429,6 +431,9 @@ function IdFilter({ className = 'lg:col-span-4', label, placeholder, value, patt
 
 // one line per flag, just enough to triage from; the rest is in `ContentFlagDetails` a click away.
 // Plain content only inside (no buttons, links or focusable dates), since the whole row is a button.
+// From sm up it's three columns: what it is and who posted it, why it was flagged stacked in the middle, the status and
+// date on the right. On phones those don't fit side by side, so it's stacked instead: the type and id with the status
+// across from them, the poster with the date across from them, then the reasons centred under both.
 function ContentFlagRow({ flag, onOpen }: {flag: ContentFlag, onOpen: (id: string) => void}) {
   const status = statusInfo(flag.status);
   const isText = flag.mimetype === CONTENT_FLAG_TEXT_MIMETYPE;
@@ -437,28 +442,30 @@ function ContentFlagRow({ flag, onOpen }: {flag: ContentFlag, onOpen: (id: strin
     <li>
       <button
         type='button'
-        className='grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-4 px-4 py-3 text-left first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 sm:px-5'
+        className='grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 text-left first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-x-4 sm:px-5'
         onClick={() => onOpen(flag.id)}
       >
-        {/* left: what it is and its id (fixed widths, so rows line up), who posted it under them */}
-        <span className='flex min-w-0 flex-col gap-2'>
-          <span className='flex items-center gap-3'>
-            <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
-            <span className='font-mono text-sm leading-5 text-white'>#{flag.id}</span>
-          </span>
+        {/* what it is and its id (fixed widths, so rows line up) */}
+        <span className='col-start-1 row-start-1 flex min-w-0 items-center gap-3'>
+          <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
+          <span className='min-w-0 truncate font-mono text-sm leading-5 text-white'>#{flag.id}</span>
+        </span>
+        {/* who posted it, under them */}
+        <span className='col-start-1 row-start-2 min-w-0'>
           <UserCell user={user} fallbackId={flag.user_id} size='sm'/>
         </span>
-        {/* middle: why it was flagged, stacked */}
-        <span className='flex flex-col items-center gap-1'>
+        {/* why it was flagged: a centred wrapping line under the rest on phones, stacked in the middle from sm up */}
+        <span className='col-span-2 row-start-3 flex flex-wrap items-center justify-center gap-1 empty:hidden sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:flex-col sm:flex-nowrap'>
           {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
           {(flag.needs_human_review) ? <Chip tone='warning'>needs review</Chip> : null}
           {(flag.auto_confirmed_from) ? <Chip>auto-confirmed</Chip> : null}
           {(user?.blocked) ? <Chip tone='danger'>user blocked</Chip> : null}
         </span>
-        {/* right: the review status, and when it was flagged */}
-        <span className='flex min-w-0 flex-col items-end gap-2'>
-          <Chip tone={status.tone} title={status.description} className='w-20 justify-center'>{status.label}</Chip>
-          <span className='text-xs whitespace-nowrap text-subtle'>{formatDateTime(flag.created)}</span>
+        {/* the review status, and when it was flagged under it. On phones this wrapper drops out of the layout so the
+            status sits across from the id and the date across from the poster */}
+        <span className='contents sm:col-start-3 sm:row-span-2 sm:row-start-1 sm:flex sm:min-w-0 sm:flex-col sm:items-end sm:gap-2'>
+          <Chip tone={status.tone} title={status.description} className='col-start-2 row-start-1 w-20 justify-center justify-self-end'>{status.label}</Chip>
+          <span className='col-start-2 row-start-2 justify-self-end text-xs whitespace-nowrap text-subtle'>{formatDateTime(flag.created)}</span>
         </span>
       </button>
     </li>
@@ -576,7 +583,10 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
         <div className='min-w-0'>
           <div className='flex h-7 items-center gap-2.5'>
             <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
-            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-lg leading-7 font-semibold text-white'>Flag #{flag.id}</h2>
+            {/* the id is cut off on phones, so there it's in the details below with a copy button instead */}
+            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-lg leading-7 font-semibold text-white'>
+              Flag<span className='sr-only sm:not-sr-only'> #{flag.id}</span>
+            </h2>
           </div>
           <p className='mt-1 text-xs text-subtle'><ExactDate value={flag.created} format={formatDateTime}/></p>
         </div>
@@ -652,7 +662,9 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
           />
           <DetailList
             items={[
-              // what the safety scan did with it, first so it's always in the same spot (beside Model)
+              // phones only, the title leaves it out there since it would be cut off
+              ['Flag', <CopyableValue value={flag.id} truncate={0}/>, 'sm:hidden'],
+              // what the safety scan did with it, first (from sm up) so it's always in the same spot (beside Model)
               ['Action', (flag.action) ? <ActionChip action={flag.action}/> : '—'],
               ['Command', (flag.command_id) ? <span className='font-mono'>{flag.command_id}</span> : '—'],
               ['Guild', (flag.guild_id) ? <CopyableValue value={flag.guild_id} truncate={0} to={adminServerPath(flag.guild_id)} linkTitle='Open this server'/> : '—'],
@@ -662,7 +674,10 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
               (flag.reviewed_at || flag.reviewed_by) ? ['Reviewed', (
                 <span>
                   {(flag.reviewed_at) ? <ExactDate value={flag.reviewed_at} format={formatDateTime}/> : null}
-                  {(flag.reviewed_by) ? <> by <span className='font-mono'>{flag.reviewed_by}</span></> : null}
+                  {/* TODO: have the api send `reviewed_by` as a user object (like `user`) and show a UserCell here instead of the id */}
+                  {(flag.reviewed_by) ? (
+                    <> by <Link to={adminUserPath(flag.reviewed_by)} title='Open in users' className='font-mono text-code underline-offset-2 hover:underline'>{flag.reviewed_by}</Link></>
+                  ) : null}
                 </span>
               )] : null,
             ]}

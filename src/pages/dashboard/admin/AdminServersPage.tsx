@@ -194,7 +194,11 @@ const COUNTS: Array<{key: keyof AdminGuildSummary['counts'], icon: LucideIcon, l
   {key: 'reports', icon: MessageSquareWarning, label: 'reports', alert: true},
 ];
 
-function ServerCounts({ counts, className }: {counts: AdminGuildSummary['counts'], className?: string}) {
+function ServerCounts({ counts, className }: {counts: AdminGuildSummary['counts'] | undefined, className?: string}) {
+  // an API from before `counts` was added leaves it out
+  if (!counts) {
+    return null;
+  }
   return (
     <div className={cn('flex shrink-0 items-center gap-3 text-xs tabular-nums', className)}>
       {COUNTS.map(({ key, icon: Icon, label, alert }) => {

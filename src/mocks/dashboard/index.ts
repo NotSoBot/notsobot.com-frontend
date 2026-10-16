@@ -20,13 +20,16 @@ import {
   TAG_DIRECTORY_ASSETS_MAX,
   TagDirectoryCategories,
   TagDirectoryVerificationStates,
+  type AdminDirectoryTag,
   type AdminTagDirectoryItem,
+  type AdminUserRef,
   type ContentFlag,
   type Tag,
   type TagDirectoryCategory,
   type TagDirectoryEditRequest,
   type TagDirectoryItem,
   type TagStorageType,
+  type UserGuild,
 } from '@/lib/api/types';
 import { toDate } from '@/lib/utils';
 
@@ -47,6 +50,7 @@ import {
   createVariables,
   emptyBlobs,
   emptyVariables,
+  createGuildSettings,
   guildEditable,
   MOCK_TOKEN,
   mockUser,
@@ -880,14 +884,29 @@ route('GET', '/users/@me/guilds/(\\d+)', ([ , guildId ]) => {
   return guildDetail(guildId);
 });
 
+const ADMIN_BYPASS_SETTINGS = ['allowlist_admin_bypass', 'blocklist_admin_bypass', 'commands_allowlist_admin_bypass', 'commands_blocklist_admin_bypass'] as const;
+
+// null resets one to true
+function applyAdminBypassSettings(detail: {settings: UserGuild['settings']}, body: Record<string, unknown>) {
+  for (const key of ADMIN_BYPASS_SETTINGS) {
+    if (key in body) {
+      detail.settings[key] = (body[key] === null) ? true : !!body[key];
+    }
+  }
+}
+
 route('PATCH', '/users/@me/guilds/(\\d+)', ([ , guildId ], { body }) => {
   const { detail } = requireEditable(guildId, 'settings');
+  if (ADMIN_BYPASS_SETTINGS.some((key) => key in body)) {
+    requireEditable(guildId, 'admin_bypass');
+  }
   const settingsKeys = ['ml_diffusion_model', 'ml_llm_model', 'ml_llm_personality', 'response_display'] as const;
   for (const key of settingsKeys) {
     if (key in body) {
       (detail.settings as unknown as Record<string, unknown>)[key] = body[key];
     }
   }
+  applyAdminBypassSettings(detail, body);
   if ('locale' in body) {
     detail.locale = (body.locale as string | null) || null;
   }
@@ -923,8 +942,18 @@ route('(PUT|DELETE)', '/(users/@me|admin)/guilds/(\\d+)/(allowlist|blocklist)/(\
   const key = list as 'allowlist' | 'blocklist';
   detail[key] = detail[key].filter((item) => !(item.id === id && item.type === type));
   if (method === 'PUT') {
-    detail[key].push({added: new Date().toISOString(), id, type, user_id: mockUser.id});
+    detail[key].push({added: new Date().toISOString(), admin_bypass: null, id, type, user_id: mockUser.id});
   }
+  return undefined;
+});
+
+route('PATCH', '/(users/@me|admin)/guilds/(\\d+)/(allowlist|blocklist)/(\\d+)/(channel|role|user)', ([ , scope, guildId, list, id, type ], { body }) => {
+  const { detail } = scopedGuild(scope, guildId, 'admin_bypass');
+  const entry = detail[list as 'allowlist' | 'blocklist'].find((item) => item.id === id && item.type === type);
+  if (!entry) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_GUILD_LIST_ITEM, 'Unknown List Item');
+  }
+  entry.admin_bypass = (typeof body.admin_bypass === 'boolean') ? body.admin_bypass : null;
   return undefined;
 });
 
@@ -937,8 +966,20 @@ route('(PUT|DELETE)', '/(users/@me|admin)/guilds/(\\d+)/commands/([^/]+)/(allowl
   const key = (list === 'allowlist') ? 'commands_allowlist' : 'commands_blocklist';
   detail[key] = detail[key].filter((item) => !(item.command === command && item.id === id && item.type === type));
   if (method === 'PUT') {
-    detail[key].push({added: new Date().toISOString(), command, id, type, user_id: mockUser.id});
+    detail[key].push({added: new Date().toISOString(), admin_bypass: null, command, id, type, user_id: mockUser.id});
   }
+  return undefined;
+});
+
+route('PATCH', '/(users/@me|admin)/guilds/(\\d+)/commands/([^/]+)/(allowlist|blocklist)/(\\d+)/(channel|guild|role|user)', ([ , scope, guildId, rawCommand, list, id, type ], { body }) => {
+  const { detail } = scopedGuild(scope, guildId, 'admin_bypass');
+  const command = decodeURIComponent(rawCommand);
+  const key = (list === 'allowlist') ? 'commands_allowlist' : 'commands_blocklist';
+  const entry = detail[key].find((item) => item.command === command && item.id === id && item.type === type);
+  if (!entry) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_GUILD_LIST_ITEM, 'Unknown List Item');
+  }
+  entry.admin_bypass = (typeof body.admin_bypass === 'boolean') ? body.admin_bypass : null;
   return undefined;
 });
 
@@ -1004,7 +1045,7 @@ route('POST', '/(users/@me|admin)/guilds/(\\d+)/data/delete', ([ , scope, guildI
     locale: null,
     loggers: [],
     prefixes: [],
-    settings: {ml_diffusion_model: null, ml_llm_model: null, ml_llm_personality: null, response_display: null},
+    settings: createGuildSettings(),
     timezone: null,
   });
   return {tags_deleted: before - state.tags.length};
@@ -1326,11 +1367,14 @@ route('POST', '/admin/tags/directory/(\\d+)/assets', ([ , tagId ], { body }) => 
   const name = file?.name ?? String(body.url || '').split(/[?#]/)[0].split('/').pop() ?? '';
   const extension = (/\.([a-z0-9]{1,12})$/i.exec(name)?.[1] ?? 'png').toLowerCase();
   const id = String(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+  const mimetype = file?.type || `image/${extension}`;
   const asset = {
     filename: `${id}.${extension}`,
     filename_base: id,
     id,
-    metadata: {duration: 0, extension, framecount: 1, height: 0, mimetype: file?.type || `image/${extension}`, size: file?.size ?? 0, width: 0},
+    // roughly `Mimetyper.is_text`
+    is_text: /^text\/|^application\/(json|javascript|xml)$|^application\/(?!lottie).*\+(json|xml)$/.test(mimetype),
+    metadata: {duration: 0, extension, framecount: 1, height: 0, mimetype, size: file?.size ?? 0, width: 0},
     position: item.tag.assets?.length ?? 0,
     urls: {cdn: `https://cdn.nsb.gg/assets/tags/${tagId}/${id}.${extension}`},
   };
@@ -1385,6 +1429,55 @@ route('PATCH', '/admin/users/(\\d+)', ([ , userId ], { body }) => {
 });
 
 // mirrors `DELETE /admin/users/<user_id>/tags`: the mock user's tags and every directory tag they own
+// mirrors `POST /admin/tags/<tag_id>/merge`: the tag's uses go onto `target_id`, its aliases point there, then it's deleted
+route('POST', '/admin/tags/(\\d+)/merge', ([ , tagId ], { body }) => {
+  requireBotOwner();
+  const find = (id: string) => {
+    const mine = state.tags.find((tag) => tag.id === id);
+    if (mine) {
+      return {tag: mine as unknown as AdminDirectoryTag, user: mockUser as AdminUserRef};
+    }
+    const listed = state.adminDirectory.find((item) => item.tag.id === id);
+    return (listed) ? {tag: listed.tag, user: listed.user} : null;
+  };
+  const source = find(tagId);
+  const target = find(String(body.target_id ?? ''));
+  if (!source) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG, 'Unknown Tag');
+  }
+  if (!target) {
+    throw new MockError(404, ApiErrorCodes.UNKNOWN_TAG, 'Unknown Target Tag');
+  }
+  if (source.tag.id === target.tag.id) {
+    throw new MockError(400, 50012, 'Cannot replace a tag with itself');
+  }
+  if (target.tag.reference_tag) {
+    throw new MockError(400, 50014, 'Cannot replace a tag with a Tag Alias, use the tag it points at');
+  }
+  const aliases = state.tags.filter((tag) => (tag.reference_tag as {id?: string} | null | undefined)?.id === source.tag.id);
+  const summary = {
+    aliases: aliases.length,
+    assets: source.tag.assets?.length ?? 0,
+    blobs: {dropped: 0, moved: state.blobs.get(source.tag.id)?.size ?? 0},
+    directory: state.directory.has(source.tag.id) || state.adminDirectory.some((item) => item.tag.id === source.tag.id),
+    use_records: source.tag.uses,
+    uses: source.tag.uses,
+    variables: {dropped: 0, moved: state.variables.get(source.tag.id)?.size ?? 0},
+  };
+  const payload = (entry: NonNullable<ReturnType<typeof find>>) => ({...entry.tag, user: entry.user});
+  if (body.dry_run) {
+    return {...summary, source: payload(source), target: payload(target)};
+  }
+  target.tag.uses += source.tag.uses;
+  for (const alias of aliases) {
+    alias.reference_tag = {...alias.reference_tag!, id: target.tag.id, name: target.tag.name, content: target.tag.content};
+  }
+  state.tags = state.tags.filter((tag) => tag.id !== source.tag.id);
+  state.adminDirectory = state.adminDirectory.filter((item) => item.tag.id !== source.tag.id);
+  state.directory.delete(source.tag.id);
+  return {...summary, source: payload(source), target: payload(target)};
+});
+
 route('DELETE', '/admin/users/(\\d+)/tags', ([ , userId ]) => {
   requireBotOwner();
   const user = state.adminUsers.find((other) => other.id === userId);
@@ -1743,7 +1836,7 @@ function adminGuildDetail(guildId: string) {
       ...adminGuildCounts(guildId),
       reminders: state.reminders.filter((reminder) => reminder.guild_id === guildId).length,
     },
-    editable: {allowlist: true, blocklist: true, commands: true, loggers: true, prefixes: true, settings: true},
+    editable: {allowlist: true, blocklist: true, commands: true, loggers: true, prefixes: true, settings: true, admin_bypass: true},
     owner: false,
     permissions: '0',
   };
@@ -1805,6 +1898,7 @@ route('PATCH', '/admin/guilds/(\\d+)', ([ , guildId ], { body }) => {
       (detail.settings as unknown as Record<string, unknown>)[key] = body[key];
     }
   }
+  applyAdminBypassSettings(detail, body);
   if ('locale' in body) {
     detail.locale = (body.locale as string | null) || null;
   }

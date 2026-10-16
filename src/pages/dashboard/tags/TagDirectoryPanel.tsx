@@ -27,7 +27,7 @@ import {
   useRequestMeTagDirectoryVerificationMutation,
 } from '@/lib/api/dashboardQueries';
 import { formatDate, formatDateTime } from '@/lib/utils';
-import { CategorySelect, tagDirectoryItemPath, VerificationBadge, verificationInfo, verificationRequirement } from '@/pages/tags/tagDirectory';
+import { CategorySelect, tagDirectoryItemPath, VerificationBadge, verificationInfo, verificationRequirement, VerificationWarning } from '@/pages/tags/tagDirectory';
 import { MediaSection, ThumbnailManager } from '@/pages/tags/TagMedia';
 
 import { CharCounter, ErrorPanel, Field, InlineError, Panel, PanelSkeleton, SaveBar, Toggle } from '../ui';
@@ -65,6 +65,7 @@ export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChan
   };
   return (
     <div className='space-y-4'>
+      <VerificationPanel tag={tag} directory={directory} listingDirty={listingDirty}/>
       <ListingForm key={directory.id} tag={tag} directory={directory} onDirtyChange={onListingDirtyChange}/>
       {(verified) ? <EditRequestPanel tag={tag} directory={directory}/> : null}
       <Panel
@@ -95,7 +96,6 @@ export function TagDirectoryPanel({ tag, onDirtyChange }: {tag: Tag, onDirtyChan
           headingClassName='sr-only'
         />
       </Panel>
-      <VerificationPanel tag={tag} directory={directory} listingDirty={listingDirty}/>
     </div>
   );
 }
@@ -371,18 +371,6 @@ function ListingForm({ tag, directory, onDirtyChange }: {
 }
 
 
-// what requesting verification means, shown before confirming (the bot's `/tag directory verify` says the same)
-function VerificationWarning() {
-  return (
-    <ul className='list-disc space-y-1.5 pl-5'>
-      <li>Requesting verification locks the tag’s content, so it can’t be edited while the review is pending or after it’s verified.</li>
-      <li>If it’s verified, NotSoBot staff may change its content to make it more efficient, and may move its media onto NotSoBot’s own servers.</li>
-      <li>You can cancel the request while it’s still pending.</li>
-    </ul>
-  );
-}
-
-
 // request verification for an unverified listing, or cancel a pending request; nothing to do once it's verified
 function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, directory: TagDirectoryItem, listingDirty: boolean}) {
   const toast = useToast();
@@ -394,7 +382,8 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
     return null;
   }
   const pending = directory.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
-  const missing = verificationRequirement(directory);
+  // why the request can't be sent yet, shown next to the button
+  const blocker = (listingDirty) ? 'Save or discard your listing changes before requesting verification.' : verificationRequirement(directory);
 
   const doRequest = () => {
     request.mutate(undefined, {
@@ -419,18 +408,6 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
         description={(pending) ?
           'Your verification request is waiting for NotSoBot’s team. The tag’s content stays locked until it’s reviewed or you cancel the request.' :
           'Ask NotSoBot’s team to review this tag. Verified tags are marked as safe to run on the directory.'}
-        actions={(pending) ? undefined : (
-          <button
-            type='button'
-            className='btn btn-primary btn-sm'
-            disabled={listingDirty || !!missing}
-            title={(listingDirty) ? 'Save or discard your listing changes first.' : (missing ?? undefined)}
-            onClick={() => setConfirming(true)}
-          >
-            <ShieldCheck className='size-3.5'/>
-            Request verification
-          </button>
-        )}
       >
         <div className='text-sm text-muted'>
           {(pending) ? (
@@ -439,8 +416,6 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
             <VerificationWarning/>
           )}
         </div>
-        {(listingDirty && !pending) ? <p className='mt-3 text-sm text-subtle'>Save or discard your listing changes before requesting verification.</p> : null}
-        {(!listingDirty && !pending && missing) ? <p className='mt-3 text-sm text-subtle'>{missing}</p> : null}
         {(pending) ? (
           <div className='mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4'>
             <p className='text-sm text-subtle'>Canceling unlocks the tag so you can edit it again. You can request verification again later.</p>
@@ -449,7 +424,21 @@ function VerificationPanel({ tag, directory, listingDirty }: {tag: Tag, director
               {(cancel.isPending) ? 'Canceling…' : 'Cancel request'}
             </button>
           </div>
-        ) : null}
+        ) : (
+          <div className='mt-4 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4'>
+            {(blocker) ? <p className='mr-auto text-sm text-subtle'>{blocker}</p> : null}
+            <button
+              type='button'
+              className='btn btn-primary btn-sm shrink-0'
+              disabled={!!blocker}
+              title={blocker ?? undefined}
+              onClick={() => setConfirming(true)}
+            >
+              <ShieldCheck className='size-3.5'/>
+              Request verification
+            </button>
+          </div>
+        )}
         {(cancel.isError) ? <InlineError>{errorMessage(cancel.error, 'Couldn’t cancel the request.')}</InlineError> : null}
       </Panel>
 

@@ -1,8 +1,9 @@
 import { Check, Flame, LayoutGrid } from 'lucide-react';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { SearchInput } from '@/components/ui/SearchInput';
+import { Routes } from '@/config';
 import { Segmented } from '@/components/ui/Segmented';
 import { readStored, writeStored } from '@/hooks/usePersistentState';
 import { useCommandsQuery, useCommandStatsQuery } from '@/lib/api/queries';
@@ -14,8 +15,10 @@ import {
   buildEntries,
   CATEGORY_ORDER,
   categoryMeta,
+  commandPath,
   compareByName,
   compareByUses,
+  entryFromPath,
   TYPE_OPTIONS,
   typeOptionFromParam,
 } from './commandMeta';
@@ -41,7 +44,10 @@ export function CommandsPage() {
   const dmOnly = searchParams.get('in') === 'dms';
   const sort: Sort = (searchParams.get('sort') === 'az') ? 'az' : 'popular';
   const query = searchParams.get('q') || '';
-  const selectedKey = searchParams.get('cmd');
+  // the open command is the path, /commands/:commandId(/:commandType)
+  const { commandId, commandType } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const deferredQuery = useDeferredValue(query);
 
   const updateParams = useCallback((updates: Record<string, string | null>) => {
@@ -145,10 +151,19 @@ export function CommandsPage() {
     }
   }, [typeOption.param, category, dmOnly, deferredQuery, sort]);
 
-  const selected = (selectedKey) ? entries.find((entry) => entry.key === selectedKey) : undefined;
+  const selected = (commandId) ? entryFromPath(entries, commandId, commandType) : undefined;
   const siblings = (selected) ? entries.filter((entry) => entry.command.id === selected.command.id && entry.key !== selected.key) : [];
-  const openCommand = useCallback((key: string) => updateParams({cmd: key}), [updateParams]);
-  const closeCommand = useCallback(() => updateParams({cmd: null}), [updateParams]);
+  // the filters stay in the query string either way
+  const goTo = useCallback((pathname: string, search: string) => {
+    navigate({pathname, search}, {replace: true, preventScrollReset: true});
+  }, [navigate]);
+  const openCommand = useCallback((key: string) => {
+    const entry = entries.find((item) => item.key === key);
+    if (entry) {
+      goTo(commandPath(entry, entries), location.search);
+    }
+  }, [entries, goTo, location.search]);
+  const closeCommand = useCallback(() => goTo(Routes.COMMANDS, location.search), [goTo, location.search]);
 
   const activeFilterCount = Number(typeOption.types !== null) + Number(!!category) + Number(dmOnly);
 

@@ -1,9 +1,10 @@
 import { AlertTriangle, Check, Plus, Shield, type LucideIcon } from 'lucide-react';
-import { useState, type ComponentProps } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router';
 
 import { useAuth } from '@/auth';
-import { config, Routes } from '@/config';
+import { config, Routes, TAG_ADD_PARAM } from '@/config';
 import { TagDirectoryCategories, TagDirectoryVerificationStates, type Tag, type TagDirectoryCategory } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -54,6 +55,18 @@ export function CategorySelect({ value, onChange, ...props }: Omit<ComponentProp
     <select {...props} className='input' value={value} onChange={(event) => onChange(Number(event.target.value) as TagDirectoryCategory)}>
       {TAG_DIRECTORY_CATEGORY_OPTIONS.map((option) => <option key={option.param} value={option.value}>{option.label}</option>)}
     </select>
+  );
+}
+
+
+// what requesting verification means, shown before confirming (the bot's `/tag directory verify` says the same)
+export function VerificationWarning() {
+  return (
+    <ul className='list-disc space-y-1.5 pl-5'>
+      <li>Requesting verification locks the tag’s content, so it can’t be edited while the review is pending or after it’s verified.</li>
+      <li>If it’s verified, NotSoBot staff may change its content to make it more efficient, and may move its media onto NotSoBot’s own servers.</li>
+      <li>You can cancel the request while it’s still pending.</li>
+    </ul>
   );
 }
 
@@ -153,14 +166,39 @@ export function NsfwBadge({ size = 'sm' }: {size?: 'sm' | 'lg'}) {
 
 // Opens the add dialog (logging in first if needed); the dialog lives outside the card so its clicks
 // don't hit the card's stretched link. `verified` lets the dialog warn about unverified tags.
-export function AddTagButton({ tag, verified, size = 'sm', className }: {
+// `openFromUrl` opens it straight away when the page has `?add=1` (TAG_ADD_PARAM), only the tag's own modal sets it
+export function AddTagButton({ tag, verified, size = 'sm', className, openFromUrl = false }: {
   tag: Pick<Tag, 'id' | 'name'>,
   verified: number,
   size?: 'sm' | 'lg',
   className?: string,
+  openFromUrl?: boolean,
 }) {
-  const { isAuthenticated, login } = useAuth();
+  const { status, isAuthenticated, login } = useAuth();
   const [ open, setOpen ] = useState(false);
+  const [ searchParams, setSearchParams ] = useSearchParams();
+  const requested = openFromUrl && searchParams.has(TAG_ADD_PARAM);
+
+  useEffect(() => {
+    if (!requested || status === 'loading' || !config.authEnabled) {
+      return;
+    }
+    if (status === 'anonymous') {
+      // comes back to this same url, param included, so the dialog opens after logging in. the callback only
+      // returns here on success, so a failed login can't loop
+      login();
+      return;
+    }
+    // dropped so closing the dialog, or stepping to another tag, doesn't open it again
+    setSearchParams((params) => {
+      params.delete(TAG_ADD_PARAM);
+      return params;
+    }, {replace: true});
+    if (isAuthenticated) {
+      setOpen(true);
+    }
+  }, [isAuthenticated, login, requested, setSearchParams, status]);
+
   // adding needs an account, and with auth off there's no way to log in
   if (!isAuthenticated && !config.authEnabled) {
     return null;

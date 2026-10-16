@@ -50,7 +50,9 @@ export function Modal({ labelledBy, onClose, className, children }: {
     // `my-auto` instead of `items-center`: centered when it fits, and when it's taller than the window it starts below
     // the top padding instead of being cut off above it
     <div className='fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-3 pt-12 pb-6 sm:px-6 sm:pt-20 sm:pb-10'>
-      <div aria-hidden className='fixed inset-0 animate-fade-in bg-black/70 backdrop-blur-sm' onClick={onClose}/>
+      {/* runs past the bottom: iOS Safari's floating toolbar sits below where `bottom: 0` ends, and the page shows
+          through there undimmed otherwise */}
+      <div aria-hidden className='fixed inset-x-0 top-0 -bottom-[50vh] animate-fade-in bg-black/70 backdrop-blur-sm' onClick={onClose}/>
       <div
         role='dialog'
         aria-modal='true'

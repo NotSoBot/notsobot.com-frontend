@@ -6,6 +6,15 @@ export function cn(...inputs: Array<ClassValue>): string {
 }
 
 
+// password managers ignore autocomplete='off', so non-credential inputs (search, id filters) opt out explicitly
+export const NO_AUTOFILL = {
+  'data-1p-ignore': true,
+  'data-lpignore': 'true',
+  'data-bwignore': true,
+  'data-form-type': 'other',
+} as const;
+
+
 export function formatMemory(bytes: number, decimals = 0): string {
   if (!bytes || bytes < 0) {
     return '0 B';

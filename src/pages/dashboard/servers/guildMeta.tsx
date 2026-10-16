@@ -18,6 +18,7 @@ export const AREA_PERMISSION: Record<GuildEditableArea, string> = {
   commands: 'Manage Server',
   loggers: 'Manage Server',
   settings: 'Manage Server',
+  admin_bypass: 'Administrator',
 };
 
 export const AREA_LABEL: Record<GuildEditableArea, string> = {
@@ -27,6 +28,7 @@ export const AREA_LABEL: Record<GuildEditableArea, string> = {
   blocklist: 'Blocklist',
   commands: 'Command lists',
   loggers: 'Loggers',
+  admin_bypass: 'Owner/admin bypass',
 };
 
 export function readOnlyMessage(area: GuildEditableArea): string {

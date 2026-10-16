@@ -1,5 +1,5 @@
 import { CheckCircle2, CircleAlert, X } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -22,6 +22,8 @@ interface ToastItem {
 type ShowToast = (message: string, tone?: ToastTone, action?: ToastAction) => void;
 
 const ToastContext = createContext<ShowToast | null>(null);
+// sets how far up the toasts sit, see `useToastClearance`
+const ToastLiftContext = createContext<((height: number) => void) | null>(null);
 
 
 export function useToast(): ShowToast {
@@ -33,11 +35,31 @@ export function useToast(): ShowToast {
 }
 
 
+// Keeps the toasts above `ref`'s element while it's mounted, for a bar along the bottom of the window they'd otherwise
+// cover (e.g. a modal's sticky footer, whose Next button sits right under them)
+export function useToastClearance(ref: RefObject<HTMLElement | null>): void {
+  const setLift = useContext(ToastLiftContext);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !setLift) {
+      return;
+    }
+    const observer = new ResizeObserver(() => setLift(element.offsetHeight));
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      setLift(0);
+    };
+  }, [ref, setLift]);
+}
+
+
 // Small stack of transient messages in the bottom corner. Announced politely to screen readers
 // (errors assertively); each one dismisses itself after a few seconds (longer with an action, so there's time to
 // reach it) or on click.
 export function ToastProvider({ children }: {children: ReactNode}) {
   const [ toasts, setToasts ] = useState<Array<ToastItem>>([]);
+  const [ lift, setLift ] = useState(0);
   const nextId = useRef(1);
 
   const dismiss = useCallback((id: number) => {
@@ -53,8 +75,13 @@ export function ToastProvider({ children }: {children: ReactNode}) {
 
   return (
     <ToastContext.Provider value={value}>
-      {children}
-      <div className='pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 sm:items-end'>
+      <ToastLiftContext.Provider value={setLift}>
+        {children}
+      </ToastLiftContext.Provider>
+      <div
+        className='pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 sm:items-end'
+        style={(lift) ? {bottom: lift} : undefined}
+      >
         {toasts.map((toast) => <Toast key={toast.id} toast={toast} onDismiss={dismiss}/>)}
       </div>
     </ToastContext.Provider>

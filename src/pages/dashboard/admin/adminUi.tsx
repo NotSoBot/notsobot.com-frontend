@@ -7,12 +7,17 @@ import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminUserRef } from '@/lib/api';
 import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
-import { cn, formatDate, formatExactDateTime, toDate } from '@/lib/utils';
+import { cn, formatDate, formatExactDateTime, NO_AUTOFILL, toDate } from '@/lib/utils';
 
 
 // the Tags tab searching `query`, like `user:<id>`
 export function adminTagsPath(query: string): string {
   return `${Routes.DASHBOARD_ADMIN_TAGS}?${new URLSearchParams({q: query}).toString()}`;
+}
+
+// the admin directory list with that listing open over it
+export function adminTagDirectoryPath(tagId: string): string {
+  return `${Routes.DASHBOARD_ADMIN_TAG_DIRECTORY}/${tagId}`;
 }
 
 // the admin server list with that server open over it
@@ -357,14 +362,15 @@ export function CollapseButton({ onClick }: {onClick: () => void}) {
 
 
 // label/value pairs in a compact grid
-export function DetailList({ items }: {items: Array<[ReactNode, ReactNode] | null | false>}) {
+// an item's optional third value is a class for both its label and value (e.g. `sm:hidden` for a phones-only row)
+export function DetailList({ items }: {items: Array<[ReactNode, ReactNode, string?] | null | false>}) {
   return (
     // content-start: next to a taller list (side by side) its rows stay packed at the top instead of spreading out
     <dl className='grid grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-4 gap-y-1.5 text-sm'>
-      {items.filter((item): item is [ReactNode, ReactNode] => !!item).map(([ label, value ], i) => (
+      {items.filter((item): item is [ReactNode, ReactNode, string?] => !!item).map(([ label, value, className ], i) => (
         <div key={i} className='contents'>
-          <dt className='text-subtle'>{label}</dt>
-          <dd className='min-w-0 break-words text-fg'>{value}</dd>
+          <dt className={cn('text-subtle', className)}>{label}</dt>
+          <dd className={cn('min-w-0 break-words text-fg', className)}>{value}</dd>
         </div>
       ))}
     </dl>
@@ -397,6 +403,8 @@ export function IdFilter({ className, label, placeholder, value, onChange }: {
         <input
           className='input pr-9 font-mono'
           inputMode='numeric'
+          autoComplete='off'
+          {...NO_AUTOFILL}
           placeholder={placeholder}
           value={input}
           onChange={(event) => setInput(event.target.value)}

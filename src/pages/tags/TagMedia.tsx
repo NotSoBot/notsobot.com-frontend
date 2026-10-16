@@ -14,6 +14,8 @@ import {
 } from '@/lib/api';
 import {
   errorMessage,
+  useAdminTagDirectoryMediaMutation,
+  useAdminTagDirectoryThumbnailMutation,
   useMeTagDirectoryAssetMutation,
   useMeTagDirectoryEditRequestMutation,
   useMeTagDirectoryThumbnailMutation,
@@ -137,6 +139,8 @@ function CoverVideo({ src, playing }: {src: string, playing: boolean}) {
 export interface MediaManage {
   tagId: string,
   verified: number,
+  // NotSoBot staff, through the admin routes: the listing's media can change whatever its verification state
+  staff?: boolean,
   // managing a verified listing's change request instead of the listing itself: its proposed media/thumbnail
   editRequest?: {
     status: number,
@@ -379,8 +383,9 @@ type MediaAction = {upload: File} | {move: string, position: number} | {remove: 
 // the listing's own media, or (`manage.editRequest`) its change request's proposed media; both answer with the listing
 function useMediaMutation(manage: MediaManage) {
   const listing = useMeTagDirectoryAssetMutation(manage.tagId);
+  const admin = useAdminTagDirectoryMediaMutation(manage.tagId);
   const draft = useMeTagDirectoryEditRequestMutation(manage.tagId);
-  const active = (manage.editRequest) ? draft : listing;
+  const active = (manage.editRequest) ? draft : (manage.staff) ? admin : listing;
   return {
     isPending: active.isPending,
     isError: active.isError,
@@ -389,10 +394,12 @@ function useMediaMutation(manage: MediaManage) {
     uploading: active.isPending && !!active.variables && ('upload' in active.variables),
     mutate: (action: MediaAction, onSuccess?: (assets: Array<TagDirectoryAsset>) => void) => {
       const options = {
-        onSuccess: (directory: TagDirectoryItem) => onSuccess?.((manage.editRequest) ? (directory.edit_request?.assets ?? []) : directory.assets),
+        onSuccess: (directory: Pick<TagDirectoryItem, 'assets' | 'edit_request'>) => onSuccess?.((manage.editRequest) ? (directory.edit_request?.assets ?? []) : directory.assets),
       };
       if (manage.editRequest) {
         draft.mutate(action, options);
+      } else if (manage.staff) {
+        admin.mutate(action, options);
       } else {
         listing.mutate(action, options);
       }
@@ -414,7 +421,7 @@ function MediaManager({ assets, selected, selectedIndex, manage, onUploaded, chi
 
   const editable = (manage.editRequest) ?
     manage.editRequest.status === TagDirectoryEditRequestStatuses.DRAFT :
-    manage.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
+    manage.staff || manage.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
   const full = TAG_DIRECTORY_ASSETS_MAX <= assets.length;
   const busy = mutation.isPending;
   const uploading = mutation.uploading;
@@ -520,7 +527,11 @@ function MediaManager({ assets, selected, selectedIndex, manage, onUploaded, chi
           <EyeOff aria-hidden className='size-3.5 shrink-0'/>
           {(manage.editRequest) ?
             'Staff review these with your request. The listing keeps its current media until it’s approved.' :
-            'Only you and NotSoBot staff can see these until the listing is verified. They can’t be changed after that.'}
+            (manage.staff) ?
+              ((manage.verified === TagDirectoryVerificationStates.VERIFIED) ?
+                'Changes show on the directory right away. The owner isn’t notified.' :
+                'Only the owner and NotSoBot staff can see these until the listing is verified. The owner isn’t notified.') :
+              'Only you and NotSoBot staff can see these until the listing is verified. They can’t be changed after that.'}
         </p>
         {(assets.length) ? <p className='mt-1 text-xs text-subtle'>{PASTE_HINT}</p> : null}
       </div>
@@ -549,16 +560,18 @@ export function ThumbnailManager({ assets, thumbnail, manage }: {
   thumbnail: TagDirectoryThumbnail | null,
   manage: MediaManage,
 }) {
-  const listing = useMeTagDirectoryThumbnailMutation(manage.tagId);
+  const own = useMeTagDirectoryThumbnailMutation(manage.tagId);
+  const admin = useAdminTagDirectoryThumbnailMutation(manage.tagId);
   const draft = useMeTagDirectoryEditRequestMutation(manage.tagId);
   const request = manage.editRequest;
+  const listing = (manage.staff) ? admin : own;
   const active = (request) ? draft : listing;
   const input = useRef<HTMLInputElement>(null);
   const [ localError, setLocalError ] = useState<string | null>(null);
 
   const editable = (request) ?
     request.status === TagDirectoryEditRequestStatuses.DRAFT :
-    manage.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
+    manage.staff || manage.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION;
   const busy = active.isPending;
   const uploading = busy && !!active.variables && ('upload' in active.variables || 'uploadThumbnail' in active.variables);
 
@@ -613,7 +626,7 @@ export function ThumbnailManager({ assets, thumbnail, manage }: {
   } else if (request && request.thumbnailMode === TagDirectoryEditRequestThumbnailModes.REMOVE) {
     status = (assets.length) ? 'Removing your thumbnail, the card will use the cover.' : 'Removing your thumbnail.';
   } else if (effective) {
-    status = (request) ? 'Keeping your current thumbnail.' : 'Using your thumbnail.';
+    status = (request) ? 'Keeping your current thumbnail.' : (manage.staff) ? 'Using its thumbnail.' : 'Using your thumbnail.';
   } else {
     status = (assets.length) ? 'Using the cover, the first of the media.' : 'No thumbnail or media yet.';
   }

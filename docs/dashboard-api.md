@@ -88,15 +88,16 @@ endpoints:
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/users/@me/guilds` | `Array<{id, name, icon, owner, permissions, can_manage}>`. `permissions` is Discord's bitfield as a string; `can_manage` = has `MANAGE_GUILD` or `ADMINISTRATOR` or is owner. If the session lacks the `guilds` scope: `403` with code `DISCORD_OAUTH_SCOPE_MISMATCH` and `metadata.scopes`, so the site can ask the user to log in again. |
-| GET | `/users/@me/guilds/<guild_id>` | `Guild.to_dict(everything=True)` (prefixes, allowlist, blocklist, commands allow/blocklists, loggers, settings) plus `permissions` (string), `owner` (boolean) and `editable: {prefixes, allowlist, blocklist, commands, loggers, settings}` booleans for the caller. Caller must be a member (from the Discord guild list). |
+| GET | `/users/@me/guilds/<guild_id>` | `Guild.to_dict(everything=True)` (prefixes, allowlist, blocklist, commands allow/blocklists, loggers, settings) plus `permissions` (string), `owner` (boolean) and `editable: {prefixes, allowlist, blocklist, commands, loggers, settings, admin_bypass}` booleans for the caller. Every allow/blocklist entry has `admin_bypass` (`true`/`false`, or `null` to follow the server's setting for that list) and `settings` has `allowlist_admin_bypass`, `blocklist_admin_bypass`, `commands_allowlist_admin_bypass` and `commands_blocklist_admin_bypass` (default `true`). Caller must be a member (from the Discord guild list). |
 | PUT | `/users/@me/guilds/<guild_id>/prefixes` | Body `{prefix}`; same rules as the bot's `PUT /guilds/<id>/prefixes`. |
 | POST | `/users/@me/guilds/<guild_id>/prefixes/delete` | Body `{prefix}`. |
 | PUT / DELETE | `/users/@me/guilds/<guild_id>/allowlist/<id>/<type>` | Same as the bot endpoint. |
 | PUT / DELETE | `/users/@me/guilds/<guild_id>/blocklist/<id>/<type>` | Same as the bot endpoint. |
 | PUT / DELETE | `/users/@me/guilds/<guild_id>/commands/<command>/allowlist/<id>/<type>` | Same as the bot endpoint. |
 | PUT / DELETE | `/users/@me/guilds/<guild_id>/commands/<command>/blocklist/<id>/<type>` | Same as the bot endpoint. |
+| PATCH | `/users/@me/guilds/<guild_id>/allowlist/<id>/<type>`, `/blocklist/<id>/<type>`, `/commands/<command>/allowlist/<id>/<type>`, `/commands/<command>/blocklist/<id>/<type>` | Body `{admin_bypass: true \| false \| null}`, the entry's owner/admin bypass (`null` follows the server's setting). Needs the `admin_bypass` area. `404` code `10022` (`UNKNOWN_GUILD_LIST_ITEM`) if the entry doesn't exist. Publishes the list's update event. |
 | POST | `/users/@me/guilds/<guild_id>/loggers/delete` | Same body as the bot endpoint. Also deletes the logger's webhook on Discord unless another logger still uses it (best effort, failures are ignored). Loggers can only be added through the bot's `loggers` command. |
-| PATCH | `/users/@me/guilds/<guild_id>` | Server settings the bot exposes through commands (e.g. locale, timezone, AI personality); same validation as the bot's `PATCH /guilds/<id>`. |
+| PATCH | `/users/@me/guilds/<guild_id>` | Server settings the bot exposes through commands (e.g. locale, timezone, AI personality); same validation as the bot's `PATCH /guilds/<id>`. Also takes `allowlist_admin_bypass`, `blocklist_admin_bypass`, `commands_allowlist_admin_bypass` and `commands_blocklist_admin_bypass` (`null` resets one to `true`), which need the `admin_bypass` area (`403 MISSING_ACCESS` otherwise). |
 | GET | `/users/@me/guilds/<guild_id>/data/export` | **Owner only** (`403 MISSING_ACCESS` for everyone else, admins included). `{guild, tags, notes, timestamp, version}`: the server's settings, prefixes, allow/blocklists and loggers, plus every tag made in the server. Left out, and said so in `notes`: logger webhook URLs (sensitive data, anyone with one can post in the channel), tag variables, tag blobs, and the content of directory tags, including the tag an alias points to when it lives outside the server (aliases can target directory tags and the caller's DM tags). |
 | POST | `/users/@me/guilds/<guild_id>/data/delete` | **Owner only.** Deletes the server's tags (their variables, blobs, uses and assets cascade), tag variables/blobs other tags keep under this server's guild storage, tag uses, allow/blocklists, command allow/blocklists, loggers (and their webhooks on Discord, best effort), prefixes, and resets the server settings. Keeps the guild row with staff-set fields (`blocked`, `blocked_reason`, `features`), entitlements, content flags and members' own data (reminders, command history, AI responses). Publishes `GUILD_SETTINGS_UPDATE` and `TAG_DELETE_BULK` for custom commands. Returns `{tags_deleted}`. |
 
@@ -107,11 +108,20 @@ Required permission per area (matches the bot commands):
 | Prefixes | `MANAGE_GUILD` |
 | Allowlist / blocklist (channels, roles, users) | `ADMINISTRATOR` |
 | Command allowlist / blocklist | `MANAGE_GUILD` |
+| Owner/admin bypass (the lists' settings and each entry's `admin_bypass`) | `ADMINISTRATOR` |
 | Loggers | same as the `loggers` commands |
 | Server settings (locale, timezone, AI personality) | `MANAGE_GUILD` |
 | Server data export / delete | server owner only |
 
-Owners always pass. Edits from the dashboard should publish the same redis update events the bot's
+Owners always pass.
+
+The server owner and administrators skip every list by default. With a list's setting (or an entry's
+`admin_bypass`) off they follow it like everyone else, so a server can fully disable a command for everyone.
+An entry's own `admin_bypass` wins over the list's setting. On an allowlist, an entry they bypass lets them in;
+on a blocklist, it's skipped for them. The bot's allowlist/blocklist/command list commands always work for
+them, so they can't lock themselves out.
+
+Edits from the dashboard should publish the same redis update events the bot's
 endpoints publish, so the running bot picks them up immediately.
 
 Display data the API doesn't store (channel/role names for allowlist entries, channel lists for loggers)
@@ -151,7 +161,7 @@ are ISO strings (the site also accepts epoch numbers).
 | GET | `/admin/guilds` | Every server NotSoBot knows: ones with a `guilds` row plus ones the bot is in (`bot_guilds`) that never saved settings. Query: `limit`, `offset`, `query` (name, case-insensitive; a bare id also matches the server id), `in_bot` (bool: only servers the bot is in right now / only ones it isn't), `blocked` (bool), `sort_by` (`newest` (default) \| `oldest` \| `name`). Items: `{id, name, icon, blocked, blocked_reason, bot: {shard_id, updated} \| null, counts: {tags, content_flags, reports}}`; `bot` is `null` when the bot isn't in it, `name` is `null` for a server with no `guilds` row, `counts` are the same as the detail's (without `reminders`). |
 | GET | `/admin/guilds/<guild_id>` | The `/users/@me/guilds/<guild_id>` shape for any server (`editable` all true, `owner: false`, `permissions: "0"`), plus `bot` (as above) and `counts: {tags, reminders, content_flags, reports}` (tags made in it, reminders set in it (a count only: staff can't read people's reminders), every content flag from it including blocked users', reports as `GET /admin/reports?guild_id=`). A server the bot is in without a `guilds` row gets one created from Discord; neither is `404` code `10012`. |
 | PATCH | `/admin/guilds/<guild_id>` | The `PATCH /users/@me/guilds/<guild_id>` body plus `blocked` and `blocked_reason` (max 2000, only kept while blocked). Unblocking is **owner only** (`403`). Publishes `GUILD_SETTINGS_UPDATE` when something changed. Returns the `GET` shape. |
-| … | `/admin/guilds/<guild_id>/prefixes`, `/prefixes/delete`, `/allowlist/<id>/<type>`, `/blocklist/<id>/<type>`, `/commands/<command>/allowlist\|blocklist/<id>/<type>`, `/loggers/delete`, `/data/export` | Same methods, bodies and events as the `/users/@me/guilds/<guild_id>/...` routes, for any server and without the Discord permission checks. |
+| … | `/admin/guilds/<guild_id>/prefixes`, `/prefixes/delete`, `/allowlist/<id>/<type>`, `/blocklist/<id>/<type>`, `/commands/<command>/allowlist\|blocklist/<id>/<type>` (including `PATCH`), `/loggers/delete`, `/data/export` | Same methods, bodies and events as the `/users/@me/guilds/<guild_id>/...` routes, for any server and without the Discord permission checks. |
 | POST | `/admin/guilds/<guild_id>/data/delete` | Same as `/users/@me/guilds/<guild_id>/data/delete`, **owner only** (`403` for moderators). |
 
 Enums: content flag `status` `0` pending, `1` confirmed, `2` dismissed, `3` reported. New flags whose media (or text) matches an already confirmed or reported flag (same `sha256`, or `pdq` within 31 bits) are created as `1` confirmed, with `reviewed_by` set to that flag's reviewer and `notes` set to `Auto-confirmed, matches #<id> by sha256|pdq`, and `auto_confirmed_from` set to that flag's id. Setting a status through `PATCH` clears `auto_confirmed_from`. Only confirmed and reported flags with a pdq are compared, through the partial index `content_flags_pdq_confirmed`. `category`: `unsafe`,

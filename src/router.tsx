@@ -31,7 +31,17 @@ const routes: Array<RouteObject> = [
     HydrateFallback: () => null,
     children: [
       {index: true, element: <HomePage/>},
-      {path: Routes.COMMANDS, element: <CommandsPage/>, handle: PAGES.COMMANDS},
+      {
+        path: Routes.COMMANDS,
+        element: <CommandsPage/>,
+        handle: PAGES.COMMANDS,
+        // the command is a drawer over the list, so the list stays mounted underneath
+        children: [
+          {index: true},
+          {path: ':commandId', handle: PAGES.COMMAND},
+          {path: ':commandId/:commandType', handle: PAGES.COMMAND_TYPE},
+        ],
+      },
       {path: Routes.FAQ, element: <FaqPage/>, handle: PAGES.FAQ},
       {path: Routes.STATUS, element: <StatusPage/>, handle: PAGES.STATUS},
       {
@@ -99,7 +109,7 @@ const routes: Array<RouteObject> = [
                 children: [
                   {path: '/dashboard/admin', element: <Navigate to={Routes.DASHBOARD_ADMIN_TAGS} replace/>},
                   {path: Routes.DASHBOARD_ADMIN_TAGS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminAllTagsPage')).AdminAllTagsPage}), handle: PAGES.DASHBOARD_ADMIN_TAGS},
-                  {path: Routes.DASHBOARD_ADMIN_TAG_DIRECTORY, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminTagsPage')).AdminTagsPage}), handle: PAGES.DASHBOARD_ADMIN_TAG_DIRECTORY},
+                  {path: `${Routes.DASHBOARD_ADMIN_TAG_DIRECTORY}/:itemId?`, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminTagsPage')).AdminTagsPage}), handle: PAGES.DASHBOARD_ADMIN_TAG_DIRECTORY},
                   {path: `${Routes.DASHBOARD_ADMIN_USERS}/:itemId?`, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminUsersPage')).AdminUsersPage}), handle: PAGES.DASHBOARD_ADMIN_USERS},
                   {path: Routes.DASHBOARD_ADMIN_ENTITLEMENTS, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminEntitlementsPage')).AdminEntitlementsPage}), handle: PAGES.DASHBOARD_ADMIN_ENTITLEMENTS},
                   {path: `${Routes.DASHBOARD_ADMIN_FLAGS}/:itemId?`, lazy: async () => ({Component: (await import('@/pages/dashboard/admin/AdminContentFlagsPage')).AdminContentFlagsPage}), handle: PAGES.DASHBOARD_ADMIN_FLAGS},

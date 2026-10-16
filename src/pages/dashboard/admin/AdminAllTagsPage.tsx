@@ -1,9 +1,9 @@
-import { ArrowUpRight, BookMarked, ChevronDown, ChevronUp, Search, Tags } from 'lucide-react';
+import { BookMarked, Replace, Search, Tags } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
+import { isOwner, useAuth } from '@/auth';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminTagItem, AdminTagsSortBy } from '@/lib/api';
 import { ADMIN_TAGS_PAGE_SIZE, errorMessage, useAdminTagsQuery } from '@/lib/api/dashboardQueries';
@@ -14,8 +14,9 @@ import { NsfwBadge, VerificationBadge } from '@/pages/tags/tagDirectory';
 import { ServerFilterChip } from '../servers/ServerFilterChip';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton, Toggle } from '../ui';
-import { AdminTagModal, useOpenListItem } from './AdminTagModal';
-import { adminServerPath, Chip, CopyableValue, CopyButton, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { AdminModalFooter, AdminTagModal, useOpenListItem } from './AdminTagModal';
+import { adminServerPath, adminTagDirectoryPath, Chip, CopyableValue, CopyButton, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { ReplaceTagDialog } from './ReplaceTagDialog';
 import { TagStoragePanel } from './TagStoragePanel';
 
 
@@ -35,6 +36,10 @@ const TITLE_ID = 'admin-tag-modal-title';
 
 export function AdminAllTagsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
+  const { user: me } = useAuth();
+  // replacing a tag with another is owners only
+  const owner = isOwner(me);
+  const [ replacing, setReplacing ] = useState(false);
   const hideNsfw = searchParams.get('nsfw') === 'hide';
   const searchContent = searchParams.get('content') === '1';
   const sortBy = SORTS.find((sort) => sort.value === searchParams.get('sort'))?.value ?? 'newest';
@@ -118,7 +123,7 @@ export function AdminAllTagsPage() {
       )}
 
       {(openItem) ? (
-        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close}>
+        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close} footer={!owner}>
           <TagDetails
             key={openItem.tag.id}
             item={openItem}
@@ -127,7 +132,28 @@ export function AdminAllTagsPage() {
               update({q: value});
             }}
           />
+          {(owner) ? (
+            <AdminModalFooter previousId={previousId} nextId={nextId} onNavigate={open}>
+              <button type='button' className='btn btn-secondary' title='Move everything to another tag, then delete this one' onClick={() => setReplacing(true)}>
+                <Replace aria-hidden className='size-4'/>
+                Replace with another tag
+              </button>
+            </AdminModalFooter>
+          ) : null}
         </AdminTagModal>
+      ) : null}
+
+      {(replacing && openItem) ? (
+        <ReplaceTagDialog
+          tag={openItem.tag}
+          onReplaced={(targetId) => {
+            setReplacing(false);
+            close();
+            // the tag that's left, with everything moved onto it
+            update({q: `id:${targetId}`});
+          }}
+          onClose={() => setReplacing(false)}
+        />
       ) : null}
     </>
   );
@@ -193,21 +219,16 @@ function TagCard({ item, onOpen }: {item: AdminTagItem, onOpen: (id: string) => 
 }
 
 
-const CONTENT_PREVIEW_LINES = 6;
-const CONTENT_PREVIEW_CHARS = 400;
-
 function TagDetails({ item, onSearch }: {item: AdminTagItem, onSearch: (query: string) => void}) {
   const { tag, directory } = item;
-  const [ expanded, setExpanded ] = useState(false);
   const ownerId = item.user?.id ?? tag.user_id ?? null;
   const reference = tag.reference_tag as {id: string, name: string, content?: string} | null | undefined;
   // aliases have no content of their own, they show their source's
   const content = (reference) ? (reference.content ?? '') : (tag.content ?? '');
-  const long = CONTENT_PREVIEW_LINES < content.split('\n').length || CONTENT_PREVIEW_CHARS < content.length;
   const location = itemLocation(item);
   const directoryLink = (directory) ? (
     <Link
-      to={`${Routes.DASHBOARD_ADMIN_TAG_DIRECTORY}?${new URLSearchParams({q: `id:${tag.id}`, status: 'all'}).toString()}`}
+      to={adminTagDirectoryPath(tag.id)}
       className='inline-flex items-center gap-1.5 hover:opacity-80'
       title={`Listed in the directory${(directory.title) ? ` as “${directory.title}”` : ''}`}
     >
@@ -239,12 +260,8 @@ function TagDetails({ item, onSearch }: {item: AdminTagItem, onSearch: (query: s
         </div>
         <LocationChip
           location={location}
-          extra={(location.kind === 'personal') ? directoryLink : (location.kind === 'server' && location.id) ? (
-            <Link to={adminServerPath(location.id)} className='inline-flex items-center gap-0.5 font-medium text-brand hover:underline' title='Open this server'>
-              Open
-              <ArrowUpRight aria-hidden className='size-3'/>
-            </Link>
-          ) : null}
+          to={(location.kind === 'server' && location.id) ? adminServerPath(location.id) : undefined}
+          extra={(location.kind === 'personal') ? directoryLink : null}
         />
       </div>
 
@@ -274,20 +291,10 @@ function TagDetails({ item, onSearch }: {item: AdminTagItem, onSearch: (query: s
           </h3>
           <div className='flex items-center gap-1'>
             {(content) ? <CopyButton value={content} label='Copy'/> : null}
-            {(long) ? (
-              <button type='button' className='btn btn-ghost btn-sm' onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-                {(expanded) ? <ChevronUp className='size-4'/> : <ChevronDown className='size-4'/>}
-                {(expanded) ? 'Collapse' : 'Expand'}
-              </button>
-            ) : null}
           </div>
         </div>
         <pre
-          className={cn(
-            'overflow-x-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg',
-            long && !expanded && 'max-h-72 overflow-y-hidden',
-            'focus:border-line-strong focus:outline-none',
-          )}
+          className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none'
           {...selectAllScope}
         >
           {content || <span className='text-subtle italic'>(empty)</span>}
@@ -308,15 +315,36 @@ const LOCATION_LABELS: Record<TagLocationKind, string> = {
   global: 'Global',
 };
 
-function LocationChip({ location, extra }: {location: TagLocation, extra?: ReactNode}) {
+// with `to` the chip itself links there (a guild opens that server in the admin servers page), and the id's copy
+// button sits beside it rather than inside the link
+function LocationChip({ location, to, extra }: {location: TagLocation, to?: string, extra?: ReactNode}) {
   const Icon = (location.kind === 'personal') ? BookMarked : location.icon;
   const id = (location.kind === 'personal') ? null : location.id;
-  return (
-    <span className='inline-flex max-w-full items-center gap-1.5 rounded-md border border-line-strong bg-surface-2 px-2 py-1 text-xs'>
-      <Icon aria-hidden className='size-3.5 shrink-0 text-muted'/>
-      <span className='shrink-0 font-medium text-fg'>{LOCATION_LABELS[location.kind]}</span>
-      {(id) ? <CopyableValue value={id} truncate={0} className='text-subtle'/> : null}
+  const label = LOCATION_LABELS[location.kind];
+  const content = (
+    <>
+      <Icon aria-hidden className='size-3.5 shrink-0 text-muted transition-colors group-hover/location:text-brand'/>
+      <span className='shrink-0 font-medium text-fg'>{label}</span>
+      {(id) ? (
+        <>
+          <span aria-hidden className='h-3 w-px shrink-0 bg-line-strong'/>
+          <span className='min-w-0 truncate font-mono text-subtle'>{id}</span>
+        </>
+      ) : null}
       {extra}
+    </>
+  );
+  const className = 'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-line-strong bg-surface-2 px-2 py-1 text-xs';
+  return (
+    <span className='inline-flex max-w-full items-center gap-1'>
+      {(to) ? (
+        <Link to={to} className={cn('group/location transition-colors hover:border-brand hover:bg-surface-3', className)} title={`Open this ${label.toLowerCase()} · ${id}`}>
+          {content}
+        </Link>
+      ) : (
+        <span className={className}>{content}</span>
+      )}
+      {(id) ? <CopyButton value={id}/> : null}
     </span>
   );
 }

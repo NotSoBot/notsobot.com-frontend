@@ -4,6 +4,9 @@ export const Routes = Object.freeze({
   AUTH_LOGIN_CALLBACK: '/auth/login/callback',
   AUTH_REDIRECT: '/auth/redirect',
   COMMANDS: '/commands',
+  // a command's drawer over the list. the default variant has no `:commandType`, see commandPath() in src/pages/commands
+  COMMAND: '/commands/:commandId',
+  COMMAND_TYPE: '/commands/:commandId/:commandType',
   DASHBOARD: '/dashboard',
   DASHBOARD_TAGS: '/dashboard/tags',
   DASHBOARD_TAG: '/dashboard/tags/:tagId',
@@ -18,6 +21,7 @@ export const Routes = Object.freeze({
   DASHBOARD_VOICES: '/dashboard/voices',
   DASHBOARD_ADMIN_TAGS: '/dashboard/admin/tags',
   DASHBOARD_ADMIN_TAG_DIRECTORY: '/dashboard/admin/tags/directory',
+  DASHBOARD_ADMIN_TAG_DIRECTORY_ITEM: '/dashboard/admin/tags/directory/:itemId',
   DASHBOARD_ADMIN_USERS: '/dashboard/admin/users',
   DASHBOARD_ADMIN_USER: '/dashboard/admin/users/:itemId',
   DASHBOARD_ADMIN_ENTITLEMENTS: '/dashboard/admin/entitlements',
@@ -40,3 +44,8 @@ export const Routes = Object.freeze({
   SUPPORT: '/support',
   SUPPORT_INVITE: '/support/invite',
 });
+
+
+// `/tags/directory/:tagId?add=1` opens that tag's add dialog (logging in first), it's the "Add to Server" button on
+// a tag link's discord embed (worker/index.ts)
+export const TAG_ADD_PARAM = 'add';
