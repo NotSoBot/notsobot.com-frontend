@@ -1,4 +1,4 @@
-// MediaScript reference, rewritten for tag authors from notsobot.api/api/prompt.txt ("MediaScript Instructions").
+// MediaScript reference, rewritten for tag authors from notsobot.api/api/prompts (sections/mediascript*.txt and functions/mediascript.json).
 // Defaults and ranges are cross-checked against notsobot.api/api/apis/mediascript/mediascript.py (+ structures.py)
 // and the TagScript side in notsobot.ts/src/utils/tags/index.ts (MEDIASCRIPT, MEDIASCRIPT_URL, MEDIASCRIPT_MAYBE_URL).
 
@@ -261,7 +261,7 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
     id: 'ms-loops',
     title: 'Loops and conditions',
     body: [
-      'Three commands run other MediaScript code: `foreachframe` runs code once per frame, `dobetween` runs code on a slice of time, and `if` runs code only when a comparison is true. The code goes at the end of the line.',
+      'Four commands run other MediaScript code: `foreachframe` runs code once per frame, `dobetween` runs code on a slice of time, `if` runs code only when a comparison is true, and `reexport` runs code over and over on its own result (see Logo effects). The code goes at the end of the line.',
       'Because each line is one command, code with more than one line has to be JSON-encoded so it fits on a single line. The easy way is `{jsonify:...}`: put the inner commands on their own lines inside it. A single short command can be written directly, like `if rand(0,1) <= 0.5 flip img`.',
       'Inside `foreachframe KEY START END CODE`, the current frame is available as its own media key called `KEYx` (so for `pfp` it is `pfpx`), and `idx` is the frame number. START is inclusive and END is exclusive, so `0 pfpfc` covers every frame. Commands inside must keep the frame a single still image, so avoid commands that turn images into GIFs (like `spin` or `shake`) inside the loop.',
       '`dobetween KEY START END CODE` works the same way but on a time range in seconds: the slice is available as `KEYx`, and after the code runs it is stitched back between the untouched parts.',
@@ -343,6 +343,60 @@ export const MEDIASCRIPT_GUIDE: Array<TagDocGuideSection> = [
   },
 
   {
+    id: 'ms-logo-effects',
+    title: 'Logo effects (Preview 2, Preview 1280, G Major, IHTX)',
+    body: [
+      'If you make logo effects, three commands are built for you: `ffmpeg` runs FFmpeg filters and codecs on a media key, `reexport` (also `ihtx`) re-exports a clip over and over and joins the exports, and `loadcube` loads `.cube` color LUTs for FFmpeg\'s `lut3d`. They replace most of what `{sh:}` effect tags do, without the shell and without `.t sync+` afterwards.',
+      '`ffmpeg KEY ...OPTIONS` takes FFmpeg\'s own output options: `-vf`, `-af`, `-filter_complex`, `-map`, `-c:v`, `-c:a`, `-crf`, `-qp`, `-preset` and more. KEY is input `0`, and `-i OTHERKEY` adds another media key as input `1`, `2`... (up to 4). The result keeps KEY\'s format and goes back into KEY. Most FFmpeg filters work, including `geq`, `displace`, `haldclut`, `curves`, `rubberband` and `frei0r` (with its built-in plugins like `mirr0r` and `gateweave`). Filters that read or write files on their own, like `movie`, `amovie` and `sendcmd`, are blocked, so load files with `load` or `loadcube` and pass them in.',
+      '`reexport KEY AMOUNT LENGTH CODE` takes the first LENGTH seconds, runs CODE on it as `KEYx`, then runs CODE again on that result, AMOUNT times, and joins every export in order (backwards if AMOUNT is negative). Exports that come out longer than LENGTH are cut back unless you add `NO_TRIM=true`. Every export\'s audio is matched to its video before joining, so the result stays in sync. `idx` is the export number, for commands that take equations.',
+      'Pitch shifting is `rubberband=pitch=2^(SEMITONES/12)`: `2^(7/12)` is up a fifth, `2^(-12/12)` is down an octave. For a chord, split the audio with `asplit`, shift each copy and mix them back with `amix=N:normalize=0`. A hue shift is `hue=h=DEGREES`. ImageMagick\'s `-modulate 100,100,X` turns the hue by about `(X-100)*1.8` degrees; if the colors come out mirrored, flip the sign.',
+      'Downloaded programs (multipitch, 4orm, `.veg` renderers) and shell commands can\'t run in MediaScript. The table shows what to use instead. Limits: up to 100 `ffmpeg` runs per script, each output at most 10 minutes and 2048x2048, and every `ffmpeg` inside `reexport` counts once per export.',
+    ].join('\n\n'),
+    table: {
+      columns: ['In a {sh:} tag', 'In MediaScript'],
+      rows: [
+        ['`magick hald:4 -modulate ...` + `movie=x.ppm,[in]haldclut`', '`hue=h=DEGREES`, or build the CLUT in the graph: `haldclutsrc=4,hue=h=54[h];[0:v][h]haldclut`'],
+        ['`multipitch in.wav out.wav 7`', '`rubberband=pitch=2^(7/12)`, chords with `asplit` + `rubberband` + `amix`'],
+        ['`movie=$(curl ...)` or a second downloaded video', '`load URL other`, then `ffmpeg KEY -i other -filter_complex "[0:v][1:v]..."`'],
+        ['`lut3d=./input/x.cube`', '`loadcube URL x`, then `lut3d=x.cube`'],
+        ['a loop of exports + concat + `.t sync+`', '`reexport KEY AMOUNT LENGTH CODE`'],
+        ['`ffmpeg -i "concat:a.avi|b.avi|..."`', '`concatmultiple`'],
+        ['4orm, `.veg` renderers, other downloaded programs', 'Not supported'],
+      ],
+    },
+    examples: [
+      {
+        code: '{mediascript:load {video} clip\nffmpeg clip -vf "hue=h=45" -af "rubberband=pitch=2^(1/12)"\nrender clip}',
+        result: 'One hue + pitch step: the colors turn 45 degrees and the audio goes up a semitone.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nreexport clip 20 0.46 {jsonify:ffmpeg clipx -vf "negate,huesaturation=hue=72" -af "rubberband=pitch=1.06" -c:v libx264}\nrender clip}',
+        result: 'IHTX-style: 20 exports of the first 0.46 seconds, each one inverted, hue shifted and pitched up from the last one.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nffmpeg clip -filter_complex "[0:a]asplit=3[a][b][c];[b]rubberband=pitch=2^(7/12)[b2];[c]rubberband=pitch=2^(12/12)[c2];[a][b2][c2]amix=3:normalize=0[out]" -map 0:v? -map [out]\nrender clip}',
+        result: 'A chord, like multipitch with `0,7,12`: the original audio, a fifth up and an octave up, mixed together.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nffmpeg clip -vf "hue=h=180,scroll=0:0:0.5,frei0r=mirr0r:-.5" -af "rubberband=pitch=2^(-2/12)"\nrender clip}',
+        result: 'The scrolling mirror look from Preview 1280 effects, with the audio down 2 semitones.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nloadcube https://example.com/Cold_Major.cube cm\nffmpeg clip -vf "lut3d=cm.cube" -af "rubberband=pitch=2^(-2/12)"\nrender clip}',
+        result: 'Color grades the clip with a .cube LUT (swap in the real link to your LUT).',
+      },
+      {
+        code: '{mediascript:load {video} clip\nload https://example.com/tv_displacement.mp4 tv\nffmpeg clip -i tv -filter_complex "[0:v]scale=640:360,split[v][g0];[g0]drawbox=c=gray:t=fill[g];[1:v]scale=640:360,format=gray[d];[v][d][g]displace=edge=wrap"\nrender clip}',
+        result: 'TV wobble with a displacement video loaded as its own media key, instead of `movie=$(curl ...)`. The result is as long as the clip; a shorter displacement video holds its last frame.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nreexport clip -10 1 {jsonify:\nhueshifthsvffmpeg clipx 36\njpeg clipx\n}\nrender clip}',
+        result: '10 exports that each shift the hue and add JPEG crunch, joined from the last one back to the first.',
+      },
+    ],
+  },
+
+  {
     id: 'ms-examples',
     title: 'Worked examples',
     body: 'A few complete tags that combine several commands. Copy one into `.tag create` and tweak it.',
@@ -408,6 +462,27 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
     notes: [
       '`FILE_X` loads the tag\'s Xth attachment so far and removes it from the reply; `FILE_X_COPY` keeps it attached.',
+    ],
+  },
+  {
+    name: 'loadcube',
+    category: 'io',
+    summary: 'Loads a `.cube` 3D color LUT for the `ffmpeg` action\'s `lut3d` filter.',
+    syntax: 'loadcube URL CUBE_KEY',
+    args: [
+      {name: 'URL', description: 'link to the `.cube` file, or `FILE_1`, `FILE_2`... for attached files'},
+      {name: 'CUBE_KEY', description: 'name to use it by, a-z, 0-9 and _ only'},
+    ],
+    examples: [
+      {
+        code: '{mediascript:load {video} clip\nloadcube https://example.com/Cold_Major.cube cm\nffmpeg clip -vf lut3d=cm.cube\nrender clip}',
+        result: 'Color grades the video with the LUT.',
+      },
+    ],
+    notes: [
+      'Use it as `lut3d=CUBE_KEY.cube` (or `lut3d=file=CUBE_KEY.cube:interp=tetrahedral`) in `ffmpeg`.',
+      'Only 3D LUTs, with `LUT_3D_SIZE` up to 65 and files up to 16mb. At most 10 per script.',
+      'Cube keys are separate from media keys, a cube can\'t be used as media.',
     ],
   },
   {
@@ -504,6 +579,36 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
     ],
     notes: [
       'The slice is available as `MEDIA_KEYx`.',
+      'Variables and new media keys made inside are discarded when it ends. `render` is not allowed inside.',
+    ],
+  },
+  {
+    name: 'reexport',
+    aliases: ['ihtx'],
+    category: 'flow',
+    summary: 'Runs code on a clip over and over, each time on the last result, then joins every result (IHTX-style exports).',
+    syntax: 'reexport MEDIA_KEY AMOUNT LENGTH NO_TRIM=false ...MEDIASCRIPTCODE',
+    args: [
+      media(),
+      {name: 'AMOUNT', default: '2', range: '-100..100, not 0', description: 'how many exports, negative joins them backwards'},
+      {name: 'LENGTH', default: 'MEDIA_KEYd', description: 'seconds from the start to use, also the length of each export'},
+      {name: 'NO_TRIM', default: 'false', description: 'keep exports that got longer than LENGTH, only works as `NO_TRIM=true`'},
+      {name: 'MEDIASCRIPTCODE', rest: true, description: 'the code to run on each export, JSON-encoded with `{jsonify:}`'},
+    ],
+    examples: [
+      {
+        code: '{mediascript:load {video} clip\nreexport clip 20 0.46 {jsonify:ffmpeg clipx -vf "negate,huesaturation=hue=72" -af "rubberband=pitch=1.06" -c:v libx264}\nrender clip}',
+        result: '20 exports of the first 0.46 seconds, each one inverted, hue shifted and pitched up from the last.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nreexport clip -10 1 {jsonify:\njpeg clipx\nhueshifthsvffmpeg clipx 36\n}\nrender clip}',
+        result: '10 exports joined last to first.',
+      },
+    ],
+    notes: [
+      'The export being made is `MEDIA_KEYx`, and `idx` is its number (1, 2, 3...).',
+      'Each export\'s audio is cut or padded to its video\'s length before joining, so it stays in sync (no `sync+` needed).',
+      'The code\'s lines count once per export toward the 300 line limit, and every `ffmpeg` in it counts toward the `ffmpeg` limit.',
       'Variables and new media keys made inside are discarded when it ends. `render` is not allowed inside.',
     ],
   },
@@ -1151,6 +1256,33 @@ export const MEDIASCRIPT_COMMANDS: Array<TagDocMediaScriptCommand> = [
       media(),
       {name: 'DURATION', default: '0.5', range: '0..120', description: 'fade length in seconds'},
       {name: 'COLOR', default: 'black', description: 'color to fade from'},
+    ],
+  },
+  {
+    name: 'ffmpeg',
+    category: 'filters',
+    summary: 'Runs FFmpeg filters and codecs on the media, using FFmpeg\'s own options.',
+    syntax: 'ffmpeg MEDIA_KEY ...FFMPEG_OPTIONS',
+    args: [
+      media(),
+      {name: 'FFMPEG_OPTIONS', rest: true, description: 'FFmpeg output options, like `-vf`, `-af`, `-filter_complex`, `-c:v`, `-c:a`, `-crf`, `-map`'},
+    ],
+    examples: [
+      {
+        code: '{mediascript:load {video} clip\nffmpeg clip -vf "negate,huesaturation=hue=72" -af "rubberband=pitch=1.06" -c:v libx264\nrender clip}',
+        result: 'Inverts the colors, shifts the hue and raises the pitch by about a semitone.',
+      },
+      {
+        code: '{mediascript:load {video} clip\nload {image} lut\nffmpeg clip -i lut -filter_complex "[0:v][1:v]haldclut"\nrender clip}',
+        result: 'Uses another media key as a second input, here as a Hald CLUT.',
+      },
+    ],
+    notes: [
+      'The media is input `0`, each `-i MEDIA_KEY` adds another media as input `1`, `2`, ... (at most 4).',
+      'The output keeps the media\'s format, so `-c:v`/`-c:a` have to fit it (`flac` in a `video/mp4` works, `pcm_s16le` doesn\'t).',
+      'Only allowed filters, codecs and options work. Filters that read or write files (`movie`, `amovie`, `sendcmd`, `zmq`, `ladspa`, `metadata`...) are blocked, and `frei0r` only takes known plugin names.',
+      'Output is capped at 10 minutes, 2048x2048 and 2 minutes of FFmpeg run time.',
+      '`lut3d` works with LUTs from `loadcube`, as `lut3d=CUBE_KEY.cube`.',
     ],
   },
   {

@@ -1,6 +1,6 @@
 import { Menu, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router';
+import { Link, matchPath, NavLink, useLocation } from 'react-router';
 
 import logo from '@/assets/logos/NotSoLogo.svg';
 import { config, Routes } from '@/config';
@@ -52,6 +52,8 @@ export function Navbar() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  const isAlsoActive = (paths?: ReadonlyArray<string>) => !!paths?.some((path) => !!matchPath({path, end: false}, location.pathname));
+
   return (
     <header className='sticky top-0 z-40 border-b border-line bg-surface'>
       <nav className='container-page flex h-16 items-center gap-4' aria-label='Main'>
@@ -73,7 +75,7 @@ export function Navbar() {
               <li key={link.to}>
                 <NavLink
                   to={link.to}
-                  className={({ isActive }) => cn('text-sm transition-colors', isActive ? 'text-white' : 'text-muted hover:text-white')}
+                  className={({ isActive }) => cn('text-sm transition-colors', (isActive || isAlsoActive(link.also)) ? 'text-white' : 'text-muted hover:text-white')}
                 >
                   {link.label}
                 </NavLink>
@@ -93,7 +95,7 @@ export function Navbar() {
                   to={link.to}
                   className={({ isActive }) => cn(
                     'block rounded-md px-3 py-2.5 text-base transition-colors',
-                    isActive ? 'bg-surface-3 text-white' : 'text-muted hover:bg-surface-2 hover:text-white',
+                    (isActive || isAlsoActive(link.also)) ? 'bg-surface-3 text-white' : 'text-muted hover:bg-surface-2 hover:text-white',
                   )}
                 >
                   {link.label}

@@ -115,13 +115,15 @@ const SlideNavigation = createContext<((id: string) => void) | null>(null);
 // One admin tag over the list, like the dashboard's own tag modal: the full card, with ← / → (or swiping on touch
 // screens) stepping through the page. Swiping drags the item along, and every step slides the next one in.
 // `footer={false}` leaves the footer to the children, for an `AdminModalFooter` with the item's own actions in it.
-export function AdminTagModal({ labelledBy, previousId, nextId, onNavigate, onClose, footer = true, children }: {
+// `stickyClose` is `Modal`'s, for children with a header that sticks to the top on phones.
+export function AdminTagModal({ labelledBy, previousId, nextId, onNavigate, onClose, footer = true, stickyClose = false, children }: {
   labelledBy: string,
   previousId: string | null,
   nextId: string | null,
   onNavigate: (id: string) => void,
   onClose: () => void,
   footer?: boolean,
+  stickyClose?: boolean,
   children: ReactNode,
 }) {
   const navigation = useRef({previousId, nextId, onNavigate});
@@ -285,7 +287,7 @@ export function AdminTagModal({ labelledBy, previousId, nextId, onNavigate, onCl
   }, []);
 
   return (
-    <Modal labelledBy={labelledBy} onClose={onClose}>
+    <Modal labelledBy={labelledBy} onClose={onClose} stickyClose={stickyClose}>
       <SlideNavigation.Provider value={(id) => step.current(id)}>
         <div ref={slideRef}>
           {children}

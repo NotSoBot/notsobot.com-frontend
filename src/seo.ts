@@ -82,7 +82,12 @@ export const PAGES: Readonly<Record<keyof typeof Routes, PageMeta>> = Object.fre
   TAG_DIRECTORY_ITEM: {title: 'Tag Directory', description: 'A community-made NotSoBot tag.'},
   TAG_DOCS: {
     title: 'Tag Scripting',
-    description: 'Learn to write your own NotSoBot tags: the scripting syntax, every function, and media scripts.',
+    description: 'Learn to write your own NotSoBot tags: the TagScript syntax and every function.',
+    index: true,
+  },
+  TAG_DOCS_MEDIASCRIPT: {
+    title: 'MediaScript',
+    description: 'Edit images, audio and video from inside a NotSoBot tag with MediaScript: the syntax and every command.',
     index: true,
   },
   SUPPORT: {title: 'Support', description: 'Join the NotSoBot support server on Discord.'},

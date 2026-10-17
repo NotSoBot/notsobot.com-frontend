@@ -360,7 +360,7 @@ export function AdminContentFlagsPage() {
       )}
 
       {(openItem) ? (
-        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close} footer={false}>
+        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close} footer={false} stickyClose>
           <ContentFlagDetails
             key={openItem.id}
             flag={openItem}
@@ -587,21 +587,24 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
     <div>
       {/* same layout as the list's rows: what it is and its id on the left, why it was flagged stacked in the middle, and
           the review status in the top right, just left of the close button (its left edge is 48px in) and lined up with the
-          "Flag #id" line: the columns sit at the top, so that line is always the padding plus half of its 28px height. From sm
+          "#id" line: the columns sit at the top, so that line is always the padding plus half of its 28px height. From sm
           up the padding is even and the outer columns are both 1fr, so the middle one is centred on the modal (the status
-          and close button sit in the right column's empty space) */}
-      <div className='relative grid gap-x-4 gap-y-2 px-4 pt-4 pr-36 pb-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start sm:px-6 sm:pt-5'>
-        <div className='min-w-0'>
+          and close button sit in the right column's empty space). On phones the reasons get their own centred line under
+          the id and date, and the whole header sticks to the top of the window (`Modal`'s top padding, hence `-top-12`)
+          with the close button over it */}
+      <div className='relative grid gap-x-4 gap-y-2 px-4 pt-4 pb-3 max-sm:sticky max-sm:-top-12 max-sm:z-10 max-sm:rounded-t-xl max-sm:border-b max-sm:border-line max-sm:bg-bg/95 max-sm:backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start sm:px-6 sm:pt-5'>
+        {/* clear of the status and close button on phones */}
+        <div className='min-w-0 max-sm:pr-32'>
           <div className='flex h-7 items-center gap-2.5'>
             <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
-            {/* the id is cut off on phones, so there it's in the details below with a copy button instead */}
-            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-lg leading-7 font-semibold text-white'>
-              Flag<span className='sr-only sm:not-sr-only'> #{flag.id}</span>
+            {/* can be cut off on phones, so there it's in the details below with a copy button too */}
+            <h2 id={TITLE_ID} className='min-w-0 truncate font-mono text-base leading-7 font-semibold text-white sm:text-lg'>
+              <span className='sr-only'>Flag </span>#{flag.id}
             </h2>
           </div>
           <p className='mt-1 text-xs text-subtle'><ExactDate value={flag.created} format={formatDateTime}/></p>
         </div>
-        <div className='flex flex-wrap items-center gap-1 sm:flex-col sm:flex-nowrap'>
+        <div className='flex flex-wrap items-center justify-center gap-1 sm:flex-col sm:flex-nowrap'>
           {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
           {(flag.needs_human_review) ? <Chip tone='warning'>needs human review</Chip> : null}
           {(flag.auto_confirmed_from) ? <Chip title={`Same media as #${flag.auto_confirmed_from}, which was already confirmed`}>auto-confirmed</Chip> : null}
@@ -610,7 +613,8 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
       </div>
 
       {/* who posted it, a link to their admin page (the server is linked from the Guild id below) */}
-      <div className='border-y border-line bg-surface-2 px-4 py-2.5 sm:px-6'>
+      {/* no top border on phones, the sticky header above has its own */}
+      <div className='border-b border-line bg-surface-2 px-4 py-2.5 sm:border-t sm:px-6'>
         <div className='flex items-center gap-2'>
           {(user ?? flag.user_id) ? (
             <Link
@@ -670,7 +674,7 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
           <DetailList
             className={DETAIL_LIST_STACKED}
             items={[
-              // phones only, the title leaves it out there since it would be cut off
+              // phones only, the title's can be cut off there
               ['Flag', <CopyableValue value={flag.id} truncate={0}/>, 'sm:hidden'],
               // what the safety scan did with it, first (from sm up) so it's always in the same spot (beside Model)
               ['Action', (flag.action) ? <ActionChip action={flag.action}/> : '—'],

@@ -51,11 +51,14 @@ const routes: Array<RouteObject> = [
         // the tag is a modal over the directory, so the directory stays mounted underneath
         children: [{index: true}, {path: ':tagId', handle: PAGES.TAG_DIRECTORY_ITEM}],
       },
-      // the docs content is large, so it's only fetched when someone opens it
+      // the docs content is large, so it's only fetched when someone opens it. both languages share one page, so
+      // switching between them keeps the search
       {
-        path: Routes.TAG_DOCS,
         lazy: async () => ({Component: (await import('@/pages/docs/TagDocsPage')).TagDocsPage}),
-        handle: PAGES.TAG_DOCS,
+        children: [
+          {path: Routes.TAG_DOCS, handle: PAGES.TAG_DOCS},
+          {path: Routes.TAG_DOCS_MEDIASCRIPT, handle: PAGES.TAG_DOCS_MEDIASCRIPT},
+        ],
       },
       {path: '/docs', element: <Navigate to={Routes.TAG_DOCS} replace/>},
       {path: Routes.LEGAL_PRIVACY, element: <PrivacyPage/>, handle: PAGES.LEGAL_PRIVACY},

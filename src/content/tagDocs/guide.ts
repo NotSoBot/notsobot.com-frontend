@@ -522,7 +522,7 @@ export const TAG_DOC_GUIDE: Array<TagDocGuideSection> = [
         ['AI_MODEL', 'A model name, e.g. ANTHROPIC_CLAUDE_HAIKU_5_5', 'Which model `{ai}` uses. An unknown model gives an error listing the valid choices.'],
         ['AI_PERSONALITY', 'Any text', 'The personality `{ai}` uses instead of your saved one.'],
         ['ALLOW_COMPONENT_EXECUTIONS_FROM_EVERYONE', 'true or false', 'Lets anyone use the tag\'s buttons and select menus. By default only the person who ran the tag can.'],
-        ['DISPLAY_MEDIA_AS_NATIVE', 'true', 'Accepted, but currently has no effect on the reply.'],
+        ['DISPLAY_MEDIA_AS_NATIVE', 'true or false', 'By default, a reply that is only one file (or only one nsb.gg link) is shown like a media command\'s reply, with its size and who ran it. `true` sends it as a plain Discord attachment or link instead.'],
         ['MEDIA_AV_FALLBACK', 'SEARCH_YOUTUBE or search.youtube (or an alias like s.yt)', 'When `{transcribe}` finds no audio or video, search YouTube with its argument instead.'],
         ['MEDIA_IV_FALLBACK', 'MEDIA_IMAGE_IMAGINE, SEARCH_GOOGLE_IMAGES or SEARCH_DUCK_DUCK_GO_IMAGES (or the function names, like imagine, and their aliases)', 'When image functions like `{image}`, `{iv}`, `{ocr}` or `{edit}` find no image, generate one (as a temporary URL) or search for one using the argument instead.'],
         ['ML_IMAGINE_DO_NOT_ERROR', 'true or false', 'Passed to image generation as its "do not error" option.'],

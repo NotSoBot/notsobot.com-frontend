@@ -18,10 +18,13 @@ export function openModalCount(): number {
 // handed back to whatever opened it, and the page underneath doesn't scroll while it's open.
 // Rendered at the end of `body`, so it's never inside a transformed ancestor and a modal opened from another one stacks
 // over it (each one's dimming included).
-export function Modal({ labelledBy, onClose, className, children }: {
+// `stickyClose` keeps the close button at the top of the window while scrolling on phones, for a modal whose header
+// sticks there too (at `-top-12`, this window's top padding on phones).
+export function Modal({ labelledBy, onClose, className, stickyClose = false, children }: {
   labelledBy: string,
   onClose: () => void,
   className?: string,
+  stickyClose?: boolean,
   children: ReactNode,
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -73,15 +76,18 @@ export function Modal({ labelledBy, onClose, className, children }: {
             className,
           )}
         >
-          <button
-            ref={closeRef}
-            type='button'
-            aria-label='Close'
-            onClick={onClose}
-            className='absolute top-3 right-3 z-10 cursor-pointer rounded-md p-2 text-muted transition-colors hover:bg-surface-2 hover:text-white'
-          >
-            <X className='size-5'/>
-          </button>
+          {/* a zero-height wrapper, so when it sticks it carries the button along without taking up any room */}
+          <div className={cn(stickyClose && 'max-sm:sticky max-sm:-top-12 max-sm:z-20 max-sm:h-0')}>
+            <button
+              ref={closeRef}
+              type='button'
+              aria-label='Close'
+              onClick={onClose}
+              className='absolute top-3 right-3 z-10 cursor-pointer rounded-md p-2 text-muted transition-colors hover:bg-surface-2 hover:text-white'
+            >
+              <X className='size-5'/>
+            </button>
+          </div>
           {children}
         </div>
       </div>

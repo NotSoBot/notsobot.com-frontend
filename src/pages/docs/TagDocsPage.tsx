@@ -1,6 +1,6 @@
 import { BookOpen, Check, Copy, Link2 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation, useMatch, useNavigate } from 'react-router';
 
 import { Segmented } from '@/components/ui/Segmented';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -32,7 +32,12 @@ const VIEW_OPTIONS: Array<{value: DocsView, label: string}> = [
   {value: 'mediascript', label: 'MediaScript'},
 ];
 
-// MediaScript anchors are all prefixed with `ms-`, so a shared link opens the right view
+const VIEW_PATHS: Readonly<Record<DocsView, string>> = {
+  tagscript: Routes.TAG_DOCS,
+  mediascript: Routes.TAG_DOCS_MEDIASCRIPT,
+};
+
+// MediaScript anchors are all prefixed with `ms-`, so they never collide with a TagScript one
 const MEDIASCRIPT_ANCHOR_PREFIX = 'ms-';
 
 const HASH_SCROLL_DELAY_MS = 250;
@@ -62,13 +67,13 @@ function search<T>(items: ReadonlyArray<T>, needle: string, text: (item: T) => s
 
 export function TagDocsPage() {
   const location = useLocation();
-  const [ searchParams, setSearchParams ] = useSearchParams();
+  const navigate = useNavigate();
   const [ query, setQuery ] = useState('');
 
   const hash = decodeHash(location.hash);
-  const view: DocsView = (searchParams.get('view') === 'mediascript' || hash.startsWith(MEDIASCRIPT_ANCHOR_PREFIX)) ? 'mediascript' : 'tagscript';
+  const view: DocsView = (useMatch(Routes.TAG_DOCS_MEDIASCRIPT)) ? 'mediascript' : 'tagscript';
   const setView = (value: string) => {
-    setSearchParams((value === 'mediascript') ? {view: value} : {}, {replace: true});
+    navigate(VIEW_PATHS[value as DocsView], {replace: true});
     window.scrollTo({top: 0});
   };
 
