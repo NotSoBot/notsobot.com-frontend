@@ -1,6 +1,6 @@
 # Dashboard API contract
 
-The dashboard (notsobot.com-frontend) and the new user-facing endpoints (notsobot.api) are built
+The dashboard (notsobot.com-web) and the new user-facing endpoints (notsobot.api) are built
 against this document. Paths are relative to the API root (the site calls them under `/api`).
 
 ## Rules for every endpoint here
@@ -83,6 +83,7 @@ adding audio and deleting stay with the bot's `voice` commands (they talk to Ele
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/users/@me/commands` | Query: `guild_id` (`0` is DMs), `channel_id`, `command_id` (the exact command id or anything under it: `tag` matches `tag` and `tag.show`; spaces count as dots), `limit` (1–100, default 50), `offset` (up to 100000). Returns `{count, total, first_used, items: CommandUse[]}`, newest first, from clickhouse `user_command_uses` (every attempt the bot reported for the caller). `count` matches the filters, `total` and `first_used` (ISO string, `null` if they never used one) ignore them. `CommandUse` is `{command_id, command_name, command_type, guild_id, channel_id, result, timestamp}`: `command_name` is that variant's name from the command list (`null` if it isn't listed anymore), `guild_id` is `null` in DMs, `result` is how it ended (the bot's `CommandResults`: `ran`, `run_error`, `argument_error`, `blocked`, ..., `null` from before it was tracked). Read only. |
 | GET | `/users/@me/reminders` | `{count, items: Reminder[]}`, soonest first (capped at `MAX_REMINDER_AMOUNT`, 300). Reminders are still made (and their time changed) with the bot's `reminder` commands. `Reminder` is `{id, content, guild_id, channel_id, message_id, position, is_all_day, timestamp_start, timestamp_end}` (ISO strings; `guild_id` is `null` for DM reminders, `message_id` is the message that created it). The owner and their DM channel are left out. Reminder text is run through the content scanner whenever it's created or changed (bot or dashboard): guideline hits are blocked with `400` code `40030` (`TEXT_BLOCKED_GUIDELINES`) and flagged as `blocked`, human-review ones go through and are flagged as `logged`. If the scanner is down nothing is saved: `SAFETY_SCAN_FAILED` (`60004`). |
 | PATCH | `/users/@me/reminders/<reminder_id>` | Body `{content?, move_to_dms?}`, at least one. `content` max 512 (empty is allowed, the reminder just pings), scanned like above. `move_to_dms: true` clears `guild_id`/`channel_id`/`message_id` so it's sent in the owner's DMs (same as the bot's `reminder delete server`); there's no moving it back. Only the caller's own reminders; anything else is `404` code `10007` (`UNKNOWN_REMINDER`). Returns the reminder, and the bot reschedules it. |
 | DELETE | `/users/@me/reminders/<reminder_id>` | `204`. Same ownership rule and `404` as the `PATCH`. |

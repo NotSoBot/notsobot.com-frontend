@@ -1,7 +1,7 @@
 // Bug, user, server, message and tag reports sent with the bot's `report` commands (prefixed, slash and context menus).
 // `content` is whatever the reporter typed, so it's only ever rendered as plain text.
 
-import { ExternalLink, Filter, Inbox } from 'lucide-react';
+import { ExternalLink, Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -15,7 +15,7 @@ import { cn, formatDateTime } from '@/lib/utils';
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { REPORT_TYPES, type ReportTone, reportJumpUrl, reportTypeInfo } from '../reports/reportLabels';
 import { AdminTagModal, useOpenListItem } from './AdminTagModal';
-import { adminServerPath, Chip, CopyableValue, DetailList, ExactDate, IdFilter, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { adminServerPath, Chip, CopyableValue, DetailList, ExactDate, FilterButton, IdFilter, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
 type Tone = ReportTone;
@@ -183,23 +183,10 @@ export function AdminReportsPage() {
 }
 
 
-function FilterButton({ label, onClick }: {label: string, onClick: () => void}) {
-  return (
-    <button
-      type='button'
-      aria-label={label}
-      title={label}
-      className='shrink-0 cursor-pointer rounded p-1 text-subtle hover:bg-surface-3 hover:text-fg'
-      onClick={onClick}
-    >
-      <Filter className='size-3.5'/>
-    </button>
-  );
-}
-
-
 // one line per report, just enough to triage from; the rest is in `ReportDetails` a click away.
 // Plain content only inside (no buttons, links or focusable dates), since the whole row is a button.
+// From sm up it's one line of fixed width columns. On phones it's stacked instead: the type and id with the status across
+// from them, the reporter under them, then the report and the date in the bottom right.
 function ReportRow({ report, onOpen }: {report: Report, onOpen: (id: string) => void}) {
   const status = statusInfo(report.status);
   const type = typeInfo(report.type);
@@ -207,16 +194,18 @@ function ReportRow({ report, onOpen }: {report: Report, onOpen: (id: string) => 
     <li>
       <button
         type='button'
-        className='flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left first:rounded-t-[inherit] hover:bg-surface-2 sm:px-5'
+        className='grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 sm:flex sm:flex-wrap sm:px-5'
         onClick={() => onOpen(report.id)}
       >
-        {/* fixed widths so every row lines up in columns */}
-        <span className='w-44 font-mono text-sm text-white'>#{report.id}</span>
-        <Chip tone={type.tone} className='w-16 justify-center'>{type.label}</Chip>
-        <Chip tone={status.tone} className='w-20 justify-center'>{status.label}</Chip>
-        <span className='w-52 min-w-0'><UserCell user={report.user} size='sm'/></span>
-        <span className='min-w-0 flex-1 basis-40 truncate text-sm text-muted'>{report.content}</span>
-        <span className='ml-auto text-xs text-subtle'>{formatDateTime(report.created)}</span>
+        {/* fixed widths from sm up so every row lines up in columns; this wrapper drops out of the layout there */}
+        <span className='col-start-1 row-start-1 flex min-w-0 items-center gap-2 sm:contents'>
+          <Chip tone={type.tone} className='shrink-0 justify-center sm:order-2 sm:w-16'>{type.label}</Chip>
+          <span className='min-w-0 truncate font-mono text-sm text-white sm:order-1 sm:w-44'>#{report.id}</span>
+        </span>
+        <Chip tone={status.tone} className='col-start-2 row-start-1 justify-center justify-self-end sm:order-3 sm:w-20'>{status.label}</Chip>
+        <span className='col-span-2 min-w-0 sm:order-4 sm:w-52'><UserCell user={report.user} size='sm'/></span>
+        <span className='col-span-2 min-w-0 truncate text-sm text-muted sm:order-5 sm:flex-1 sm:basis-40'>{report.content}</span>
+        <span className='col-span-2 justify-self-end text-xs text-subtle sm:order-6 sm:ml-auto'>{formatDateTime(report.created)}</span>
       </button>
     </li>
   );

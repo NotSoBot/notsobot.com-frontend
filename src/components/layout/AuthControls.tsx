@@ -3,8 +3,9 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 
 import { useAuth } from '@/auth';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Routes } from '@/config';
-import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
+import { userDisplayTag } from '@/lib/discord';
 import { cn } from '@/lib/utils';
 
 
@@ -96,7 +97,7 @@ function UserMenu({ compact }: {compact: boolean}) {
         onClick={() => setOpen((value) => !value)}
         className='flex cursor-pointer items-center gap-2.5 rounded-full border border-line bg-surface-2 py-1 pr-3 pl-1 transition-colors hover:border-line-strong'
       >
-        <img src={userAvatarUrl(user, 80)} alt='' className='size-9 rounded-full bg-surface-3'/>
+        <UserAvatar user={user} size={80} className='size-9 rounded-full bg-surface-3'/>
         {/* `compact` (the navbar) only leaves the name out on phones, there's room for it from sm up */}
         <span className={cn('max-w-40 truncate text-sm font-medium text-white', compact && 'hidden sm:inline')}>{user.username}</span>
         <ChevronDown className={cn('size-4 text-subtle transition-transform', open && 'rotate-180')}/>
@@ -109,7 +110,7 @@ function UserMenu({ compact }: {compact: boolean}) {
           className='absolute right-0 z-50 mt-2 w-60 origin-top-right animate-fade-in overflow-hidden rounded-lg border border-line bg-surface shadow-2xl shadow-black/40'
         >
           <div className='flex items-center gap-3 border-b border-line px-4 py-3'>
-            <img src={userAvatarUrl(user, 128)} alt='' className='size-10 rounded-full bg-surface-3'/>
+            <UserAvatar user={user} size={128} className='size-10 rounded-full bg-surface-3'/>
             <div className='min-w-0'>
               <div className='truncate text-sm font-semibold'>{userDisplayTag(user)}</div>
               <div className='truncate font-mono text-xs text-subtle'>{user.id}</div>

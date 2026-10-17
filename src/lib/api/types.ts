@@ -1121,6 +1121,44 @@ export interface ReportsPage {
   items: Array<Report>,
 }
 
+// `/users/@me/commands`: one command attempt the bot reported for the caller, newest first
+export interface MeCommandUse {
+  channel_id: string,
+  command_id: string,
+  // null when the command (or that variant of it) isn't in the bot's command list anymore
+  command_name: string | null,
+  command_type: CommandType,
+  // null in DMs
+  guild_id: string | null,
+  // how it ended, the bot's `CommandResults` (null from before it was tracked)
+  result: MeCommandResult | string | null,
+  timestamp: string,
+}
+
+export const MeCommandResults = {
+  ARGUMENT_ERROR: 'argument_error',
+  BLOCKED: 'blocked',
+  BOT_MISSING_PERMISSIONS: 'bot_missing_permissions',
+  CANCELLED: 'cancelled',
+  FAIL: 'fail',
+  MISSING_PERMISSIONS: 'missing_permissions',
+  RAN: 'ran',
+  RATELIMITED: 'ratelimited',
+  RUN_ERROR: 'run_error',
+} as const;
+export type MeCommandResult = (typeof MeCommandResults)[keyof typeof MeCommandResults];
+
+export interface MeCommandsPage {
+  // matching the filters
+  count: number,
+  // the caller's first command ever (ignores the filters), null if they've never used one
+  first_used: string | null,
+  items: Array<MeCommandUse>,
+  // every command they've used, ignoring the filters
+  total: number,
+}
+
+
 // the caller's own reports, without the reporter (it's them) or the staff-only notes and reviewer
 export type MeReport = Omit<Report, 'notes' | 'reviewed_by' | 'user'>;
 

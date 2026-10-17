@@ -40,6 +40,7 @@ import type {
   EntitlementsPage,
   Reminder,
   ReminderPatch,
+  MeCommandsPage,
   MeReport,
   MeReportsPage,
   RemindersPage,
@@ -348,6 +349,19 @@ export const api = {
   // one of the caller's reports, `/dashboard/reports/:reportId`
   fetchMeReport: (reportId: string, signal?: AbortSignal) => {
     return apiRequest<MeReport>(ApiEndpoints.USER_ME_REPORT(reportId), {signal});
+  },
+
+  fetchMeCommands: (params: {guildId?: string | null, channelId?: string | null, commandId?: string | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
+    return apiRequest<MeCommandsPage>(ApiEndpoints.USER_ME_COMMANDS, {
+      signal,
+      query: {
+        guild_id: params.guildId,
+        channel_id: params.channelId,
+        command_id: params.commandId,
+        offset: params.offset,
+        limit: params.limit,
+      },
+    });
   },
 
   fetchMeReports: (params: {status?: number | null, offset?: number, limit?: number}, signal?: AbortSignal) => {

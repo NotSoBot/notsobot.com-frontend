@@ -5,11 +5,12 @@ import { Link } from 'react-router';
 import { Markdown } from '@/components/ui/Markdown';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { TagDirectoryVerificationStates, type TagDirectoryItem } from '@/lib/api';
 import { useAdminTagDirectoryItemQuery, useMeTagDirectoryQuery } from '@/lib/api/dashboardQueries';
 import { useTagDirectoryItemQuery } from '@/lib/api/queries';
 import { Routes } from '@/routes';
-import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
+import { userDisplayTag } from '@/lib/discord';
 import { cn, formatDate, formatDateTime } from '@/lib/utils';
 import { adminTagsPath, CopyButton } from '@/pages/dashboard/admin/adminUi';
 
@@ -284,7 +285,7 @@ function TagDetail({ item, editing, onEditingChange }: {item: TagDirectoryItem, 
           <section className='card p-5'>
             <h3 className='section-label mb-4'>Created By</h3>
             <div className='flex items-center gap-3'>
-              <img src={userAvatarUrl(tag.user, 128)} alt='' className='size-14 shrink-0 rounded-full bg-surface-3'/>
+              <UserAvatar user={tag.user} size={128} className='size-14 shrink-0 rounded-full bg-surface-3'/>
               <div className='min-w-0'>
                 <div className='flex items-center gap-2'>
                   <span className='truncate font-medium text-white'>{userDisplayTag(tag.user)}</span>

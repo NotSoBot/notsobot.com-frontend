@@ -8,6 +8,7 @@ import type {
   AdminUserEntry,
   AdminVoice,
   ContentFlag,
+  MeCommandUse,
   Reminder,
   Report,
   Tag,
@@ -505,6 +506,41 @@ export function createReports(users: Array<AdminUser>): Array<Report> {
     });
   }
   return reports;
+}
+
+
+// the mock user's command history (`/users/@me/commands`), newest first: a few hundred uses over ~2 years, mostly in
+// their servers (and a server they've left), some in DMs, a few with commands the bot doesn't list anymore
+export function createCommandUses(): Array<MeCommandUse> {
+  // [command id, name, type]
+  const commands: Array<[string, string | null, MeCommandUse['command_type']]> = [
+    ['tag.show', 'tag', 0], ['tag.show', 'tag show', 1], ['tag.create', 'tag create', 0], ['ping', 'ping', 0],
+    ['image.caption', 'caption', 0], ['image.caption', 'caption', 1], ['ai.chat', 'chat', 1], ['image.reverse', 'reverse', 3],
+    ['info.user', 'userinfo', 2], ['reminder.create', 'reminder create', 1], ['oldcommand', null, 0],
+  ];
+  const results = ['ran', 'ran', 'ran', 'ran', 'ran', 'ran', 'run_error', 'argument_error', 'ratelimited', 'blocked', null];
+  const places: Array<[string | null, string]> = [
+    ['1100000000000000001', '1200000000000000010'], ['1100000000000000001', '1200000000000000011'],
+    ['1100000000000000002', '1200000000000000020'], ['1100000000000000003', '1200000000000000030'],
+    ['1100000000000000009', '1200000000000000090'], [null, mockUser.channel_id ?? '1200000000000000099'],
+  ];
+  const first = Date.now() - 730 * 86400000;
+  const uses: Array<MeCommandUse> = [];
+  for (let i = 0; i < 260; i++) {
+    const [ commandId, name, type ] = commands[(i * 7) % commands.length];
+    const [ guildId, channelId ] = places[(i * 5) % places.length];
+    uses.push({
+      channel_id: channelId,
+      command_id: commandId,
+      command_name: name,
+      command_type: type,
+      guild_id: guildId,
+      result: results[(i * 3) % results.length],
+      // denser towards now
+      timestamp: new Date(first + (Date.now() - first) * Math.sqrt(i / 259)).toISOString(),
+    });
+  }
+  return uses.reverse();
 }
 
 

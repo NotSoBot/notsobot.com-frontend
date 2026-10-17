@@ -40,6 +40,7 @@ import {
   createAdminGuilds,
   createAdminUsers,
   createBlobs,
+  createCommandUses,
   createContentFlags,
   createEntitlements,
   createFiles,
@@ -69,6 +70,7 @@ const state = {
   adminDirectory: createAdminDirectory(adminUsers),
   contentFlags: createContentFlags(adminUsers),
   files: createFiles(),
+  commandUses: createCommandUses(),
   reminders: createReminders(),
   reports: createReports(adminUsers),
   voices: createVoices(adminUsers),
@@ -2038,6 +2040,24 @@ route('POST', '/users/@me/files/delete', (_match, { body }) => {
   const before = state.files.length;
   state.files = state.files.filter((file) => !fileIds.has(file.id));
   return {deleted: before - state.files.length};
+});
+
+// mirrors `views/me_commands.py`
+route('GET', '/users/@me/commands', (_match, { query }) => {
+  const guildId = query.get('guild_id');
+  const channelId = query.get('channel_id');
+  const commandId = (query.get('command_id') ?? '').trim().toLowerCase().split(/\s+/).join('.');
+  const matching = state.commandUses.filter((use) => {
+    return (guildId === null || (use.guild_id ?? '0') === guildId)
+      && (channelId === null || use.channel_id === channelId)
+      && (!commandId || use.command_id === commandId || use.command_id.startsWith(`${commandId}.`));
+  });
+  const first = state.commandUses[state.commandUses.length - 1];
+  return {
+    ...pageOf(matching, query),
+    first_used: first?.timestamp ?? null,
+    total: state.commandUses.length,
+  };
 });
 
 route('GET', '/users/@me/reminders', () => {

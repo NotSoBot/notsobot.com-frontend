@@ -4,7 +4,7 @@
 // api fetches it, so the reviewer's browser never touches the source), blurred until revealed and never for
 // child safety flags.
 
-import { AlertTriangle, ArrowUpRight, Ban, Check, Clock, CloudOff, Eye, Flag, ImageOff, Info, Languages, type LucideIcon, MessageSquareWarning, Server, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Ban, Check, Clock, CloudOff, Eye, Flag, ImageOff, Info, Languages, type LucideIcon, MessageSquareWarning, ShieldCheck, X } from 'lucide-react';
 import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -65,6 +65,10 @@ function pdqHint(distance?: number): string {
 }
 
 const TITLE_ID = 'admin-content-flag-modal-title';
+
+// the modal's two detail lists, when stacked (below sm): each spans both columns of its parent and reuses them, so the
+// labels of both lists share one width. max-sm so these don't fight the list's own grid-cols once side by side
+const DETAIL_LIST_STACKED = 'max-sm:col-span-2 max-sm:grid-cols-subgrid';
 
 // What the safety scan did with it (`action`, set in `responses/tools.py` and `content_flag.py`). Coloured by whether the
 // content got out: the ones that stopped it are calm teal/blue/grey, `logged` (it went through, only logged for review)
@@ -432,12 +436,20 @@ function IdFilter({ className = 'lg:col-span-4', label, placeholder, value, patt
 // one line per flag, just enough to triage from; the rest is in `ContentFlagDetails` a click away.
 // Plain content only inside (no buttons, links or focusable dates), since the whole row is a button.
 // From sm up it's three columns: what it is and who posted it, why it was flagged stacked in the middle, the status and
-// date on the right. On phones those don't fit side by side, so it's stacked instead: the type and id with the status
-// across from them, the poster with the date across from them, then the reasons centred under both.
+// date on the right. On phones those don't fit side by side, so it's stacked instead: the poster with the status across
+// from them, the reasons centred under them, then the type and id with the date across from them.
 function ContentFlagRow({ flag, onOpen }: {flag: ContentFlag, onOpen: (id: string) => void}) {
   const status = statusInfo(flag.status);
   const isText = flag.mimetype === CONTENT_FLAG_TEXT_MIMETYPE;
   const { user } = flag;
+  const reasons = [
+    (flag.category) ? <Chip key='category' tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null,
+    (flag.needs_human_review) ? <Chip key='review' tone='warning'>needs review</Chip> : null,
+    (flag.auto_confirmed_from) ? <Chip key='auto'>auto-confirmed</Chip> : null,
+    (user?.blocked) ? <Chip key='blocked' tone='danger'>user blocked</Chip> : null,
+  ].filter(Boolean);
+  // the type and id's row on phones, under the reasons when there are any
+  const lastRow = (reasons.length) ? 'row-start-3' : 'row-start-2';
   return (
     <li>
       <button
@@ -446,26 +458,25 @@ function ContentFlagRow({ flag, onOpen }: {flag: ContentFlag, onOpen: (id: strin
         onClick={() => onOpen(flag.id)}
       >
         {/* what it is and its id (fixed widths, so rows line up) */}
-        <span className='col-start-1 row-start-1 flex min-w-0 items-center gap-3'>
+        <span className={cn('col-start-1 flex min-w-0 items-center gap-3 sm:row-start-1', lastRow)}>
           <Chip className='w-12 shrink-0 justify-center'>{(isText) ? 'text' : 'media'}</Chip>
           <span className='min-w-0 truncate font-mono text-sm leading-5 text-white'>#{flag.id}</span>
         </span>
-        {/* who posted it, under them */}
-        <span className='col-start-1 row-start-2 min-w-0'>
+        {/* who posted it, first on phones and under them from sm up */}
+        <span className='col-start-1 row-start-1 min-w-0 sm:row-start-2'>
           <UserCell user={user} fallbackId={flag.user_id} size='sm'/>
         </span>
-        {/* why it was flagged: a centred wrapping line under the rest on phones, stacked in the middle from sm up */}
-        <span className='col-span-2 row-start-3 flex flex-wrap items-center justify-center gap-1 empty:hidden sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:flex-col sm:flex-nowrap'>
-          {(flag.category) ? <Chip tone={(flag.category.startsWith('unsafe')) ? 'danger' : 'warning'}>{flag.category}</Chip> : null}
-          {(flag.needs_human_review) ? <Chip tone='warning'>needs review</Chip> : null}
-          {(flag.auto_confirmed_from) ? <Chip>auto-confirmed</Chip> : null}
-          {(user?.blocked) ? <Chip tone='danger'>user blocked</Chip> : null}
-        </span>
+        {/* why it was flagged: a centred wrapping line in the middle on phones, stacked in the middle column from sm up */}
+        {(reasons.length) ? (
+          <span className='col-span-2 row-start-2 flex flex-wrap items-center justify-center gap-1 sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:flex-col sm:flex-nowrap'>
+            {reasons}
+          </span>
+        ) : null}
         {/* the review status, and when it was flagged under it. On phones this wrapper drops out of the layout so the
-            status sits across from the id and the date across from the poster */}
+            status sits across from the poster and the date across from the id */}
         <span className='contents sm:col-start-3 sm:row-span-2 sm:row-start-1 sm:flex sm:min-w-0 sm:flex-col sm:items-end sm:gap-2'>
           <Chip tone={status.tone} title={status.description} className='col-start-2 row-start-1 w-20 justify-center justify-self-end'>{status.label}</Chip>
-          <span className='col-start-2 row-start-2 justify-self-end text-xs whitespace-nowrap text-subtle'>{formatDateTime(flag.created)}</span>
+          <span className={cn('col-start-2 justify-self-end text-xs whitespace-nowrap text-subtle', lastRow)}>{formatDateTime(flag.created)}</span>
         </span>
       </button>
     </li>
@@ -598,32 +609,26 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
         <Chip tone={status.tone} title={status.description} className='absolute top-[20px] right-16 w-20 justify-center sm:top-[24px]'>{status.label}</Chip>
       </div>
 
-      {/* who posted it and where, each a link to their admin page */}
-      <div className='flex flex-wrap items-center gap-2 border-y border-line bg-surface-2 px-4 py-2.5 sm:px-6'>
-        {(user ?? flag.user_id) ? (
-          <Link
-            to={adminUserPath(user?.id ?? flag.user_id!)}
-            title='Open in users'
-            className='group/user -ml-1.5 flex min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 transition-colors hover:bg-surface-3'
-          >
-            <UserCell user={user} fallbackId={flag.user_id} size='sm'/>
-            <ArrowUpRight aria-hidden className='size-3.5 shrink-0 text-subtle transition-colors group-hover/user:text-brand'/>
-          </Link>
-        ) : (
-          <UserCell user={null}/>
-        )}
-        {(user?.blocked) ? <Chip tone='danger' title={user.blocked_reason || undefined}>Blocked</Chip> : null}
-        <div className='ml-auto flex flex-wrap items-center gap-2'>
-          {(flag.guild_id) ? (
-            <Link to={adminServerPath(flag.guild_id)} className='btn btn-secondary btn-sm' title={`Open server ${flag.guild_id}`}>
-              <Server aria-hidden className='size-4'/>
-              Server
+      {/* who posted it, a link to their admin page (the server is linked from the Guild id below) */}
+      <div className='border-y border-line bg-surface-2 px-4 py-2.5 sm:px-6'>
+        <div className='flex items-center gap-2'>
+          {(user ?? flag.user_id) ? (
+            <Link
+              to={adminUserPath(user?.id ?? flag.user_id!)}
+              title='Open in users'
+              className='group/user -ml-1.5 flex min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 transition-colors hover:bg-surface-3'
+            >
+              <UserCell user={user} fallbackId={flag.user_id} size='sm'/>
+              <ArrowUpRight aria-hidden className='size-3.5 shrink-0 text-subtle transition-colors group-hover/user:text-brand'/>
             </Link>
-          ) : null}
+          ) : (
+            <UserCell user={null}/>
+          )}
+          {(user?.blocked) ? <Chip tone='danger' title={user.blocked_reason || undefined}>Blocked</Chip> : null}
           {(user && canToggleBlock) ? (
             <button
               type='button'
-              className={cn('btn btn-sm', (user.blocked) ? 'btn-secondary' : 'btn-danger')}
+              className={cn('btn btn-sm ml-auto shrink-0', (user.blocked) ? 'btn-secondary' : 'btn-danger')}
               onClick={() => setBlocking(true)}
             >
               {(user.blocked) ? <ShieldCheck aria-hidden className='size-4'/> : <Ban aria-hidden className='size-4'/>}
@@ -631,7 +636,7 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
             </button>
           ) : null}
         </div>
-        {(user?.blocked && user.blocked_reason) ? <p className='basis-full text-xs break-words text-subtle'>Blocked for: {user.blocked_reason}</p> : null}
+        {(user?.blocked && user.blocked_reason) ? <p className='mt-1 text-xs break-words text-subtle'>Blocked for: {user.blocked_reason}</p> : null}
       </div>
 
       <div className='px-4 pt-4 pb-5 sm:px-6'>
@@ -642,9 +647,11 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
           </div>
         ) : null}
 
-        {/* side by side once there's room, where the command/server/channel/message ids sit on the right */}
-        <div className='grid gap-4 sm:grid-cols-2'>
+        {/* side by side once there's room, where the command/server/channel/message ids sit on the right. Stacked on phones,
+            both lists share one label column (subgrid) so their values line up */}
+        <div className='grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-4 sm:grid-cols-2'>
           <DetailList
+            className={DETAIL_LIST_STACKED}
             items={[
               ['Model', flag.model || '—'],
               ['Mimetype', flag.mimetype || '—'],
@@ -661,6 +668,7 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
             ]}
           />
           <DetailList
+            className={DETAIL_LIST_STACKED}
             items={[
               // phones only, the title leaves it out there since it would be cut off
               ['Flag', <CopyableValue value={flag.id} truncate={0}/>, 'sm:hidden'],
@@ -671,15 +679,6 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
               ['Channel', (flag.channel_id) ? <CopyableValue value={flag.channel_id} truncate={0}/> : '—'],
               ['Message', (flag.message_id) ? <CopyableValue value={flag.message_id} truncate={0}/> : '—'],
               (flag.tag_id) ? ['Tag', <CopyableValue value={flag.tag_id} truncate={0} to={`${Routes.DASHBOARD_ADMIN_TAGS}?q=${flag.tag_id}`} linkTitle='Find this tag in tags'/>] : null,
-              (flag.reviewed_at || flag.reviewed_by) ? ['Reviewed', (
-                <span>
-                  {(flag.reviewed_at) ? <ExactDate value={flag.reviewed_at} format={formatDateTime}/> : null}
-                  {/* TODO: have the api send `reviewed_by` as a user object (like `user`) and show a UserCell here instead of the id */}
-                  {(flag.reviewed_by) ? (
-                    <> by <Link to={adminUserPath(flag.reviewed_by)} title='Open in users' className='font-mono text-code underline-offset-2 hover:underline'>{flag.reviewed_by}</Link></>
-                  ) : null}
-                </span>
-              )] : null,
             ]}
           />
         </div>
@@ -779,7 +778,20 @@ function ContentFlagDetails({ flag, onReport, navigation }: {
             saveNotes();
           }}
         >
-          <label htmlFor={`flag-notes-${flag.id}`} className='section-label mb-1 block'>Notes</label>
+          {/* who reviewed it sits with the notes, since that's what they'd explain */}
+          <div className='mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5'>
+            <label htmlFor={`flag-notes-${flag.id}`} className='section-label'>Notes</label>
+            {(flag.reviewed_at || flag.reviewed_by) ? (
+              <p className='text-xs text-subtle'>
+                Reviewed
+                {(flag.reviewed_at) ? <> <ExactDate value={flag.reviewed_at} format={formatDateTime}/></> : null}
+                {/* TODO: have the api send `reviewed_by` as a user object (like `user`) and show a UserCell here instead of the id */}
+                {(flag.reviewed_by) ? (
+                  <> by <Link to={adminUserPath(flag.reviewed_by)} title='Open in users' className='font-mono text-code underline-offset-2 hover:underline'>{flag.reviewed_by}</Link></>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
           <textarea
             id={`flag-notes-${flag.id}`}
             className='input min-h-16 resize-y'

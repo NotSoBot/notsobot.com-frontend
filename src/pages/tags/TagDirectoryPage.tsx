@@ -6,6 +6,7 @@ import { stripMarkdown } from '@/components/ui/Markdown';
 import { Modal } from '@/components/ui/Modal';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Spinner } from '@/components/ui/Spinner';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
@@ -16,7 +17,6 @@ import {
   type TagDirectorySortBy,
 } from '@/lib/api';
 import { useTagDirectoryQuery } from '@/lib/api/queries';
-import { userAvatarUrl } from '@/lib/discord';
 import { cn, formatDate } from '@/lib/utils';
 
 import { TagDetailModal } from './TagDetailModal';
@@ -301,7 +301,7 @@ function TagCard({ item, search }: {item: TagDirectoryItem, search: string}) {
 
         <div className='flex items-center justify-between border-t border-line pt-3'>
           <div className='flex min-w-0 items-center gap-2'>
-            <img src={userAvatarUrl(tag.user, 32)} alt='' loading='lazy' className='size-6 rounded-full bg-surface-3'/>
+            <UserAvatar user={tag.user} size={32} loading='lazy' className='size-6 rounded-full bg-surface-3'/>
             <span className='truncate text-sm text-muted'>{tag.user.username}</span>
           </div>
           <AddTagButton tag={tag} verified={item.verified}/>

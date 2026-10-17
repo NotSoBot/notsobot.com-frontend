@@ -26,7 +26,7 @@ import { cn, NO_AUTOFILL } from '@/lib/utils';
 
 import { ApplicationChips, ApplicationNameDialog, isApplicationDisabled, isNotSoBotApplication } from '../applications/ApplicationDialogs';
 import { DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton } from '../ui';
-import { CopyableValue, ExactDate, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
+import { adminUserPath, CopyableValue, ExactDate, FilterButton, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
 
 type Tab = 'applications' | 'access';
@@ -185,6 +185,7 @@ function ApplicationsTab({ state }: {state: SearchParamState}) {
                   const disabled = isApplicationDisabled(application);
                   // the bot's own applications are owners only, and can only be renamed from here
                   const locked = notsobot && !isOwner(me);
+                  const ownerId = application.user?.id ?? application.owner_id;
                   return (
                     <tr key={application.id} className='align-middle hover:bg-surface-2'>
                       <td className='max-w-72 px-4 py-3'>
@@ -195,16 +196,15 @@ function ApplicationsTab({ state }: {state: SearchParamState}) {
                         <CopyableValue value={application.id} truncate={0} className='mt-0.5'/>
                       </td>
                       <td className='px-4 py-3'>
-                        {(application.user) ? (
-                          <button
-                            type='button'
-                            className='-m-1 cursor-pointer rounded-md p-1 text-left hover:bg-surface-3'
-                            title='Show only this user’s applications'
-                            onClick={() => update({user_id: application.user?.id ?? null, q: null})}
-                          >
-                            <UserCell user={application.user}/>
-                          </button>
-                        ) : <UserCell user={null} fallbackId={application.owner_id}/>}
+                        {/* name opens the owner in users, the id copies, the funnel shows only their applications */}
+                        {(ownerId) ? (
+                          <div className='flex min-w-0 items-center gap-1'>
+                            <UserCell user={application.user} fallbackId={ownerId} to={adminUserPath(ownerId)}/>
+                            {(ownerId !== userId) ? (
+                              <FilterButton label='Show only this user’s applications' onClick={() => update({user_id: ownerId, q: null})}/>
+                            ) : null}
+                          </div>
+                        ) : <UserCell user={null}/>}
                       </td>
                       <td className='px-4 py-3 whitespace-nowrap text-muted'>
                         <ExactDate value={application.created}/>
@@ -393,7 +393,7 @@ function AccessTab({ state }: {state: SearchParamState}) {
               <tbody className='divide-y divide-line'>
                 {items.map((item) => (
                   <tr key={item.user.id} className='align-middle hover:bg-surface-2'>
-                    <td className='px-4 py-3'><UserCell user={item.user}/></td>
+                    <td className='px-4 py-3'><UserCell user={item.user} to={adminUserPath(item.user.id)}/></td>
                     <td className='px-4 py-3'>
                       {(item.applications) ? (
                         <button

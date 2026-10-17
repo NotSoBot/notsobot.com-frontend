@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   // a separate script from notsobot.cf-worker ("notsobot-com"), which keeps the cdn/proxy/umami/etc domains.
   // these routes are more specific than its "*notsobot.com/*", so cloudflare sends the website here instead.
-  "name": "notsobot-com-frontend",
+  "name": "notsobot-com-web",
   "main": "worker/index.ts",
   "compatibility_date": "2025-09-01",
   "assets": {

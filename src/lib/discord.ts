@@ -9,7 +9,12 @@ export function userAvatarUrl(user: Pick<User, 'id' | 'avatar' | 'discriminator'
     const extension = user.avatar.startsWith('a_') ? 'gif' : 'png';
     return `${CDN}/avatars/${user.id}/${user.avatar}.${extension}?size=${size}`;
   }
+  return userDefaultAvatarUrl(user);
+}
 
+
+// the avatar Discord shows when a user has none, also used when their custom one fails to load
+export function userDefaultAvatarUrl(user: Pick<User, 'id' | 'discriminator'>): string {
   // default avatars: pomelo (discriminator 0) users use the id, legacy users the discriminator
   const discriminator = Number(user.discriminator);
   const index = (discriminator)

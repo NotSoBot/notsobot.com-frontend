@@ -97,6 +97,7 @@ const routes: Array<RouteObject> = [
                 ],
               },
               {path: Routes.DASHBOARD_APPLICATIONS, lazy: async () => ({Component: (await import('@/pages/dashboard/applications/ApplicationsPage')).ApplicationsPage}), handle: PAGES.DASHBOARD_APPLICATIONS},
+              {path: Routes.DASHBOARD_COMMANDS, lazy: async () => ({Component: (await import('@/pages/dashboard/commands/CommandHistoryPage')).CommandHistoryPage}), handle: PAGES.DASHBOARD_COMMANDS},
               {path: Routes.DASHBOARD_SERVERS, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServersPage')).ServersPage}), handle: PAGES.DASHBOARD_SERVERS},
               {path: Routes.DASHBOARD_SERVER, lazy: async () => ({Component: (await import('@/pages/dashboard/servers/ServerDetailPage')).ServerDetailPage}), handle: PAGES.DASHBOARD_SERVER},
               {path: Routes.DASHBOARD_PREMIUM, lazy: async () => ({Component: (await import('@/pages/dashboard/PremiumPage')).PremiumPage}), handle: PAGES.DASHBOARD_PREMIUM},

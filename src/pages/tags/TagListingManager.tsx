@@ -360,34 +360,18 @@ export function ManageListingCard({ item, access, editing, onEdit }: {
       {(access.staff) ? (
         <div className='mt-4 border-t border-line pt-4'>
           <h4 className='section-label mb-2'>Verification</h4>
+          {/* the current status' slot turns into "Mark pending", like the content flags modal, so nothing sits greyed out */}
           <div className='grid gap-2'>
-            <VerifyButton
-              label='Verify'
-              icon={<ShieldCheck className='size-4'/>}
-              className='btn-primary'
-              current={item.verified === TagDirectoryVerificationStates.VERIFIED}
-              disabled={verify.isPending}
-              pending={pendingTarget === TagDirectoryVerificationStates.VERIFIED}
-              onClick={() => setVerified(TagDirectoryVerificationStates.VERIFIED)}
-            />
-            <VerifyButton
-              label='Mark pending'
-              icon={<Clock className='size-4'/>}
-              className='btn-secondary'
-              current={item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION}
-              disabled={verify.isPending}
-              pending={pendingTarget === TagDirectoryVerificationStates.PENDING_VERIFICATION}
-              onClick={() => setVerified(TagDirectoryVerificationStates.PENDING_VERIFICATION)}
-            />
-            <VerifyButton
-              label='Reject'
-              icon={<ShieldX className='size-4'/>}
-              className='btn-danger'
-              current={item.verified === TagDirectoryVerificationStates.NOT_VERIFIED}
-              disabled={verify.isPending}
-              pending={pendingTarget === TagDirectoryVerificationStates.NOT_VERIFIED}
-              onClick={() => setVerified(TagDirectoryVerificationStates.NOT_VERIFIED)}
-            />
+            {VERIFY_SLOTS.map((slot) => {
+              const value = (item.verified === slot) ? TagDirectoryVerificationStates.PENDING_VERIFICATION : slot;
+              const action = VERIFY_ACTIONS[value];
+              return (
+                <button key={slot} type='button' className={cn('btn btn-sm', action.className)} disabled={verify.isPending} onClick={() => setVerified(value)}>
+                  {(pendingTarget === value) ? <Spinner className='size-4 border-white/40 border-t-white'/> : <action.icon className='size-4'/>}
+                  {action.label}
+                </button>
+              );
+            })}
           </div>
           {(verify.isError) ? <InlineError>{errorMessage(verify.error, 'Couldn’t change the verification.')}</InlineError> : null}
           <Link
@@ -477,22 +461,13 @@ function OwnerVerificationSection({ item, editing }: {item: TagDirectoryItem, ed
 }
 
 
-function VerifyButton({ label, icon, className, current, disabled, pending, onClick }: {
-  label: string,
-  icon: ReactNode,
-  className: string,
-  current: boolean,
-  disabled: boolean,
-  pending: boolean,
-  onClick: () => void,
-}) {
-  return (
-    <button type='button' className={cn('btn btn-sm', className)} disabled={disabled || current} onClick={onClick}>
-      {(pending) ? <Spinner className='size-4 border-white/40 border-t-white'/> : icon}
-      {label}
-    </button>
-  );
-}
+const VERIFY_SLOTS = [ TagDirectoryVerificationStates.VERIFIED, TagDirectoryVerificationStates.NOT_VERIFIED ] as const;
+
+const VERIFY_ACTIONS: Record<number, {label: string, icon: typeof ShieldCheck, className: string}> = {
+  [TagDirectoryVerificationStates.VERIFIED]: {label: 'Verify', icon: ShieldCheck, className: 'btn-primary'},
+  [TagDirectoryVerificationStates.PENDING_VERIFICATION]: {label: 'Mark pending', icon: Clock, className: 'btn-secondary'},
+  [TagDirectoryVerificationStates.NOT_VERIFIED]: {label: 'Reject', icon: ShieldX, className: 'btn-danger'},
+};
 
 
 // Replaces the listing's description/content in the modal while editing. Owners get the title, description, category

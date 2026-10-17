@@ -1,4 +1,4 @@
-import { AlarmClock, AlertTriangle, ArrowUpRight, Ban, Crown, Eye, Tags as TagsIcon, type LucideIcon } from 'lucide-react';
+import { AlarmClock, AlertTriangle, ArrowUpRight, Ban, Crown, Eye, SquareTerminal, Tags as TagsIcon, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -144,7 +144,7 @@ function ServerDetails({ guild, onDirtyChange }: {guild: UserGuild, onDirtyChang
 }
 
 
-// "Your reminders" / "Your tags" in this server, opening those pages filtered to it
+// "Your commands" / "Your reminders" / "Your tags" in this server, opening those pages filtered to it
 function YourStuffLinks({ guildId }: {guildId: string}) {
   const reminders = useMeRemindersQuery();
   const tags = useMeTagsCountQuery(guildId);
@@ -152,6 +152,8 @@ function YourStuffLinks({ guildId }: {guildId: string}) {
   const search = `?${new URLSearchParams({server: guildId})}`;
   return (
     <nav aria-label='Your things in this server' className='flex shrink-0 flex-wrap gap-2'>
+      {/* no count, it'd scan their whole command history every time a server is opened */}
+      <YourStuffLink to={`${Routes.DASHBOARD_COMMANDS}${search}`} icon={SquareTerminal} label='Your commands' count={undefined}/>
       <YourStuffLink to={`${Routes.DASHBOARD_REMINDERS}${search}`} icon={AlarmClock} label='Your reminders' count={reminderCount}/>
       <YourStuffLink to={`${Routes.DASHBOARD_TAGS}${search}`} icon={TagsIcon} label='Your tags' count={tags.data}/>
     </nav>

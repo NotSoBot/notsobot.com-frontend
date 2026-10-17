@@ -23,6 +23,7 @@ export const queryKeys = {
   meTagDirectory: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'directory'] as const,
   meTagServers: (token: string | null, tagId: string) => ['users', '@me', token, 'tags', 'item', tagId, 'servers'] as const,
   meApplications: (token: string | null) => ['users', '@me', token, 'applications'] as const,
+  meCommands: (token: string | null, filters: object) => ['users', '@me', token, 'commands', filters] as const,
   meEntitlements: (token: string | null) => ['users', '@me', token, 'entitlements'] as const,
   meReminders: (token: string | null) => ['users', '@me', token, 'reminders'] as const,
   meReports: (token: string | null, filters: object) => ['users', '@me', token, 'reports', filters] as const,

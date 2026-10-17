@@ -642,6 +642,35 @@ export function useMeEntitlementsQuery() {
 }
 
 
+export const ME_COMMANDS_PAGE_SIZE = 50;
+
+export interface MeCommandsFilters {
+  // '0' is DMs
+  guildId: string | null,
+  channelId: string | null,
+  commandId: string | null,
+  page: number,
+}
+
+// the overview's "Commands used" is the unfiltered first page, so it shares this cache with the history page
+export function useMeCommandsQuery(filters: MeCommandsFilters) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: queryKeys.meCommands(token, filters),
+    queryFn: ({ signal }) => api.fetchMeCommands({
+      guildId: filters.guildId,
+      channelId: filters.channelId,
+      commandId: filters.commandId,
+      offset: filters.page * ME_COMMANDS_PAGE_SIZE,
+      limit: ME_COMMANDS_PAGE_SIZE,
+    }, signal),
+    placeholderData: keepPreviousData,
+    // it only changes when they use the bot, no need to rescan on every focus
+    staleTime: 60 * 1000,
+  });
+}
+
+
 export const ME_REPORTS_PAGE_SIZE = 25;
 
 export function useMeReportQuery(reportId: string | null) {

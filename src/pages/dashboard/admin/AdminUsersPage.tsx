@@ -5,11 +5,12 @@ import { Link } from 'react-router';
 import { isOwner, useAuth } from '@/auth';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Segmented } from '@/components/ui/Segmented';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { UserFlags, type AdminUserEntry, type AdminUsersSortBy } from '@/lib/api';
 import { ADMIN_PAGE_SIZE, errorMessage, useAdminUserEntryQuery, useAdminUsersQuery } from '@/lib/api/dashboardQueries';
-import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
+import { userDisplayTag } from '@/lib/discord';
 import { cn } from '@/lib/utils';
 
 import { premiumLabel } from '../premium';
@@ -280,7 +281,7 @@ function UserDetails({ entry }: {entry: AdminUserEntry}) {
   return (
     <div className='p-4 sm:p-6'>
       <div className='flex items-center gap-4 pr-10'>
-        <img src={userAvatarUrl(user, 128)} alt='' className='size-16 shrink-0 rounded-full bg-surface-3'/>
+        <UserAvatar user={user} size={128} className='size-16 shrink-0 rounded-full bg-surface-3'/>
         <div className='min-w-0'>
           <h2 id={TITLE_ID} className='truncate text-xl font-semibold text-white'>{userDisplayTag(user)}</h2>
           <div className='mt-1 flex items-center gap-1.5 text-xs text-subtle'>

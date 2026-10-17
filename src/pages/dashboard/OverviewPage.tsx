@@ -3,11 +3,12 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { useAuth } from '@/auth';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Routes } from '@/config';
-import { isDiscordGrantError, isScopeMismatch, useMeGuildsQuery, useMeTagsCountQuery } from '@/lib/api/dashboardQueries';
+import { isDiscordGrantError, isScopeMismatch, useMeCommandsQuery, useMeGuildsQuery, useMeTagsCountQuery } from '@/lib/api/dashboardQueries';
 import { UserPremiumTypes } from '@/lib/api';
-import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
-import { cn } from '@/lib/utils';
+import { userDisplayTag } from '@/lib/discord';
+import { cn, formatDate } from '@/lib/utils';
 
 import { CONTENT_SECTIONS, DASHBOARD_SECTIONS } from './DashboardLayout';
 import { premiumLabel } from './premium';
@@ -15,6 +16,7 @@ import { Skeleton } from './ui';
 
 
 const SECTION_BLURBS: Record<string, string> = {
+  'Command History': 'Every command you’ve used, filterable by server, channel and command.',
   Premium: 'Your premium tier and the subscriptions behind it.',
   Tags: 'Edit your tags, their variables and stored blobs.',
   Servers: 'Prefixes, allow/blocklists, loggers and server settings.',
@@ -27,6 +29,8 @@ export function OverviewPage() {
   const { user } = useAuth();
   const tagsCount = useMeTagsCountQuery();
   const guilds = useMeGuildsQuery();
+  // the history page's unfiltered first page, so opening it after this is instant
+  const commands = useMeCommandsQuery({guildId: null, channelId: null, commandId: null, page: 0});
 
   if (!user) {
     return null;
@@ -40,7 +44,7 @@ export function OverviewPage() {
       <section className='card relative overflow-hidden p-5 sm:p-6'>
         <div aria-hidden className='absolute inset-x-0 top-0 h-16 bg-gradient-to-r from-brand/40 via-brand/10 to-transparent'/>
         <div className='relative flex flex-col gap-4 sm:flex-row sm:items-center'>
-          <img src={userAvatarUrl(user, 128)} alt='' className='size-20 rounded-full border-4 border-surface bg-surface-3'/>
+          <UserAvatar user={user} size={128} className='size-20 rounded-full border-4 border-surface bg-surface-3'/>
           <div className='min-w-0 flex-1'>
             <h1 className='truncate text-2xl font-bold text-white sm:text-3xl'>{userDisplayTag(user)}</h1>
             <p className='mt-0.5 truncate font-mono text-xs text-subtle'>{user.id}</p>
@@ -59,7 +63,14 @@ export function OverviewPage() {
         </div>
       </section>
 
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+        <Stat
+          label='Commands used'
+          to={Routes.DASHBOARD_COMMANDS}
+          value={(commands.isPending) ? null : (commands.isError) ? '—' : commands.data.total.toLocaleString()}
+          detail={(commands.data?.first_used) ? `Since ${formatDate(commands.data.first_used)}` : undefined}
+          color='#5865f2'
+        />
         <Stat
           label='Tags you own'
           to={Routes.DASHBOARD_TAGS}

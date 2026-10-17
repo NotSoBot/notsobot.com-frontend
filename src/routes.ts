@@ -9,6 +9,7 @@ export const Routes = Object.freeze({
   COMMAND_TYPE: '/commands/:commandId/:commandType',
   DASHBOARD: '/dashboard',
   DASHBOARD_APPLICATIONS: '/dashboard/applications',
+  DASHBOARD_COMMANDS: '/dashboard/commands',
   DASHBOARD_TAGS: '/dashboard/tags',
   DASHBOARD_TAG: '/dashboard/tags/:tagId',
   DASHBOARD_TAG_EDIT: '/dashboard/tags/:tagId/edit',
@@ -49,6 +50,7 @@ export const Routes = Object.freeze({
 });
 
 
-// `/tags/directory/:tagId?add=1` opens that tag's add dialog (logging in first), it's the "Add to Server" button on
+// `/tags/directory/:tagId?add=true` opens that tag's add dialog (logging in first), it's the "Add to Server" button on
 // a tag link's discord embed (worker/index.ts)
 export const TAG_ADD_PARAM = 'add';
+export const TAG_ADD_VALUE = 'true';

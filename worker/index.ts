@@ -15,7 +15,7 @@ import {
   type TagDirectoryPage,
 } from '../src/lib/api/types';
 import { commandTypeFromPath } from '../src/lib/commandPaths';
-import { Routes, TAG_ADD_PARAM } from '../src/routes';
+import { Routes, TAG_ADD_PARAM, TAG_ADD_VALUE } from '../src/routes';
 import { NOT_FOUND_PAGE, PAGE_ALIASES, PAGES, pageTitle, SITE_NAME, type PageMeta } from '../src/seo';
 
 
@@ -223,7 +223,7 @@ function tagEmbed(
   text.push({type: 10, content: `-# ${escapeMarkdown(stats.join(' · '))}`});
 
   const addUrl = new URL(Routes.TAG_DIRECTORY_ITEM.replace(':tagId', item.id), `https://${env.SITE_DOMAIN}`);
-  addUrl.searchParams.set(TAG_ADD_PARAM, '1');
+  addUrl.searchParams.set(TAG_ADD_PARAM, TAG_ADD_VALUE);
 
   const components: DiscordContainer = {
     type: 17,

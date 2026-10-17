@@ -1,11 +1,11 @@
-import { AlarmClock, AudioLines, Blocks, Crown, Files, Flag, Inbox, LayoutDashboard, MessageSquareWarning, Server, Settings, ShieldCheck, Tags, type LucideIcon, Users } from 'lucide-react';
+import { AlarmClock, AudioLines, Blocks, Crown, Files, Flag, Inbox, LayoutDashboard, MessageSquareWarning, Server, Settings, ShieldCheck, SquareTerminal, Tags, type LucideIcon, Users } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
 import { isStaff, useAuth } from '@/auth';
 import { ToastProvider } from '@/components/ui/Toast';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Routes } from '@/config';
-import { userAvatarUrl } from '@/lib/discord';
 import { cn } from '@/lib/utils';
 
 import { premiumLabel } from './premium';
@@ -25,6 +25,7 @@ interface Section {
 export const DASHBOARD_SECTIONS: ReadonlyArray<Section> = [
   {to: Routes.DASHBOARD, label: 'Overview', icon: LayoutDashboard, color: '#5865f2', end: true},
   {to: Routes.DASHBOARD_APPLICATIONS, label: 'Applications', icon: Blocks, color: '#3ba55c'},
+  {to: Routes.DASHBOARD_COMMANDS, label: 'Command History', icon: SquareTerminal, color: '#5865f2'},
   {to: Routes.DASHBOARD_PREMIUM, label: 'Premium', icon: Crown, color: '#f0b232'},
   {to: Routes.DASHBOARD_SERVERS, label: 'Servers', icon: Server, color: '#faa81a'},
   {to: Routes.DASHBOARD_SETTINGS, label: 'Settings', icon: Settings, color: '#00b0f4'},
@@ -74,7 +75,7 @@ export function DashboardLayout() {
           >
             {(user) ? (
               <div className='mb-4 hidden items-center gap-3 px-1 lg:flex'>
-                <img src={userAvatarUrl(user, 64)} alt='' className='size-10 rounded-full bg-surface-3'/>
+                <UserAvatar user={user} size={64} className='size-10 rounded-full bg-surface-3'/>
                 <div className='min-w-0'>
                   <div className='truncate font-semibold text-white'>{user.username}</div>
                   <div className='truncate text-xs text-subtle'>{premiumLabel(user.premium_type)}</div>

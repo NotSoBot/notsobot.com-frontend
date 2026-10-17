@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router';
 
 import { useAuth } from '@/auth';
 import { Markdown } from '@/components/ui/Markdown';
-import { config, Routes, TAG_ADD_PARAM } from '@/config';
+import { config, Routes, TAG_ADD_PARAM, TAG_ADD_VALUE } from '@/config';
 import { TagDirectoryCategories, TagDirectoryVerificationStates, type Tag, type TagDirectoryCategory } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -223,7 +223,8 @@ export function NsfwBadge({ size = 'sm' }: {size?: 'sm' | 'lg'}) {
 
 // Opens the add dialog (logging in first if needed); the dialog lives outside the card so its clicks
 // don't hit the card's stretched link. `verified` lets the dialog warn about unverified tags.
-// `openFromUrl` opens it straight away when the page has `?add=1` (TAG_ADD_PARAM), only the tag's own modal sets it
+// `openFromUrl` opens it straight away when the page has `?add=true` (TAG_ADD_PARAM), only the tag's own modal sets it.
+// `?add=1` still works for embeds discord cached before the switch
 export function AddTagButton({ tag, verified, size = 'sm', className, openFromUrl = false }: {
   tag: Pick<Tag, 'id' | 'name'>,
   verified: number,
@@ -234,7 +235,7 @@ export function AddTagButton({ tag, verified, size = 'sm', className, openFromUr
   const { status, isAuthenticated, login } = useAuth();
   const [ open, setOpen ] = useState(false);
   const [ searchParams, setSearchParams ] = useSearchParams();
-  const requested = openFromUrl && searchParams.has(TAG_ADD_PARAM);
+  const requested = openFromUrl && [TAG_ADD_VALUE, '1'].includes(searchParams.get(TAG_ADD_PARAM) ?? '');
 
   useEffect(() => {
     if (!requested || status === 'loading' || !config.authEnabled) {

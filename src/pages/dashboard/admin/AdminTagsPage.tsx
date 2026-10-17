@@ -33,7 +33,7 @@ import { TAG_NAME_MAX } from '@/pages/dashboard/tags/tagMeta';
 import { CategoryBadge, categoryOptionFromParam, CategorySelect, DescriptionEditor, NsfwBadge, TAG_DIRECTORY_CATEGORY_OPTIONS, VerificationBadge, verificationRequirement } from '@/pages/tags/tagDirectory';
 
 import { CharCounter, DashboardHeader, EmptyState, ErrorPanel, Field, Skeleton, Toggle } from '../ui';
-import { AdminTagModal, useOpenListItem } from './AdminTagModal';
+import { AdminModalFooter, AdminTagModal, useOpenListItem } from './AdminTagModal';
 import { Chip, CopyableValue, CopyButton, DetailList, ExactDate, Pagination, selectAllScope, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 import { DeleteDirectoryTagFlow } from './DeleteDirectoryTagFlow';
 import { TagAssetsPanel } from './TagAssetsPanel';
@@ -171,10 +171,11 @@ export function AdminTagsPage() {
       )}
 
       {(openItem) ? (
-        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close}>
+        <AdminTagModal labelledBy={TITLE_ID} previousId={previousId} nextId={nextId} onNavigate={open} onClose={close} footer={false}>
           <DirectoryTagDetails
             key={openItem.id}
             item={openItem}
+            navigation={{previousId, nextId, onNavigate: open}}
             onDelete={() => {
               // the delete flow is its own dialog, and the tag leaves the list once it's deleted
               close();
@@ -243,7 +244,12 @@ const CONTENT_MAX = 2000;
 const TITLE_MAX = 128;
 const DESCRIPTION_MAX = 2000;
 
-function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, onDelete: () => void}) {
+// `navigation` is the modal's Previous / Next, the review actions go between them
+function DirectoryTagDetails({ item, navigation, onDelete }: {
+  item: AdminTagDirectoryItem,
+  navigation: {previousId: string | null, nextId: string | null, onNavigate: (id: string) => void},
+  onDelete: () => void,
+}) {
   const { tag } = item;
   const toast = useToast();
   const mutation = usePatchAdminTagDirectoryMutation();
@@ -325,237 +331,238 @@ function DirectoryTagDetails({ item, onDelete }: {item: AdminTagDirectoryItem, o
   const missing = verificationRequirement(item);
 
   return (
-    <div className='p-4 sm:p-6'>
-      <div className='flex flex-wrap items-start justify-between gap-3 pr-10'>
-        <div className='min-w-0 flex-1'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <h2 id={TITLE_ID} className='truncate text-xl font-semibold text-white'>{item.title || <span className='text-subtle italic'>Untitled</span>}</h2>
-            <VerificationBadge verified={item.verified}/>
-            <CategoryBadge category={item.category}/>
-            {(tag.nsfw) ? <NsfwBadge/> : null}
-            {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
-          </div>
-          <p className='mt-0.5 font-mono text-sm text-code'>{tag.name}</p>
-        </div>
-        <div className='flex flex-wrap gap-2'>
-          <ActionButton
-            label='Verify'
-            icon={<ShieldCheck className='size-4'/>}
-            className='btn-primary'
-            disabled={mutation.isPending || item.verified === TagDirectoryVerificationStates.VERIFIED || !!missing}
-            title={(item.verified !== TagDirectoryVerificationStates.VERIFIED) ? (missing ?? undefined) : undefined}
-            pending={pendingTarget === TagDirectoryVerificationStates.VERIFIED}
-            onClick={() => setVerified(TagDirectoryVerificationStates.VERIFIED, 'verified')}
-          />
-          <ActionButton
-            label='Mark pending'
-            icon={<Clock className='size-4'/>}
-            className='btn-secondary'
-            disabled={mutation.isPending || item.verified === TagDirectoryVerificationStates.PENDING_VERIFICATION}
-            pending={pendingTarget === TagDirectoryVerificationStates.PENDING_VERIFICATION}
-            onClick={() => setVerified(TagDirectoryVerificationStates.PENDING_VERIFICATION, 'marked pending')}
-          />
-          <ActionButton
-            label='Reject'
-            icon={<ShieldX className='size-4'/>}
-            className='btn-danger'
-            disabled={mutation.isPending || item.verified === TagDirectoryVerificationStates.NOT_VERIFIED}
-            pending={pendingTarget === TagDirectoryVerificationStates.NOT_VERIFIED}
-            onClick={() => setVerified(TagDirectoryVerificationStates.NOT_VERIFIED, 'set to unverified')}
-          />
-          <ActionButton
-            label='Delete'
-            icon={<Trash2 className='size-4'/>}
-            className='btn-danger'
-            disabled={mutation.isPending}
-            pending={false}
-            onClick={onDelete}
-          />
-        </div>
-      </div>
-
-      <div className='mt-3'>
-        <UserCell user={item.user} fallbackId={tag.user_id ?? null}/>
-      </div>
-
-      {(item.edit_request) ? <EditRequestReview item={item} request={item.edit_request}/> : null}
-
-      {(listingDraft !== null) ? (
-        <div className='mt-3 space-y-3'>
-          <Field
-            label='Tag name'
-            counter={<CharCounter length={draftName.length} max={TAG_NAME_MAX}/>}
-            error={(!draftName) ? 'A tag needs a name.' : (nameTaken) ? 'The owner already has a tag with this name there.' : null}
-          >
-            {(props) => (
-              <input
-                {...props}
-                className='input font-mono'
-                value={listingDraft.name}
-                disabled={listingMutation.isPending}
-                autoComplete='off'
-                {...NO_AUTOFILL}
-                spellCheck={false}
-                onChange={(event) => {
-                  listingMutation.reset();
-                  setListingDraft({...listingDraft, name: event.target.value.replace(/[\r\n]/g, '')});
-                }}
-              />
-            )}
-          </Field>
-          <Field label='Title' counter={<CharCounter length={listingDraft.title.length} max={TITLE_MAX}/>}>
-            {(props) => (
-              <input
-                {...props}
-                className='input'
-                value={listingDraft.title}
-                disabled={listingMutation.isPending}
-                autoComplete='off'
-                {...NO_AUTOFILL}
-                onChange={(event) => setListingDraft({...listingDraft, title: event.target.value})}
-              />
-            )}
-          </Field>
-          <Field label='Description' counter={<CharCounter length={listingDraft.description.length} max={DESCRIPTION_MAX}/>}>
-            {(props) => (
-              <DescriptionEditor
-                {...props}
-                className='input resize-y leading-relaxed'
-                rows={Math.min(12, Math.max(3, listingDraft.description.split('\n').length + 1))}
-                value={listingDraft.description}
-                disabled={listingMutation.isPending}
-                onChange={(value) => setListingDraft({...listingDraft, description: value})}
-              />
-            )}
-          </Field>
-          <Field label='Category'>
-            {(props) => (
-              <CategorySelect
-                {...props}
-                value={listingDraft.category}
-                disabled={listingMutation.isPending}
-                onChange={(value) => setListingDraft({...listingDraft, category: value})}
-              />
-            )}
-          </Field>
-          <div className='flex flex-wrap items-center gap-2'>
-            <ActionButton
-              label='Save listing'
-              icon={<Pencil className='size-4'/>}
-              className='btn-primary'
-              disabled={listingMutation.isPending || !listingChanged || listingInvalid}
-              pending={listingMutation.isPending}
-              onClick={saveListing}
-            />
-            <button type='button' className='btn btn-sm btn-ghost' disabled={listingMutation.isPending} onClick={() => {
-              listingMutation.reset();
-              setListingDraft(null);
-            }}>Cancel</button>
-            <span className='text-xs text-subtle'>Works on locked, pending and verified tags too, the owner isn’t notified.</span>
+    <>
+      <div className='p-4 sm:p-6'>
+        <div className='flex flex-wrap items-start justify-between gap-3 pr-10'>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <h2 id={TITLE_ID} className='truncate text-xl font-semibold text-white'>{item.title || <span className='text-subtle italic'>Untitled</span>}</h2>
+              <VerificationBadge verified={item.verified}/>
+              <CategoryBadge category={item.category}/>
+              {(tag.nsfw) ? <NsfwBadge/> : null}
+              {(tag.locked) ? <Chip tone='warning'>Locked</Chip> : null}
+            </div>
+            <p className='mt-0.5 font-mono text-sm text-code'>{tag.name}</p>
           </div>
         </div>
-      ) : (
-        <div className='mt-3 flex items-start justify-between gap-2'>
-          {(item.description) ? (
-            <Markdown text={item.description} className='text-sm text-muted'/>
-          ) : (
-            <p className='text-sm text-subtle italic'>No description</p>
-          )}
-          <button
-            type='button'
-            className='btn btn-ghost btn-sm shrink-0'
-            onClick={() => setListingDraft({name: tag.name, title: item.title ?? '', description: item.description ?? '', category: item.category ?? 0})}
-          >
-            <Pencil className='size-4'/>
-            Edit listing
-          </button>
-        </div>
-      )}
 
-      <div className='mt-3'>
-        <DetailList
-          items={[
-            ['Tag id', <CopyableValue value={tag.id} truncate={0}/>],
-            ['Uses', (tag.uses ?? 0).toLocaleString()],
-            ['Servers', (item.server_count ?? 0).toLocaleString()],
-            ['Created', <ExactDate value={tag.created}/>],
-            (tag.edited) ? ['Edited', <ExactDate value={tag.edited}/>] : null,
-            (item.created) ? ['Listed', <ExactDate value={item.created}/>] : null,
-            (tag.server_id) ? ['Server id', <span className='font-mono'>{tag.server_id}</span>] : null,
-          ]}
-        />
-      </div>
-
-      <div className='mt-4'>
-        <div className='mb-1.5 flex items-center justify-between gap-2'>
-          <h3 className='section-label'>Content</h3>
-          <div className='flex items-center gap-1'>
-            <span className='mr-1 text-xs text-subtle tabular-nums'><CharCounter length={(draft ?? content).length} max={CONTENT_MAX}/></span>
-            {(draft === null && content) ? <CopyButton value={content} label='Copy'/> : null}
-            {(draft === null) ? (
-              <button type='button' className='btn btn-ghost btn-sm' onClick={() => setDraft(content)}>
-                <Pencil className='size-4'/>
-                Edit
-              </button>
-            ) : null}
-          </div>
+        <div className='mt-3'>
+          <UserCell user={item.user} fallbackId={tag.user_id ?? null}/>
         </div>
-        {(draft !== null) ? (
-          <div>
-            <textarea
-              className='input resize-y font-mono leading-relaxed'
-              rows={Math.min(24, Math.max(6, draft.split('\n').length + 1))}
-              aria-label='Tag content'
-              value={draft}
-              disabled={contentMutation.isPending}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-            <div className='mt-2 flex flex-wrap items-center gap-2'>
+
+        {(item.edit_request) ? <EditRequestReview item={item} request={item.edit_request}/> : null}
+
+        {(listingDraft !== null) ? (
+          <div className='mt-3 space-y-3'>
+            <Field
+              label='Tag name'
+              counter={<CharCounter length={draftName.length} max={TAG_NAME_MAX}/>}
+              error={(!draftName) ? 'A tag needs a name.' : (nameTaken) ? 'The owner already has a tag with this name there.' : null}
+            >
+              {(props) => (
+                <input
+                  {...props}
+                  className='input font-mono'
+                  value={listingDraft.name}
+                  disabled={listingMutation.isPending}
+                  autoComplete='off'
+                  {...NO_AUTOFILL}
+                  spellCheck={false}
+                  onChange={(event) => {
+                    listingMutation.reset();
+                    setListingDraft({...listingDraft, name: event.target.value.replace(/[\r\n]/g, '')});
+                  }}
+                />
+              )}
+            </Field>
+            <Field label='Title' counter={<CharCounter length={listingDraft.title.length} max={TITLE_MAX}/>}>
+              {(props) => (
+                <input
+                  {...props}
+                  className='input'
+                  value={listingDraft.title}
+                  disabled={listingMutation.isPending}
+                  autoComplete='off'
+                  {...NO_AUTOFILL}
+                  onChange={(event) => setListingDraft({...listingDraft, title: event.target.value})}
+                />
+              )}
+            </Field>
+            <Field label='Description' counter={<CharCounter length={listingDraft.description.length} max={DESCRIPTION_MAX}/>}>
+              {(props) => (
+                <DescriptionEditor
+                  {...props}
+                  className='input resize-y leading-relaxed'
+                  rows={Math.min(12, Math.max(3, listingDraft.description.split('\n').length + 1))}
+                  value={listingDraft.description}
+                  disabled={listingMutation.isPending}
+                  onChange={(value) => setListingDraft({...listingDraft, description: value})}
+                />
+              )}
+            </Field>
+            <Field label='Category'>
+              {(props) => (
+                <CategorySelect
+                  {...props}
+                  value={listingDraft.category}
+                  disabled={listingMutation.isPending}
+                  onChange={(value) => setListingDraft({...listingDraft, category: value})}
+                />
+              )}
+            </Field>
+            <div className='flex flex-wrap items-center gap-2'>
               <ActionButton
-                label='Save content'
+                label='Save listing'
                 icon={<Pencil className='size-4'/>}
                 className='btn-primary'
-                disabled={contentMutation.isPending || !draft.trim() || CONTENT_MAX < draft.length || draft === content}
-                pending={contentMutation.isPending}
-                onClick={saveContent}
+                disabled={listingMutation.isPending || !listingChanged || listingInvalid}
+                pending={listingMutation.isPending}
+                onClick={saveListing}
               />
-              <button type='button' className='btn btn-sm btn-ghost' disabled={contentMutation.isPending} onClick={() => setDraft(null)}>Cancel</button>
-              <span className='text-xs text-subtle'>Saving bypasses the lock, the owner isn’t notified and the edited date stays the same.</span>
+              <button type='button' className='btn btn-sm btn-ghost' disabled={listingMutation.isPending} onClick={() => {
+                listingMutation.reset();
+                setListingDraft(null);
+              }}>Cancel</button>
+              <span className='text-xs text-subtle'>Works on locked, pending and verified tags too, the owner isn’t notified.</span>
             </div>
           </div>
         ) : (
-          <pre
-            className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none'
-            {...selectAllScope}
-          >
-            {content || <span className='text-subtle italic'>(empty)</span>}
-          </pre>
+          <div className='mt-3 flex items-start justify-between gap-2'>
+            {(item.description) ? (
+              <Markdown text={item.description} className='text-sm text-muted'/>
+            ) : (
+              <p className='text-sm text-subtle italic'>No description</p>
+            )}
+            <button
+              type='button'
+              className='btn btn-ghost btn-sm shrink-0'
+              onClick={() => setListingDraft({name: tag.name, title: item.title ?? '', description: item.description ?? '', category: item.category ?? 0})}
+            >
+              <Pencil className='size-4'/>
+              Edit listing
+            </button>
+          </div>
         )}
+
+        <div className='mt-3'>
+          <DetailList
+            items={[
+              ['Tag id', <CopyableValue value={tag.id} truncate={0}/>],
+              ['Uses', (tag.uses ?? 0).toLocaleString()],
+              ['Servers', (item.server_count ?? 0).toLocaleString()],
+              ['Created', <ExactDate value={tag.created}/>],
+              (tag.edited) ? ['Edited', <ExactDate value={tag.edited}/>] : null,
+              (item.created) ? ['Listed', <ExactDate value={item.created}/>] : null,
+              (tag.server_id) ? ['Server id', <span className='font-mono'>{tag.server_id}</span>] : null,
+            ]}
+          />
+        </div>
+
+        <div className='mt-4'>
+          <div className='mb-1.5 flex items-center justify-between gap-2'>
+            <h3 className='section-label'>Content</h3>
+            <div className='flex items-center gap-1'>
+              <span className='mr-1 text-xs text-subtle tabular-nums'><CharCounter length={(draft ?? content).length} max={CONTENT_MAX}/></span>
+              {(draft === null && content) ? <CopyButton value={content} label='Copy'/> : null}
+              {(draft === null) ? (
+                <button type='button' className='btn btn-ghost btn-sm' onClick={() => setDraft(content)}>
+                  <Pencil className='size-4'/>
+                  Edit
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {(draft !== null) ? (
+            <div>
+              <textarea
+                className='input resize-y font-mono leading-relaxed'
+                rows={Math.min(24, Math.max(6, draft.split('\n').length + 1))}
+                aria-label='Tag content'
+                value={draft}
+                disabled={contentMutation.isPending}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <div className='mt-2 flex flex-wrap items-center gap-2'>
+                <ActionButton
+                  label='Save content'
+                  icon={<Pencil className='size-4'/>}
+                  className='btn-primary'
+                  disabled={contentMutation.isPending || !draft.trim() || CONTENT_MAX < draft.length || draft === content}
+                  pending={contentMutation.isPending}
+                  onClick={saveContent}
+                />
+                <button type='button' className='btn btn-sm btn-ghost' disabled={contentMutation.isPending} onClick={() => setDraft(null)}>Cancel</button>
+                <span className='text-xs text-subtle'>Saving bypasses the lock, the owner isn’t notified and the edited date stays the same.</span>
+              </div>
+            </div>
+          ) : (
+            <pre
+              className='max-h-96 overflow-auto rounded-md border border-line bg-deep p-3 font-mono text-sm whitespace-pre-wrap break-words text-fg focus:border-line-strong focus:outline-none'
+              {...selectAllScope}
+            >
+              {content || <span className='text-subtle italic'>(empty)</span>}
+            </pre>
+          )}
+        </div>
+
+        <TagAssetsPanel tagId={item.id} assets={tag.assets ?? []} onArchived={onArchived}/>
+
+        <TagStoragePanel tagId={item.id} className='mt-4'/>
+
+        {(item.thumbnail) ? (
+          <div className='mt-4'>
+            <h3 className='section-label mb-1.5'>Listing thumbnail</h3>
+            <a href={item.thumbnail.urls.cdn} target='_blank' rel='noreferrer noopener' className='inline-block'>
+              <img src={item.thumbnail.urls.cdn} alt='' loading='lazy' className='size-16 rounded-md border border-line object-cover'/>
+            </a>
+          </div>
+        ) : null}
+
+        {(item.assets?.length) ? (
+          <div className='mt-4'>
+            <h3 className='section-label mb-1.5'>Listing assets</h3>
+            <ul className='space-y-1'>
+              {item.assets.map((asset) => <AssetRow key={asset.id} asset={asset}/>)}
+            </ul>
+          </div>
+        ) : null}
+
       </div>
 
-      <TagAssetsPanel tagId={item.id} assets={tag.assets ?? []} onArchived={onArchived}/>
-
-      <TagStoragePanel tagId={item.id} className='mt-4'/>
-
-      {(item.thumbnail) ? (
-        <div className='mt-4'>
-          <h3 className='section-label mb-1.5'>Listing thumbnail</h3>
-          <a href={item.thumbnail.urls.cdn} target='_blank' rel='noreferrer noopener' className='inline-block'>
-            <img src={item.thumbnail.urls.cdn} alt='' loading='lazy' className='size-16 rounded-md border border-line object-cover'/>
-          </a>
-        </div>
-      ) : null}
-
-      {(item.assets?.length) ? (
-        <div className='mt-4'>
-          <h3 className='section-label mb-1.5'>Listing assets</h3>
-          <ul className='space-y-1'>
-            {item.assets.map((asset) => <AssetRow key={asset.id} asset={asset}/>)}
-          </ul>
-        </div>
-      ) : null}
-
-    </div>
+      {/* verify on the left, reject on the right, delete set apart after a divider (an outline, like the content flags
+          modal's reporting, so it doesn't read as a second reject). The current status' slot turns into "Mark pending",
+          like the content flags modal, so nothing sits greyed out and the buttons never move around */}
+      <AdminModalFooter {...navigation}>
+        {VERIFY_SLOTS.map((slot) => {
+          const value = (item.verified === slot) ? TagDirectoryVerificationStates.PENDING_VERIFICATION : slot;
+          const action = VERIFY_ACTIONS[value];
+          const blocked = value === TagDirectoryVerificationStates.VERIFIED && !!missing;
+          return (
+            <FooterButton
+              key={slot}
+              label={action.label}
+              short={action.short}
+              icon={action.icon}
+              className={action.className}
+              disabled={mutation.isPending || blocked}
+              title={(blocked) ? (missing ?? undefined) : undefined}
+              pending={pendingTarget === value}
+              onClick={() => setVerified(value, action.toast)}
+            />
+          );
+        })}
+        <span aria-hidden className='mx-0.5 h-6 w-px shrink-0 self-center bg-line-strong sm:mx-1'/>
+        <FooterButton
+          label='Delete'
+          short='Delete'
+          icon={Trash2}
+          className='border border-danger/50 bg-transparent text-danger hover:bg-danger/15'
+          disabled={mutation.isPending}
+          pending={false}
+          onClick={onDelete}
+        />
+      </AdminModalFooter>
+    </>
   );
 }
 
@@ -761,6 +768,37 @@ function MiniMedia({ url, mimetype, label, badge }: {url: string | null, mimetyp
       </a>
       {(label) ? <span className='text-[10px] text-subtle'>{label}</span> : null}
     </div>
+  );
+}
+
+
+const VERIFY_SLOTS = [ TagDirectoryVerificationStates.VERIFIED, TagDirectoryVerificationStates.NOT_VERIFIED ] as const;
+
+const VERIFY_ACTIONS: Record<number, {label: string, short: string, toast: string, icon: typeof ShieldCheck, className: string}> = {
+  [TagDirectoryVerificationStates.VERIFIED]: {label: 'Verify', short: 'Verify', toast: 'verified', icon: ShieldCheck, className: 'btn-primary'},
+  [TagDirectoryVerificationStates.PENDING_VERIFICATION]: {label: 'Mark pending', short: 'Pending', toast: 'marked pending', icon: Clock, className: 'btn-secondary'},
+  [TagDirectoryVerificationStates.NOT_VERIFIED]: {label: 'Reject', short: 'Reject', toast: 'set to unverified', icon: ShieldX, className: 'btn-danger'},
+};
+
+
+// `AdminModalFooter`'s buttons, sized like the content flags modal's: they share the width on phones (with the short
+// label and no icon) and are their natural size from sm up
+function FooterButton({ label, short, icon: Icon, className, disabled, title, pending, onClick }: {
+  label: string,
+  short: string,
+  icon: typeof ShieldCheck,
+  className: string,
+  disabled: boolean,
+  title?: string,
+  pending: boolean,
+  onClick: () => void,
+}) {
+  return (
+    <button type='button' className={cn('btn min-w-0 flex-1 px-2 sm:flex-none sm:px-3', className)} disabled={disabled} title={title} onClick={onClick}>
+      {(pending) ? <Spinner className='size-4 border-white/40 border-t-white'/> : <Icon aria-hidden className='hidden size-4 shrink-0 sm:block'/>}
+      <span className='truncate sm:hidden'>{short}</span>
+      <span className='hidden sm:inline'>{label}</span>
+    </button>
   );
 }
 

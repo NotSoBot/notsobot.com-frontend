@@ -44,6 +44,7 @@ export const PAGES: Readonly<Record<keyof typeof Routes, PageMeta>> = Object.fre
   DASHBOARD_SERVER: {title: 'Server', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_SETTINGS: {title: 'Settings', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_PREMIUM: {title: 'Premium', description: DASHBOARD_DESCRIPTION},
+  DASHBOARD_COMMANDS: {title: 'Command History', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_FILES: {title: 'Your Files', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_REMINDERS: {title: 'Your Reminders', description: DASHBOARD_DESCRIPTION},
   DASHBOARD_REPORTS: {title: 'Your Reports', description: DASHBOARD_DESCRIPTION},

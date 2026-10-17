@@ -36,6 +36,7 @@ export const ApiEndpoints = Object.freeze({
   USER_ME_APPLICATION: (applicationId: string) => `/users/@me/applications/${applicationId}`,
   USER_ME_APPLICATION_TOKEN: (applicationId: string) => `/users/@me/applications/${applicationId}/token`,
   USER_ME_APPLICATION_TOKEN_RESET: (applicationId: string) => `/users/@me/applications/${applicationId}/token-reset`,
+  USER_ME_COMMANDS: '/users/@me/commands',
   USER_ME_ENTITLEMENTS: '/users/@me/entitlements',
   USER_ME_FILES: '/users/@me/files',
   USER_ME_FILE: (fileId: string) => `/users/@me/files/${fileId}`,

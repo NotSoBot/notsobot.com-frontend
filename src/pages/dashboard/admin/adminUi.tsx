@@ -1,12 +1,13 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, X } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router';
 
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Routes } from '@/config';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminUserRef } from '@/lib/api';
-import { userAvatarUrl, userDisplayTag } from '@/lib/discord';
+import { userDisplayTag } from '@/lib/discord';
 import { cn, formatDate, formatExactDateTime, NO_AUTOFILL, toDate } from '@/lib/utils';
 
 
@@ -23,6 +24,11 @@ export function adminTagDirectoryPath(tagId: string): string {
 // the admin server list with that server open over it
 export function adminServerPath(guildId: string): string {
   return `${Routes.DASHBOARD_ADMIN_SERVERS}/${guildId}`;
+}
+
+// the admin user list with that user open over it
+export function adminUserPath(userId: string): string {
+  return `${Routes.DASHBOARD_ADMIN_USERS}/${userId}`;
 }
 
 
@@ -224,28 +230,65 @@ export const selectAllScope = {
 };
 
 
-// avatar + name + id; avatars come from Discord's CDN (never from user-submitted content)
-export function UserCell({ user, fallbackId, size = 'md' }: {user: AdminUserRef | null, fallbackId?: string | null, size?: 'sm' | 'md'}) {
+// avatar + name + id; avatars come from Discord's CDN (never from user-submitted content).
+// With `to` the avatar and name link to that user's admin page and the id gets a copy button.
+export function UserCell({ user, fallbackId, size = 'md', to }: {user: AdminUserRef | null, fallbackId?: string | null, size?: 'sm' | 'md', to?: string}) {
   if (!user) {
     return (
       <span className='text-sm text-subtle'>
-        Unknown user{(fallbackId) ? <> · <span className='font-mono'>{fallbackId}</span></> : null}
+        Unknown user{(fallbackId) ? (
+          <> · {(to) ? <CopyableValue value={fallbackId} truncate={0} to={to} linkTitle='Open in users'/> : <span className='font-mono'>{fallbackId}</span>}</>
+        ) : null}
+      </span>
+    );
+  }
+  const name = userDisplayTag(user);
+  const avatar = (
+    <UserAvatar
+      user={user}
+      size={64}
+      loading='lazy'
+      className={cn('shrink-0 rounded-full bg-surface-3', (size === 'sm') ? 'size-6' : 'size-8')}
+    />
+  );
+  if (to) {
+    return (
+      <span className='flex min-w-0 items-center gap-2'>
+        <Link to={to} tabIndex={-1} aria-hidden className='shrink-0'>{avatar}</Link>
+        <span className='min-w-0'>
+          <Link to={to} title='Open in users' className='group/user flex min-w-0 items-center gap-1 text-sm font-medium text-white underline-offset-2 hover:underline'>
+            <span className='truncate'>{name}</span>
+            <ArrowUpRight aria-hidden className='size-3.5 shrink-0 text-subtle transition-colors group-hover/user:text-brand'/>
+          </Link>
+          <CopyableValue value={user.id} truncate={0} className='max-w-full'/>
+        </span>
       </span>
     );
   }
   return (
     <span className='flex min-w-0 items-center gap-2'>
-      <img
-        src={userAvatarUrl(user, 64)}
-        alt=''
-        loading='lazy'
-        className={cn('shrink-0 rounded-full bg-surface-3', (size === 'sm') ? 'size-6' : 'size-8')}
-      />
+      {avatar}
       <span className='min-w-0'>
-        <span className='block truncate text-sm font-medium text-white'>{userDisplayTag(user)}</span>
+        <span className='block truncate text-sm font-medium text-white'>{name}</span>
         <span className='block truncate font-mono text-xs text-subtle'>{user.id}</span>
       </span>
     </span>
+  );
+}
+
+
+// small funnel icon that narrows the list to whatever it sits next to
+export function FilterButton({ label, onClick }: {label: string, onClick: () => void}) {
+  return (
+    <button
+      type='button'
+      aria-label={label}
+      title={label}
+      className='shrink-0 cursor-pointer rounded p-1 text-subtle hover:bg-surface-3 hover:text-fg'
+      onClick={onClick}
+    >
+      <Filter className='size-3.5'/>
+    </button>
   );
 }
 
@@ -363,10 +406,10 @@ export function CollapseButton({ onClick }: {onClick: () => void}) {
 
 // label/value pairs in a compact grid
 // an item's optional third value is a class for both its label and value (e.g. `sm:hidden` for a phones-only row)
-export function DetailList({ items }: {items: Array<[ReactNode, ReactNode, string?] | null | false>}) {
+export function DetailList({ className, items }: {className?: string, items: Array<[ReactNode, ReactNode, string?] | null | false>}) {
   return (
     // content-start: next to a taller list (side by side) its rows stay packed at the top instead of spreading out
-    <dl className='grid grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-4 gap-y-1.5 text-sm'>
+    <dl className={cn('grid grid-cols-[max-content_minmax(0,1fr)] content-start gap-x-4 gap-y-1.5 text-sm', className)}>
       {items.filter((item): item is [ReactNode, ReactNode, string?] => !!item).map(([ label, value, className ], i) => (
         <div key={i} className='contents'>
           <dt className={cn('text-subtle', className)}>{label}</dt>
