@@ -403,6 +403,8 @@ export const ApiErrorCodes = {
   TAG_DIRECTORY_EDIT_REQUEST_NO_CHANGES: 50038,
   MAX_TAG_DIRECTORY: 30013,
   MAX_TAG_DIRECTORY_ASSETS: 30018,
+  // the reporter's replies on their reports, per hour
+  MAX_REPORT_MESSAGES: 30019,
   // the session's Discord grant was revoked/expired (not the site session itself)
   DISCORD_OAUTH_ERROR: 60001,
   DISCORD_OAUTH_SCOPE_MISMATCH: 60002,
@@ -1114,6 +1116,9 @@ export interface Report {
   type: number,
   // the reporter
   user: User,
+  // replies in the report's conversation (status changes don't count) and who sent the last one
+  replies: number,
+  last_reply: {author: ReportMessageAuthor, created: ApiTimestamp} | null,
 }
 
 export interface ReportsPage {
@@ -1170,6 +1175,30 @@ export interface MeReportsPage {
 export interface ReportPatch {
   status?: ReportStatus,
   notes?: string | null,
+}
+
+// the reporter can only reopen their report
+export interface MeReportPatch {
+  status: typeof ReportStatuses.OPEN,
+}
+
+// staff replies are only ever "NotSoAdmin" to the reporter
+export type ReportMessageAuthor = 'staff' | 'reporter';
+
+// one entry in a report's conversation between the reporter and staff (dashboard only): a reply (`content`) or a
+// status change (`status`)
+export interface ReportMessage {
+  author: ReportMessageAuthor,
+  // admin routes only, which staff member (or the reporter) it was
+  author_id?: string,
+  content: string | null,
+  created: ApiTimestamp,
+  id: string,
+  status: ReportStatus | null,
+}
+
+export interface ReportMessagesPage {
+  items: Array<ReportMessage>,
 }
 
 

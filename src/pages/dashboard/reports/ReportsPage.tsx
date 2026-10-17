@@ -1,17 +1,30 @@
-// The reports the user sent with the bot's report commands and where they stand. Read only, the reports are made in Discord.
+// The reports the user sent with the bot's report commands and where they stand. The reports are made in Discord, here they
+// can talk with staff (only ever "NotSoAdmin" to them) about one and reopen it, even after it was resolved or dismissed.
 // `content` is whatever the user typed, so it's only ever rendered as plain text.
 
-import { ArrowLeft, ExternalLink, MessageSquareWarning } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MessageSquareWarning, MessagesSquare, RotateCcw } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { ReportTypes, type MeReport } from '@/lib/api';
+import { useAuth } from '@/auth';
+import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
+import { ReportStatuses, ReportTypes, type MeReport } from '@/lib/api';
 import { Routes } from '@/config';
-import { ME_REPORTS_PAGE_SIZE, errorMessage, useMeReportQuery, useMeReportsQuery } from '@/lib/api/dashboardQueries';
+import {
+  ME_REPORTS_PAGE_SIZE,
+  errorMessage,
+  useMeReportMessagesQuery,
+  useMeReportQuery,
+  useMeReportsQuery,
+  usePostMeReportMessageMutation,
+  useReopenMeReportMutation,
+} from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime, formatExactDateTime } from '@/lib/utils';
 
 import { Chip, Pagination, useSearchParamState, useStepBackFromEmptyPage } from '../admin/adminUi';
-import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
+import { DashboardHeader, EmptyState, ErrorPanel, Panel, Skeleton } from '../ui';
 import { REPORT_STATUSES, reportJumpUrl, reportStatusInfo, reportTypeInfo } from './reportLabels';
+import { REPORT_STAFF_NAME, ReportThread } from './ReportThread';
 
 
 function parseStatus(value: string | null): number | null {
@@ -49,11 +62,64 @@ function SingleReport({ reportId }: {reportId: string}) {
       ) : (isError || !report) ? (
         <ErrorPanel title='Couldn’t load this report' message={errorMessage(error)} onRetry={() => refetch()} retrying={isRefetching}/>
       ) : (
-        <ul className='card divide-y divide-line'>
-          <ReportRow report={report}/>
-        </ul>
+        <>
+          <ul className='card divide-y divide-line'>
+            <ReportRow report={report} linked={false}/>
+          </ul>
+          <ReportConversation report={report}/>
+        </>
       )}
     </>
+  );
+}
+
+
+// works whatever the status is; replying alone doesn't reopen it, that's the Reopen button
+function ReportConversation({ report }: {report: MeReport}) {
+  const toast = useToast();
+  const { user } = useAuth();
+  const messages = useMeReportMessagesQuery(report.id);
+  const send = usePostMeReportMessageMutation(report.id);
+  const reopen = useReopenMeReportMutation(report.id);
+  const closed = report.status !== ReportStatuses.OPEN;
+
+  return (
+    <Panel
+      className='mt-4'
+      title='Conversation'
+      description={<>Talk with the NotSoBot team about this report. Their replies show up here as {REPORT_STAFF_NAME}.</>}
+    >
+      <ReportThread
+        viewer='reporter'
+        reporter={user}
+        messages={messages.data?.items}
+        loading={messages.isPending}
+        error={messages.error}
+        onRetry={() => messages.refetch()}
+        onSend={(content) => send.mutateAsync(content).catch((error) => {
+          toast(errorMessage(error), 'error');
+          throw error;
+        })}
+        sending={send.isPending}
+        notice={(closed) ? (
+          <>This report is {reportStatusInfo(report.status).label.toLowerCase()}. Replying won’t reopen it, use <span className='text-fg'>Reopen</span> if you still need it looked at.</>
+        ) : undefined}
+        actions={(closed) ? (
+          <button
+            type='button'
+            className='btn btn-secondary btn-sm'
+            disabled={reopen.isPending}
+            onClick={() => reopen.mutate(undefined, {
+              onSuccess: () => toast('Report reopened'),
+              onError: (error) => toast(errorMessage(error), 'error'),
+            })}
+          >
+            {(reopen.isPending) ? <Spinner className='size-3.5'/> : <RotateCcw aria-hidden className='size-3.5'/>}
+            Reopen
+          </button>
+        ) : null}
+      />
+    </Panel>
   );
 }
 
@@ -129,9 +195,11 @@ function ReportTarget({ report }: {report: MeReport}) {
 }
 
 
-function ReportRow({ report }: {report: MeReport}) {
+// `linked` rows (the list) link to the report's own page, where the conversation is
+function ReportRow({ report, linked = true }: {report: MeReport, linked?: boolean}) {
   const type = reportTypeInfo(report.type);
   const status = reportStatusInfo(report.status);
+  const staffReplied = report.last_reply?.author === 'staff';
 
   return (
     <li className='flex items-start gap-3 px-4 py-3'>
@@ -142,6 +210,7 @@ function ReportRow({ report }: {report: MeReport}) {
         <div className='flex flex-wrap items-center gap-2'>
           <Chip tone={type.tone}>{type.label}</Chip>
           <Chip tone={status.tone}>{status.label}</Chip>
+          {(staffReplied && linked) ? <Chip tone='brand' title='The last reply is from the NotSoBot team'>{REPORT_STAFF_NAME} replied</Chip> : null}
           <span className='text-xs text-subtle' title={formatExactDateTime(report.created)}>{formatDateTime(report.created)}</span>
         </div>
         <p className='mt-1.5 whitespace-pre-wrap break-words text-sm text-fg'>{report.content}</p>
@@ -149,6 +218,12 @@ function ReportRow({ report }: {report: MeReport}) {
           <ReportTarget report={report}/>
           {(report.reviewed_at) ? (
             <span title={formatExactDateTime(report.reviewed_at)}>Reviewed {formatDateTime(report.reviewed_at)}</span>
+          ) : null}
+          {(linked) ? (
+            <Link to={reportPath(report.id)} className='inline-flex items-center gap-1 hover:text-fg hover:underline'>
+              <MessagesSquare aria-hidden className='size-3'/>
+              {(report.replies) ? `${report.replies} ${(report.replies === 1) ? 'reply' : 'replies'}` : 'Reply'}
+            </Link>
           ) : null}
           <Link to={reportPath(report.id)} className='font-mono hover:text-fg hover:underline' title='Link to this report'>#{report.id}</Link>
         </div>

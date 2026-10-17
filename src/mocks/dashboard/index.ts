@@ -24,6 +24,8 @@ import {
   type AdminTagDirectoryItem,
   type AdminUserRef,
   type ContentFlag,
+  type Report,
+  type ReportMessage,
   type Tag,
   type TagDirectoryCategory,
   type TagDirectoryEditRequest,
@@ -45,7 +47,9 @@ import {
   createEntitlements,
   createFiles,
   createReminders,
+  createReportMessages,
   createReports,
+  syncReportReplies,
   createGuilds,
   createSettings,
   createTags,
@@ -73,6 +77,7 @@ const state = {
   commandUses: createCommandUses(),
   reminders: createReminders(),
   reports: createReports(adminUsers),
+  reportMessages: new Map<string, Array<ReportMessage>>(),
   voices: createVoices(adminUsers),
   applications: createApplications(adminUsers),
   entitlements: createEntitlements(adminUsers),
@@ -91,6 +96,11 @@ const state = {
 
 
 type GuildsError = 'scope' | 'grant' | 'ratelimit' | 'refreshing' | null;
+
+state.reportMessages = createReportMessages(state.reports);
+for (const report of state.reports) {
+  syncReportReplies(report, state.reportMessages.get(report.id) ?? []);
+}
 
 
 // errors carry their extra fields flat in the body, like notsobot.api's `ApiError(metadata=...)`
@@ -1782,13 +1792,52 @@ route('POST', '/admin/content-flags/(\\d+)/translate', ([ , flagId ]) => {
   return withUser(flag);
 });
 
-route('GET', '/admin/reports/(\\d+)', ([ , reportId ]) => {
-  requireBotOwner();
+function findReport(reportId: string): Report {
   const report = state.reports.find((other) => other.id === reportId);
   if (!report) {
     throw new MockError(404, ApiErrorCodes.UNKNOWN_REPORT, 'Unknown Report');
   }
   return report;
+}
+
+// mirrors `utilities/tools/reports.py` `create_report_message`
+function addReportMessage(report: Report, message: Omit<ReportMessage, 'created' | 'id'>): ReportMessage {
+  const thread = state.reportMessages.get(report.id) ?? [];
+  const created: ReportMessage = {...message, created: new Date().toISOString(), id: `${report.id}${Date.now()}`};
+  thread.push(created);
+  state.reportMessages.set(report.id, thread);
+  syncReportReplies(report, thread);
+  return created;
+}
+
+function reportMessageContent(body: Record<string, unknown>): string {
+  const content = (typeof body.content === 'string') ? body.content.trim() : '';
+  if (!content || content.length > 2000) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'content must be 1-2000 characters', {field: 'content'});
+  }
+  return content;
+}
+
+// the reporter's view of a message, without which staff member it was
+function reporterMessage({ author_id: _authorId, ...message }: ReportMessage) {
+  return message;
+}
+
+route('GET', '/admin/reports/(\\d+)', ([ , reportId ]) => {
+  requireBotOwner();
+  return findReport(reportId);
+});
+
+route('GET', '/admin/reports/(\\d+)/messages', ([ , reportId ]) => {
+  requireBotOwner();
+  const report = findReport(reportId);
+  return {items: state.reportMessages.get(report.id) ?? []};
+});
+
+route('POST', '/admin/reports/(\\d+)/messages', ([ , reportId ], { body }) => {
+  requireBotOwner();
+  const report = findReport(reportId);
+  return addReportMessage(report, {author: 'staff', author_id: mockUser.id, content: reportMessageContent(body), status: null});
 });
 
 route('GET', '/admin/reports', (_match, { query }) => {
@@ -1798,7 +1847,9 @@ route('GET', '/admin/reports', (_match, { query }) => {
   const userId = query.get('user_id');
   const targetId = query.get('target_id');
   const guildId = query.get('guild_id');
+  const awaitingReply = parseBool(query.get('awaiting_reply'));
   const matching = state.reports
+    .filter((report) => awaitingReply === null || (report.last_reply?.author === 'reporter') === awaitingReply)
     .filter((report) => !guildId || reportInGuild(report, guildId))
     .filter((report) => type === null || type === '' || report.type === Number(type))
     .filter((report) => status === null || status === '' || report.status === Number(status))
@@ -1819,7 +1870,10 @@ route('PATCH', '/admin/reports/(\\d+)', ([ , reportId ], { body }) => {
     if (![0, 1, 2].includes(status)) {
       throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'status must be 0-2', {field: 'status'});
     }
-    report.status = status;
+    if (report.status !== status) {
+      report.status = status;
+      addReportMessage(report, {author: 'staff', author_id: mockUser.id, content: null, status: status as ReportMessage['status']});
+    }
   }
   if (body.notes !== undefined) {
     report.notes = (typeof body.notes === 'string' && body.notes) ? body.notes : null;
@@ -1983,14 +2037,43 @@ function renameVoice(voiceId: string, body: Record<string, unknown>) {
   return voice;
 }
 
-route('GET', '/users/@me/reports/(\\d+)', ([ , reportId ]) => {
-  // the same every-other fixture report the list treats as the mock user's own
+// the same every-other fixture report the list treats as the mock user's own
+function findOwnReport(reportId: string): Report {
   const report = state.reports.filter((_report, index) => index % 2 === 0).find((other) => other.id === reportId);
   if (!report) {
     throw new MockError(404, ApiErrorCodes.UNKNOWN_REPORT, 'Unknown Report');
   }
-  const { notes: _notes, reviewed_by: _reviewedBy, user: _user, ...rest } = report;
-  return rest;
+  return report;
+}
+
+function ownReportPayload({ notes: _notes, reviewed_by: _reviewedBy, user: _user, ...report }: Report) {
+  return report;
+}
+
+route('GET', '/users/@me/reports/(\\d+)', ([ , reportId ]) => ownReportPayload(findOwnReport(reportId)));
+
+// reopening is all the reporter can do
+route('PATCH', '/users/@me/reports/(\\d+)', ([ , reportId ], { body }) => {
+  const report = findOwnReport(reportId);
+  if (body.status !== 0) {
+    throw new MockError(400, ApiErrorCodes.INVALID_FORM_BODY, 'status must be 0', {field: 'status'});
+  }
+  if (report.status !== 0) {
+    report.status = 0;
+    addReportMessage(report, {author: 'reporter', author_id: report.user.id, content: null, status: 0});
+  }
+  return ownReportPayload(report);
+});
+
+route('GET', '/users/@me/reports/(\\d+)/messages', ([ , reportId ]) => {
+  const report = findOwnReport(reportId);
+  return {items: (state.reportMessages.get(report.id) ?? []).map(reporterMessage)};
+});
+
+route('POST', '/users/@me/reports/(\\d+)/messages', ([ , reportId ], { body }) => {
+  const report = findOwnReport(reportId);
+  const message = addReportMessage(report, {author: 'reporter', author_id: report.user.id, content: reportMessageContent(body), status: null});
+  return reporterMessage(message);
 });
 
 route('GET', '/users/@me/reports', (_match, { query }) => {
@@ -1999,7 +2082,7 @@ route('GET', '/users/@me/reports', (_match, { query }) => {
   const matching = state.reports
     .filter((_report, index) => index % 2 === 0)
     .filter((report) => status === null || status === '' || report.status === Number(status))
-    .map(({ notes: _notes, reviewed_by: _reviewedBy, user: _user, ...report }) => report);
+    .map(ownReportPayload);
   return pageOf(matching, query);
 });
 

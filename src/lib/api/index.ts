@@ -42,9 +42,12 @@ import type {
   ReminderPatch,
   MeCommandsPage,
   MeReport,
+  MeReportPatch,
   MeReportsPage,
   RemindersPage,
   Report,
+  ReportMessage,
+  ReportMessagesPage,
   ReportPatch,
   ReportsPage,
   GuildListKind,
@@ -349,6 +352,19 @@ export const api = {
   // one of the caller's reports, `/dashboard/reports/:reportId`
   fetchMeReport: (reportId: string, signal?: AbortSignal) => {
     return apiRequest<MeReport>(ApiEndpoints.USER_ME_REPORT(reportId), {signal});
+  },
+
+  // reopening is the only change the reporter can make
+  patchMeReport: (reportId: string, body: MeReportPatch) => {
+    return apiRequest<MeReport>(ApiEndpoints.USER_ME_REPORT(reportId), {method: 'PATCH', body});
+  },
+
+  fetchMeReportMessages: (reportId: string, signal?: AbortSignal) => {
+    return apiRequest<ReportMessagesPage>(ApiEndpoints.USER_ME_REPORT_MESSAGES(reportId), {signal});
+  },
+
+  postMeReportMessage: (reportId: string, content: string) => {
+    return apiRequest<ReportMessage>(ApiEndpoints.USER_ME_REPORT_MESSAGES(reportId), {method: 'POST', body: {content}});
   },
 
   fetchMeCommands: (params: {guildId?: string | null, channelId?: string | null, commandId?: string | null, offset?: number, limit?: number}, signal?: AbortSignal) => {
@@ -760,6 +776,7 @@ export const api = {
   fetchAdminReports: (params: {
     type?: number | null,
     status?: number | null,
+    awaitingReply?: boolean | null,
     userId?: string,
     targetId?: string,
     guildId?: string,
@@ -771,6 +788,7 @@ export const api = {
       query: {
         type: params.type,
         status: params.status,
+        awaiting_reply: params.awaitingReply ?? undefined,
         user_id: params.userId || undefined,
         target_id: params.targetId || undefined,
         guild_id: params.guildId || undefined,
@@ -786,6 +804,14 @@ export const api = {
 
   patchAdminReport: (reportId: string, body: ReportPatch) => {
     return apiRequest<Report>(ApiEndpoints.ADMIN_REPORT(reportId), {method: 'PATCH', body});
+  },
+
+  fetchAdminReportMessages: (reportId: string, signal?: AbortSignal) => {
+    return apiRequest<ReportMessagesPage>(ApiEndpoints.ADMIN_REPORT_MESSAGES(reportId), {signal});
+  },
+
+  postAdminReportMessage: (reportId: string, content: string) => {
+    return apiRequest<ReportMessage>(ApiEndpoints.ADMIN_REPORT_MESSAGES(reportId), {method: 'POST', body: {content}});
   },
 
   fetchAdminEntitlements: (params: {

@@ -1,7 +1,7 @@
 // Bug, user, server, message and tag reports sent with the bot's `report` commands (prefixed, slash and context menus).
 // `content` is whatever the reporter typed, so it's only ever rendered as plain text.
 
-import { ExternalLink, Inbox } from 'lucide-react';
+import { ExternalLink, Inbox, MessagesSquare } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -9,11 +9,20 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { Routes } from '@/config';
 import { ReportStatuses, ReportTypes, type Report, type ReportPatch, type ReportStatus } from '@/lib/api';
-import { ADMIN_PAGE_SIZE, errorMessage, useAdminReportQuery, useAdminReportsQuery, usePatchAdminReportMutation } from '@/lib/api/dashboardQueries';
+import {
+  ADMIN_PAGE_SIZE,
+  errorMessage,
+  useAdminReportMessagesQuery,
+  useAdminReportQuery,
+  useAdminReportsQuery,
+  usePatchAdminReportMutation,
+  usePostAdminReportMessageMutation,
+} from '@/lib/api/dashboardQueries';
 import { cn, formatDateTime } from '@/lib/utils';
 
 import { DashboardHeader, EmptyState, ErrorPanel, Skeleton } from '../ui';
 import { REPORT_TYPES, type ReportTone, reportJumpUrl, reportTypeInfo } from '../reports/reportLabels';
+import { ReportThread } from '../reports/ReportThread';
 import { AdminTagModal, useOpenListItem } from './AdminTagModal';
 import { adminServerPath, Chip, CopyableValue, DetailList, ExactDate, FilterButton, IdFilter, Pagination, useSearchParamState, useStepBackFromEmptyPage, UserCell } from './adminUi';
 
@@ -57,12 +66,25 @@ function parseStatus(value: string | null): number | null {
   return (value === 'all') ? null : parseEnum(value) ?? ReportStatuses.OPEN;
 }
 
+function parseBool(value: string | null): boolean | null {
+  return (value === 'true') ? true : (value === 'false') ? false : null;
+}
+
+// the reporter sent the last reply. Replying doesn't reopen a closed report, so these can be resolved or dismissed too
+function awaitingReply(report: Report): boolean {
+  return report.last_reply?.author === 'reporter';
+}
+
+// the slot each status button sits in; once the report is in that status, the slot turns into Reopen
+const ACTION_SLOTS: Array<ReportStatus> = [ReportStatuses.RESOLVED, ReportStatuses.DISMISSED];
+
 
 export function AdminReportsPage() {
   const { searchParams, page, update, setPage } = useSearchParamState();
   const navigate = useNavigate();
   const type = parseEnum(searchParams.get('type'));
   const status = parseStatus(searchParams.get('status'));
+  const awaiting = parseBool(searchParams.get('awaiting_reply'));
   const userId = (searchParams.get('user_id') || '').trim();
   const targetId = (searchParams.get('target_id') || '').trim();
   // sent from the server or about it (the admin server modal's "Reports")
@@ -71,6 +93,7 @@ export function AdminReportsPage() {
   const { data, isPending, isError, error, isPlaceholderData, isFetching, isRefetching, refetch } = useAdminReportsQuery({
     type,
     status,
+    awaitingReply: awaiting,
     userId,
     targetId,
     guildId,
@@ -89,7 +112,7 @@ export function AdminReportsPage() {
     onChange: setPage,
     fetching: isFetching && isPlaceholderData,
   };
-  const filtered = !!(type !== null || status !== ReportStatuses.OPEN || userId || targetId || guildId);
+  const filtered = !!(type !== null || status !== ReportStatuses.OPEN || awaiting !== null || userId || targetId || guildId);
   // closes the report too (in the same navigation), the one it's filtering by might not be in the new list
   const filterBy = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
@@ -111,7 +134,7 @@ export function AdminReportsPage() {
         description='Bug, user, server, message and tag reports sent with the bot’s report commands, newest first.'
       />
 
-      <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
+      <div className='card mb-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'>
         <label className='text-sm'>
           <span className='mb-1 block text-subtle'>Status</span>
           <select
@@ -128,6 +151,14 @@ export function AdminReportsPage() {
           <select className='input' value={(type === null) ? '' : String(type)} onChange={(event) => update({type: event.target.value})}>
             <option value=''>Any</option>
             {TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>
+        </label>
+        <label className='text-sm'>
+          <span className='mb-1 block text-subtle'>Conversation</span>
+          <select className='input' value={(awaiting === null) ? '' : String(awaiting)} onChange={(event) => update({awaiting_reply: event.target.value})}>
+            <option value=''>Any</option>
+            <option value='true'>Waiting on staff</option>
+            <option value='false'>Not waiting</option>
           </select>
         </label>
         <IdFilter
@@ -204,7 +235,18 @@ function ReportRow({ report, onOpen }: {report: Report, onOpen: (id: string) => 
         </span>
         <Chip tone={status.tone} className='col-start-2 row-start-1 justify-center justify-self-end sm:order-3 sm:w-20'>{status.label}</Chip>
         <span className='col-span-2 min-w-0 sm:order-4 sm:w-52'><UserCell user={report.user} size='sm'/></span>
-        <span className='col-span-2 min-w-0 truncate text-sm text-muted sm:order-5 sm:flex-1 sm:basis-40'>{report.content}</span>
+        <span className='col-span-2 flex min-w-0 items-center gap-2 text-sm text-muted sm:order-5 sm:flex-1 sm:basis-40'>
+          {(report.replies) ? (
+            <span
+              className={cn('inline-flex shrink-0 items-center gap-1 text-xs', (awaitingReply(report)) ? 'font-medium text-warning' : 'text-subtle')}
+              title={(awaitingReply(report)) ? 'The reporter replied last, waiting on staff' : `${report.replies} ${(report.replies === 1) ? 'reply' : 'replies'}`}
+            >
+              <MessagesSquare aria-hidden className='size-3.5'/>
+              {report.replies}
+            </span>
+          ) : null}
+          <span className='min-w-0 truncate'>{report.content}</span>
+        </span>
         <span className='col-span-2 justify-self-end text-xs text-subtle sm:order-6 sm:ml-auto'>{formatDateTime(report.created)}</span>
       </button>
     </li>
@@ -235,7 +277,7 @@ function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
       patch.notes = notes.trim() || null;
     }
     mutation.mutate({reportId: report.id, patch}, {
-      onSuccess: () => toast(`Report ${report.id}: ${statusInfo(value).label.toLowerCase()}`),
+      onSuccess: () => toast(`Report ${report.id}: ${(value === ReportStatuses.OPEN) ? 'reopened' : statusInfo(value).label.toLowerCase()}`),
       onError: (error) => toast(errorMessage(error), 'error'),
     });
   };
@@ -262,18 +304,22 @@ function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
           <p className='mt-1 text-xs text-subtle'><ExactDate value={report.created} format={formatDateTime}/></p>
         </div>
         <div className='flex flex-wrap gap-2'>
-          {STATUSES.map((item) => (
-            <button
-              key={item.value}
-              type='button'
-              className={cn('btn btn-sm', (item.value === ReportStatuses.RESOLVED) ? 'btn-primary' : 'btn-secondary')}
-              disabled={mutation.isPending || report.status === item.value}
-              onClick={() => setStatus(item.value)}
-            >
-              {(pendingStatus === item.value) ? <Spinner className='size-3.5'/> : null}
-              {item.action}
-            </button>
-          ))}
+          {ACTION_SLOTS.map((slot) => {
+            // a resolved report has Reopen where Resolve was, a dismissed one has it where Dismiss was
+            const value = (report.status === slot) ? ReportStatuses.OPEN : slot;
+            return (
+              <button
+                key={slot}
+                type='button'
+                className={cn('btn btn-sm', (value === ReportStatuses.RESOLVED) ? 'btn-primary' : 'btn-secondary')}
+                disabled={mutation.isPending}
+                onClick={() => setStatus(value)}
+              >
+                {(pendingStatus === value) ? <Spinner className='size-3.5'/> : null}
+                {statusInfo(value).action}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -378,7 +424,36 @@ function ReportDetails({ report, onFilterReporter, onFilterTarget }: {
           </div>
         ) : null}
       </form>
+
+      <div className='mt-4'>
+        <h3 className='section-label mb-2'>Conversation with the reporter</h3>
+        <ReportConversation report={report}/>
+      </div>
     </div>
+  );
+}
+
+
+// replies here show up on the reporter's dashboard as NotSoAdmin
+function ReportConversation({ report }: {report: Report}) {
+  const toast = useToast();
+  const messages = useAdminReportMessagesQuery(report.id);
+  const send = usePostAdminReportMessageMutation(report.id);
+  return (
+    <ReportThread
+      viewer='staff'
+      reporter={report.user}
+      messages={messages.data?.items}
+      loading={messages.isPending}
+      error={messages.error}
+      onRetry={() => messages.refetch()}
+      onSend={(content) => send.mutateAsync(content).catch((error) => {
+        toast(errorMessage(error), 'error');
+        throw error;
+      })}
+      sending={send.isPending}
+      notice={(report.status !== ReportStatuses.OPEN) ? 'Replying doesn’t reopen the report.' : undefined}
+    />
   );
 }
 

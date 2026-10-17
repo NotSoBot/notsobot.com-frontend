@@ -11,6 +11,7 @@ import type {
   MeCommandUse,
   Reminder,
   Report,
+  ReportMessage,
   Tag,
   TagBlobs,
   TagDirectoryAsset,
@@ -26,6 +27,7 @@ import type {
 import deepfryPreview from '@/assets/logos/effects/deepfry.webp';
 import magikPreview from '@/assets/logos/effects/magik-animated.webp';
 import { TagDirectoryCategories } from '@/lib/api/types';
+import { toDate } from '@/lib/utils';
 
 
 export const MOCK_TOKEN = 'dashboard-mock-token';
@@ -492,6 +494,9 @@ export function createReports(users: Array<AdminUser>): Array<Report> {
         : (type === 4) ? ['1400000000000000007', '1400000000000000013'][i % 2]
         : null,
       type,
+      // `syncReportReplies` fills these in from the conversation
+      replies: 0,
+      last_reply: null,
       user: {
         avatar: reporter.avatar,
         blocked: reporter.blocked,
@@ -506,6 +511,39 @@ export function createReports(users: Array<AdminUser>): Array<Report> {
     });
   }
   return reports;
+}
+
+// a few reports with a conversation going: staff asking for more, the reporter answering (staff ids only on the admin side)
+export function createReportMessages(reports: Array<Report>): Map<string, Array<ReportMessage>> {
+  const threads = new Map<string, Array<ReportMessage>>();
+  reports.forEach((report, i) => {
+    // not the newest one, its replies would be in the future
+    if (i === 0 || i % 3 !== 0) {
+      return;
+    }
+    const start = toDate(report.created).getTime();
+    const at = (hours: number) => new Date(start + hours * 3600000).toISOString();
+    const items: Array<ReportMessage> = [
+      {author: 'staff', author_id: mockUser.id, content: 'Thanks for the report! Do you remember roughly when this happened, and in which channel?', created: at(1), id: `${report.id}01`, status: null},
+    ];
+    // the rest are waiting on the reporter
+    if (i % 9 === 0) {
+      items.push({author: 'reporter', author_id: report.user.id, content: 'Around an hour before I sent it, in #general. It happened twice.', created: at(1.5), id: `${report.id}02`, status: null});
+    }
+    if (report.status !== 0 && report.reviewed_at) {
+      items.push({author: 'staff', author_id: mockUser.id, content: null, created: report.reviewed_at, id: `${report.id}03`, status: report.status as ReportMessage['status']});
+    }
+    threads.set(report.id, items);
+  });
+  return threads;
+}
+
+// `replies`/`last_reply` from the conversation, like the api's `report_reply_stats`
+export function syncReportReplies(report: Report, messages: Array<ReportMessage>): void {
+  const replies = messages.filter((message) => message.content !== null);
+  const last = replies[replies.length - 1];
+  report.replies = replies.length;
+  report.last_reply = (last) ? {author: last.author, created: last.created} : null;
 }
 
 

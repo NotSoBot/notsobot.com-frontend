@@ -9,6 +9,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { CommandTypes, MeCommandResults, type Command, type CommandType, type MeCommandUse } from '@/lib/api';
 import { ME_COMMANDS_PAGE_SIZE, errorMessage, useMeCommandsQuery, useMeGuildsQuery } from '@/lib/api/dashboardQueries';
 import { useCommandsQuery } from '@/lib/api/queries';
+import { enabledCommandVariants } from '@/lib/commandAvailability';
 import { commandPath } from '@/lib/commandPaths';
 import { cn, formatDate, formatDateTime, formatExactDateTime, NO_AUTOFILL } from '@/lib/utils';
 
@@ -69,7 +70,9 @@ export function CommandHistoryPage() {
   const guilds = useMeGuildsQuery();
   const commands = useCommandsQuery();
   const guildNames = useMemo(() => new Map((guilds.data ?? []).map((guild) => [guild.id, guild.name])), [guilds.data]);
-  const commandTypes = useMemo(() => new Map((commands.data ?? []).map((command) => [command.id, command.metadata.map((x) => x.type)])), [commands.data]);
+  // only the variants still offered get a link; a disabled (removed) command shows its name without one, since its
+  // page on the commands site no longer exists
+  const commandTypes = useMemo(() => new Map((commands.data ?? []).map((command) => [command.id, enabledCommandVariants(command).map((x) => x.type)])), [commands.data]);
 
   const items = data?.items ?? [];
   const steppingBack = useStepBackFromEmptyPage({page, setPage, data, isPlaceholderData, pageSize: ME_COMMANDS_PAGE_SIZE});
@@ -178,8 +181,8 @@ function SummaryCard({ label, value, detail, color }: {label: string, value: Rea
 }
 
 
-// free text (`tag` also matches its subcommands like `tag show`), suggesting the bot's command ids; lands in the URL once
-// typing stops
+// free text (`tag` also matches its subcommands like `tag show`), suggesting the bot's command ids (disabled ones too,
+// they're still in the history); lands in the URL once typing stops
 function CommandFilter({ value, commands, onChange }: {value: string, commands: Array<Command> | undefined, onChange: (value: string | null) => void}) {
   const [ input, setInput ] = useState(value);
   useEffect(() => setInput(value), [value]);

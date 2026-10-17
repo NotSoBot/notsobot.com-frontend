@@ -6,6 +6,7 @@ import { QuarantineNotice } from '@/components/ui/QuarantineNotice';
 import { Routes } from '@/config';
 import { ApiEndpoints, apiUrl } from '@/lib/api';
 import { useCommandsQuery, useInfoDiscordQuery } from '@/lib/api/queries';
+import { enabledCommandVariants } from '@/lib/commandAvailability';
 
 
 const FEATURES: Array<{icon: LucideIcon, title: string, description: string}> = [
@@ -191,7 +192,7 @@ function LiveStats() {
     return {guilds, users};
   }, [info]);
 
-  const commandCount = commands?.filter((command) => command.metadata.length).length;
+  const commandCount = commands?.filter((command) => enabledCommandVariants(command).length).length;
 
   const stats = [
     {label: 'Servers', value: (totals) ? compactNumber(totals.guilds) : null},

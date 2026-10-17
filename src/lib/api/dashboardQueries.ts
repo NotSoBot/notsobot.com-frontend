@@ -43,7 +43,11 @@ import type {
   Reminder,
   ReminderPatch,
   RemindersPage,
+  MeReport,
+  MeReportsPage,
   Report,
+  ReportMessage,
+  ReportMessagesPage,
   ReportPatch,
   ReportsPage,
   Tag,
@@ -65,7 +69,7 @@ import type {
   Voice,
   VoicesPage,
 } from './types';
-import { ApiErrorCodes, TAG_DIRECTORY_ASSETS_MAX } from './types';
+import { ApiErrorCodes, ReportStatuses, TAG_DIRECTORY_ASSETS_MAX } from './types';
 
 
 export const ME_TAGS_PAGE_SIZE = 50;
@@ -673,12 +677,62 @@ export function useMeCommandsQuery(filters: MeCommandsFilters) {
 
 export const ME_REPORTS_PAGE_SIZE = 25;
 
+// a report's conversation is checked again this often while it's open, so a reply from the other side shows up
+const REPORT_MESSAGES_REFETCH_INTERVAL = 30 * 1000;
+
 export function useMeReportQuery(reportId: string | null) {
   const { token } = useAuth();
   return useQuery({
     queryKey: ['users', '@me', token, 'report', reportId],
     queryFn: ({ signal }) => api.fetchMeReport(reportId!, signal),
     enabled: !!reportId,
+  });
+}
+
+export function useMeReportMessagesQuery(reportId: string) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: ['users', '@me', token, 'report', reportId, 'messages'],
+    queryFn: ({ signal }) => api.fetchMeReportMessages(reportId, signal),
+    refetchInterval: REPORT_MESSAGES_REFETCH_INTERVAL,
+  });
+}
+
+// the report (its reply count) and the list are refetched after, the message is added to the thread right away
+export function usePostMeReportMessageMutation(reportId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const reportKey = ['users', '@me', token, 'report', reportId];
+  return useMutation({
+    mutationFn: (content: string) => api.postMeReportMessage(reportId, content),
+    onSuccess: (message: ReportMessage) => {
+      queryClient.setQueryData<ReportMessagesPage>([...reportKey, 'messages'], (page) => (page) ? {...page, items: [...page.items, message]} : page);
+    },
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: reportKey}),
+      queryClient.invalidateQueries({queryKey: ['users', '@me', token, 'reports']}),
+    ]),
+  });
+}
+
+export function useReopenMeReportMutation(reportId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const reportKey = ['users', '@me', token, 'report', reportId];
+  const listKey = ['users', '@me', token, 'reports'];
+  return useMutation({
+    mutationFn: () => api.patchMeReport(reportId, {status: ReportStatuses.OPEN}),
+    onSuccess: (report: MeReport) => {
+      queryClient.setQueryData(reportKey, report);
+      queryClient.setQueriesData<MeReportsPage>({queryKey: listKey}, (page) => {
+        return (page) ? {...page, items: page.items.map((other) => (other.id === report.id) ? report : other)} : page;
+      });
+    },
+    // the thread has the reopen in it now
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: reportKey}),
+      queryClient.invalidateQueries({queryKey: listKey}),
+    ]),
   });
 }
 
@@ -1452,6 +1506,8 @@ export function useTranslateAdminContentFlagMutation() {
 export interface AdminReportsFilters {
   type: number | null,
   status: number | null,
+  // the reporter sent the last reply
+  awaitingReply: boolean | null,
   userId: string,
   targetId: string,
   guildId: string,
@@ -1475,6 +1531,7 @@ export function useAdminReportsQuery(filters: AdminReportsFilters) {
     queryFn: ({ signal }) => api.fetchAdminReports({
       type: filters.type,
       status: filters.status,
+      awaitingReply: filters.awaitingReply,
       userId: filters.userId,
       targetId: filters.targetId,
       guildId: filters.guildId,
@@ -1501,7 +1558,37 @@ export function usePatchAdminReportMutation() {
         return {...page, items: page.items.map((other) => (other.id === report.id) ? report : other)};
       });
     },
-    onSettled: () => queryClient.invalidateQueries({queryKey: listKey}),
+    // a status change is added to the conversation too
+    onSettled: (_data, _error, { reportId }) => Promise.all([
+      queryClient.invalidateQueries({queryKey: listKey}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'report', reportId, 'messages']}),
+    ]),
+  });
+}
+
+export function useAdminReportMessagesQuery(reportId: string) {
+  const { token } = useAuth();
+  return useQuery({
+    queryKey: [...queryKeys.admin(token), 'report', reportId, 'messages'],
+    queryFn: ({ signal }) => api.fetchAdminReportMessages(reportId, signal),
+    refetchInterval: REPORT_MESSAGES_REFETCH_INTERVAL,
+  });
+}
+
+// replies as NotSoAdmin; the report (its reply count) and the list are refetched after
+export function usePostAdminReportMessageMutation(reportId: string) {
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const reportKey = [...queryKeys.admin(token), 'report', reportId];
+  return useMutation({
+    mutationFn: (content: string) => api.postAdminReportMessage(reportId, content),
+    onSuccess: (message: ReportMessage) => {
+      queryClient.setQueryData<ReportMessagesPage>([...reportKey, 'messages'], (page) => (page) ? {...page, items: [...page.items, message]} : page);
+    },
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({queryKey: reportKey}),
+      queryClient.invalidateQueries({queryKey: [...queryKeys.admin(token), 'reports']}),
+    ]),
   });
 }
 

@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/Toast';
 import type { GuildAdminBypassSetting, GuildListEntry, GuildListKind, UserGuild } from '@/lib/api';
 import { errorField, errorMessage, useGuildMutation, type GuildAction } from '@/lib/api/dashboardQueries';
 import { useCommandsQuery } from '@/lib/api/queries';
+import { enabledCommandVariants } from '@/lib/commandAvailability';
 import { formatDate } from '@/lib/utils';
 
 import { isSnowflake } from '../tags/tagMeta';
@@ -367,10 +368,11 @@ export function CommandListSection({ guild, list }: {guild: UserGuild, list: Gui
   const edit = useGuildEdit(guild.id);
   const datalistId = useId();
   const { data: commands } = useCommandsQuery();
+  // only what can still be picked; existing entries for a removed command keep showing below by their stored name
   const commandNames = useMemo(() => {
     const names = new Set<string>();
     for (const command of commands ?? []) {
-      for (const metadata of command.metadata) {
+      for (const metadata of enabledCommandVariants(command)) {
         names.add(metadata.name);
       }
     }

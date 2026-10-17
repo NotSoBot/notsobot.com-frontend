@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import { enabledCommandVariants } from '@/lib/commandAvailability';
 import { commandPath as commandPathFor, commandTypeFromPath } from '@/lib/commandPaths';
 import { CommandCategories, CommandTypes, LegacyCommandCategories, type Command, type CommandMetadata, type CommandStat, type CommandType } from '@/lib/api';
 
@@ -142,10 +143,12 @@ export function buildEntries(commands: Array<Command>, stats: Array<CommandStat>
     usage.set(key, (usage.get(key) || 0) + stat.count);
   }
 
+  // disabled commands/variants (removed from the bot) aren't listed, so their pages act like unknown commands
   const entries: Array<Entry> = [];
   for (const command of commands) {
+    // a disabled sibling can still lend its category
     const fallbackCategory = command.metadata.find((x) => x.category)?.category || '';
-    for (const metadata of command.metadata) {
+    for (const metadata of enabledCommandVariants(command)) {
       if (!metadata.name) {
         continue;
       }

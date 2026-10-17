@@ -14,6 +14,7 @@ import {
   type TagDirectoryItem,
   type TagDirectoryPage,
 } from '../src/lib/api/types';
+import { enabledCommandVariants } from '../src/lib/commandAvailability';
 import { commandTypeFromPath } from '../src/lib/commandPaths';
 import { Routes, TAG_ADD_PARAM, TAG_ADD_VALUE } from '../src/routes';
 import { NOT_FOUND_PAGE, PAGE_ALIASES, PAGES, pageTitle, SITE_NAME, type PageMeta } from '../src/seo';
@@ -299,7 +300,7 @@ function mentionFor(slash: CommandMetadata | undefined): string | null {
 }
 
 function slashCommandMention(command: Command | undefined): string | null {
-  return mentionFor(command?.metadata.find((item) => item.type === CommandTypes.APPLICATION_SLASH));
+  return mentionFor((command) ? enabledCommandVariants(command).find((item) => item.type === CommandTypes.APPLICATION_SLASH) : undefined);
 }
 
 
@@ -316,15 +317,16 @@ function commandUsage(metadata: CommandMetadata): string {
 }
 
 
-// the variant /commands/:commandId(/:commandType) shows, null for an unknown or hidden (owner) command
+// the variant /commands/:commandId(/:commandType) shows, null for an unknown, hidden (owner) or disabled command
 async function fetchCommandMetadata(env: Env, commandId: string, slug: string | undefined): Promise<[Command, CommandMetadata] | null> {
   const commands = await fetchCommands(env);
   const command = commands?.find((item) => item.id === commandId);
   if (!command) {
     return null;
   }
-  const type = commandTypeFromPath(slug, command.metadata.map((metadata) => metadata.type));
-  const metadata = command.metadata.find((item) => item.type === type);
+  const variants = enabledCommandVariants(command);
+  const type = commandTypeFromPath(slug, variants.map((metadata) => metadata.type));
+  const metadata = variants.find((item) => item.type === type);
   return (metadata && metadata.category !== CommandCategories.OWNER) ? [command, metadata] : null;
 }
 
@@ -338,7 +340,7 @@ function commandEmbed(command: Command, metadata: CommandMetadata): Embed {
     text.push({type: 10, content: truncate(description, EMBED_DESCRIPTION_MAX_LENGTH)});
   }
   // every way to run it, whichever variant the link is for: prefix, then slash, then the context menus
-  const variants = [ ...command.metadata ].sort((x, y) => x.type - y.type);
+  const variants = enabledCommandVariants(command).sort((x, y) => x.type - y.type);
   text.push({type: 10, content: variants.map((variant) => `-# ${commandUsage(variant)}`).join('\n')});
 
   return {
